@@ -1772,6 +1772,8 @@ async function renderApTab(){
       // auth.users (а не угадывается), плюс роль, бан, профиль, текущая и
       // удалённые анкеты — всё одним джойном.
       const allUsers = await apiFetch('rpc/admin_list_users', { method:'POST', body:'{}' }) || [];
+      // Уровни — та же серверная витрина, что на главной: одна правда на весь сайт.
+      if (typeof mlLoad === 'function') { try { await mlLoad(); } catch(e) {} }
 
       // ── Заявки на регистрацию по почте (pending из signup_requests) ──
       let pendHtml = '';
@@ -1822,6 +1824,7 @@ async function renderApTab(){
 
         const isCurrentUser = user && u.user_id === user.id;
         const banned = !!u.is_banned;
+        const lvlRow = (typeof mlOf === 'function') ? mlOf(u.user_id) : null;
 
         // Бейджи: фракция (одобренная) и удалённые анкеты
         const facBadge = (u.faction_status === 'approved' && u.faction_name)
@@ -1856,8 +1859,10 @@ async function renderApTab(){
                     <span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>
                     ${roleLabels[u.role] || String(u.role||'').toUpperCase()}
                   </div>
+                  ${lvlRow ? `<span class="ml-t${mlTier(lvlRow.level)}" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:var(--b1);border:1px solid var(--ml-c);font-family:Rajdhani,sans-serif;font-size:7px;letter-spacing:1.5px;color:var(--ml-c)">◈ ${lvlRow.level} УР · ${esc(lvlRow.title.toUpperCase())} · ${lvlRow.xp} XP</span>` : ''}
                   ${facBadge}
                 </div>
+                ${lvlRow ? `<div class="ml-t${mlTier(lvlRow.level)}" style="margin-top:8px">${mlBarHtml(lvlRow, true)}</div>` : ''}
               </div>
 
               <button class="ib-btn" onclick="openEditUsr('${esc(u.user_id)}','${esc(u.role||'')}','${esc(email)}',${banned})" style="flex-shrink:0" title="Редактировать">✎</button>
@@ -1994,6 +1999,28 @@ async function openContribModal(key, displayName, avUrl, hue, cnt) {
   document.getElementById('contrib-mo-email').textContent = roleText;
 
   document.getElementById('contrib-mo-cnt').textContent = cnt;
+
+  // ── Уровень: шапка + разбивка опыта по осям + сухие цифры ──
+  // Витрину могли ещё не тянуть (досье открыли с ленты, а не с главной) —
+  // дозагружаем и дорисовываем в тот же узел, модалку не перезапуская.
+  const lvlBox = document.getElementById('contrib-mo-lvl');
+  const seenBox = document.getElementById('contrib-mo-seen');
+  const paintLvl = () => {
+    const r = (typeof mlOf === 'function') ? mlOf(key) : null;
+    if (!lvlBox) return;
+    if (!r) { lvlBox.innerHTML = ''; if (seenBox) seenBox.innerHTML = ''; return; }
+    // «Был в сети» держим в ЭТОМ же блоке, а не в левой колонке: на телефоне
+    // левая колонка складывается в узкую строку (аватар + имя) и третья
+    // строчка там ломала выравнивание.
+    lvlBox.innerHTML = mlHeadHtml(r) + mlSeenHtml(r) + mlAxesHtml(r) + mlFactsHtml(r);
+    if (seenBox) seenBox.innerHTML = '';
+    // титул вместо безликого «УЧАСТНИК» под именем
+    const el = document.getElementById('contrib-mo-email');
+    if (el && !isMe) el.textContent = String(r.title || '').toUpperCase();
+  };
+  paintLvl();
+  if (typeof mlLoad === 'function' && !ML.loaded) mlLoad().then(paintLvl).catch(()=>{});
+
   document.getElementById('contrib-mo-pages').innerHTML = pgsHtml; document.getElementById('contrib-mo-role-wrap').innerHTML = roleHtml + banHtml;
   document.getElementById('contrib-mo-edit-btn').style.display = isMe ? 'flex' : 'none';
   om('mo-contrib');

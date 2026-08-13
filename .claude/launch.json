@@ -70,6 +70,16 @@
         "8147"
       ],
       "port": 8147
+    },
+    {
+      "name": "levels",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8161"
+      ],
+      "port": 8161
     }
   ]
 }

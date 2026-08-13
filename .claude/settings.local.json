@@ -737,7 +737,17 @@
       "Bash(\" | head)",
       "Bash(grep -n \"^[0-9]*[-:]function \\\\|return `\" | head)",
       "Bash(awk 'NR<870 && /^function |^async function /{print NR\": \"$0}' guide.js)",
-      "Bash(node tools/db_q.js \"select p.proname, pg_get_function_identity_arguments\\(p.oid\\) args from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.proname like '%faction_rating%'\")"
+      "Bash(node tools/db_q.js \"select p.proname, pg_get_function_identity_arguments\\(p.oid\\) args from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.proname like '%faction_rating%'\")",
+      "Bash(node tools/db_q.js \"select jsonb_pretty\\(to_jsonb\\(faction_rating\\(\\)\\)\\) j\")",
+      "Bash(grep -n \"^\\\\s*//\\\\s*=\\\\|adminSection\\\\|function adm\" admin.js)",
+      "Bash(node tools/db_q.js \"select table_name from information_schema.tables where table_schema='public' order by 1\")",
+      "Bash(node tools/db_q.js \"select table_name,column_name,data_type from information_schema.columns where table_schema='public' and table_name in \\('profiles','pages','comments','access_log','faction_economy','faction_achievements','faction_members','characters','char_xp','auth_users','user_roles','faction_news','battles','news_reactions','tickets'\\) order by table_name,ordinal_position\")",
+      "Bash(node tools/db_q.js \"select status,count\\(*\\) from public.faction_members group by 1\")",
+      "Bash(node tools/db_q.js \"select status,count\\(*\\) from public.battles group by 1\")",
+      "Bash(node tools/db_run.js _member_levels.sql)",
+      "Bash(node tools/db_q.js \"select level,count\\(*\\) from public.member_levels group by 1 order by 1\")",
+      "Bash(node tools/db_run.js _promo_path.sql)",
+      "Bash(node tools/db_q.js \"select page_slug,count\\(*\\) c from public.comments where coalesce\\(is_deleted,false\\)=false group by 1 order by c desc limit 3\")"
     ]
   }
 }

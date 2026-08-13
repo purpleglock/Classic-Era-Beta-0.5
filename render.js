@@ -52,23 +52,52 @@ async function renderHome() {
     const isNew = Math.abs(new Date(p.updated_at||0)-new Date(p.created_at||0))<60000;
     const sec2 = p.section ? sections.find(s=>s.slug===p.section) : null;
     const authorName = userLabel(p.author_id || p.created_by || '');
-    return `<div class="cl-row" onclick="go('${jsq(p.slug)}')"><span class="cl-type ${isNew?'ct-new':'ct-edit'}">${isNew?T('new_tag'):T('edit_tag')}</span><div class="cl-info"><span class="cl-title">${esc(pT(p))}</span><span class="cl-author">✍ ${esc(authorName)}</span></div>${sec2 ? `<span class="cl-sec-tag">${esc(sN(sec2))}</span>` : ''}<span class="cl-date">${timeAgo(p.updated_at)}</span></div>`;
+    return `<div class="cl-row" onclick="go('${jsq(p.slug)}')"><span class="cl-type ${isNew?'ct-new':'ct-edit'}">${isNew?T('new_tag'):T('edit_tag')}</span><div class="cl-info"><span class="cl-title">${esc(pT(p))}</span><span class="cl-author">✍ ${esc(authorName)}${(typeof mlBadge === 'function' ? mlBadge(p.author_id, 'sm') : '')}</span></div>${sec2 ? `<span class="cl-sec-tag">${esc(sN(sec2))}</span>` : ''}<span class="cl-date">${timeAgo(p.updated_at)}</span></div>`;
   }).join('');
 
   // ключ автора = author_id (uuid); created_by-email — легаси-фолбэк до этапа 3
   const contribMap = {}; pages.filter(isVisiblePage).forEach(p=>{ const k=p.author_id||p.created_by; if(k) contribMap[k]=(contribMap[k]||0)+1; });
   allProfiles.forEach(prof=>{ if(prof.user_id && !(prof.user_id in contribMap)) contribMap[prof.user_id]=0; });
-  const sortedContribs = Object.entries(contribMap).sort((a,b)=>b[1]-a[1]);
-  const maxCnt = Math.max(100, sortedContribs.length ? sortedContribs[0][1] : 1);
+  // Уровни: витрина серверная (ml_list). Не блокируем главную сетью — рисуем с
+  // тем, что уже в кэше, а первую загрузку добираем в фоне и перерисовываем
+  // (обложка-новелла переживает перерисовку через _homeCoverKey).
+  if (typeof mlLoad === 'function' && !ML.loaded && !ML.loading) {
+    mlLoad().then(() => {
+      if ((typeof curSlug === 'undefined') || curSlug === 'home' || !curSlug) { try { renderHome(); } catch (e) {} }
+    }).catch(() => {});
+  }
+
+  // Порядок участников — по опыту (уровень = стаж + активность + вклад + игра
+  // + ачивки), а не по одному числу страниц. Пока витрина не доехала — старый
+  // порядок по страницам, чтобы блок не прыгал пустым.
+  const _mlKey = k => (typeof mlOf === 'function' && mlOf(k)) || null;
+  const sortedContribs = Object.entries(contribMap).sort((a,b)=>{
+    const ra = _mlKey(a[0]), rb = _mlKey(b[0]);
+    if (ra || rb) return (rb ? rb.xp : -1) - (ra ? ra.xp : -1);
+    return b[1]-a[1];
+  });
   const contribsHtml = sortedContribs.length ? `<section class="home-block hp-contribs"><div class="hb-head"><span class="hb-tag">${T('contributors')}</span></div><div class="contrib-grid">${sortedContribs.map(([key, cnt], idx) => {
     const rank = idx + 1;
     const rankClass = rank <= 3 ? ` rank-${rank}` : '';
     const name = key.includes('@') ? key.split('@')[0] : 'Участник'; const hue = [...key].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
     const prof = getProfileOf(key); const displayName = prof.display_name || name; const avUrl = safeAvatar(prof.avatar_url);
     const avHtml = avUrl ? `<img src="${esc(avUrl)}" loading="lazy">` : `<span style="font-size:20px;font-family:Rajdhani,sans-serif;font-weight:900;color:hsl(${hue},60%,72%)">${esc(displayName.slice(0,2).toUpperCase())}</span>`;
-    const barPct = Math.min(100, Math.round((cnt / 100) * 100));
+    // Уровень с сервера: он же задаёт «богатство» карточки (свечение, оттенок).
+    // Пока витрина не доехала — падаем на старую меру по числу страниц, чтобы
+    // карточка не выглядела пустой на первом кадре.
+    const mlr = _mlKey(key);
+    const barPct = mlr ? Math.round(mlProgress(mlr) * 100) : Math.min(100, cnt);
     const rankNumHtml = rank <= 9 ? `<div class="contrib-rank-num">${rank}</div>` : '';
-    const tier = Math.min(Math.floor(cnt / 5), 20);
+    // Ступень «богатства» карточки. Уровень пополам: иначе на 12-м уровне фон
+    // уходил в кислотную заливку и свечение на 30px — против правил оформления
+    // (один-два акцента, остальное строго).
+    const tier = mlr ? Math.min(Math.floor(mlr.level / 2), 10) : Math.min(Math.floor(cnt / 5), 20);
+    const mlt = mlr ? mlTier(mlr.level) : 0;
+    const lvlHtml = mlr ? `<div class="contrib-lvl-ring ml-t${mlt}">${mlr.level}</div>` : '';
+    const titleHtml = mlr ? `<div class="contrib-title ml-t${mlt}">${esc(mlr.title)}</div>` : '';
+    const footHtml = mlr
+      ? `<div class="contrib-xp ml-t${mlt}"><b>${mlr.xp}</b>&nbsp;XP</div>`
+      : `<div class="contrib-cnt">${cnt}&nbsp;СТР</div>`;
     const tierHue = (hue + tier * 12) % 360;
     const tierSat = Math.min(22 + tier * 2.5, 60);
     const tierLight = Math.min(12 + tier * 0.8, 24);
@@ -80,7 +109,7 @@ async function renderHome() {
     const barLight = Math.min(45 + tier * 1.5, 65);
     // своя карточка получает личную анимацию «зацензурено» (css/10_patch.css)
     const censClass = (typeof user !== 'undefined' && user && (key === user.id || key === user.email)) ? ' contrib-censored' : '';
-    return `<div class="contrib-card${rankClass}${censClass}" onclick="openContribModal('${jsq(key)}','${jsq(displayName)}','${jsq(safeAvatar(avUrl))}',${hue},${cnt})" title="Посмотреть профиль" style="background:linear-gradient(145deg, hsl(${tierHue},${tierSat}%,${tierLight}%) 0%, hsl(${tierHue},${tierSat - 4}%,${tierLight - 3}%) 100%); border-color:hsl(${tierHue},${tierBorderSat}%,${tierBorderLight}%); ${tierGlow}"><div class="contrib-scan"></div><div class="contrib-card-top"><div class="contrib-av-wrap"><div class="contrib-av" style="background:linear-gradient(135deg, hsl(${tierHue},${tierSat + 5}%,${tierLight + 4}%) 0%, hsl(${tierHue},${tierSat}%,${tierLight}%) 100%);border-color:hsl(${tierHue},${tierBorderSat + 10}%,${tierBorderLight + 8}%)">${avHtml}</div><div class="contrib-av-ring" style="color:hsl(${tierHue},${tierSat + 25}%,${50 + tier * 1.5}%)"></div>${rankNumHtml}</div><div class="contrib-card-info"><div class="contrib-name">${esc(displayName)}</div></div></div><div class="contrib-card-bottom"><div class="contrib-stat-bar"><div class="contrib-stat-fill" style="width:${barPct}%; background:linear-gradient(90deg, hsl(${barHue},${barSat}%,${barLight}%) 0%, hsl(${barHue},${barSat + 10}%,${barLight + 8}%) 100%); box-shadow: 0 0 ${tier * 1.5}px hsla(${barHue}, ${barSat}%, ${barLight}%, ${Math.min(tier * 0.05, 0.6)});"></div></div><div class="contrib-cnt">${cnt}&nbsp;СТР</div></div>${censClass ? '<div class="cens-layer"><i></i><i></i><i></i></div>' : ''}</div>`;
+    return `<div class="contrib-card${rankClass}${censClass}" onclick="openContribModal('${jsq(key)}','${jsq(displayName)}','${jsq(safeAvatar(avUrl))}',${hue},${cnt})" title="Посмотреть профиль" style="background:linear-gradient(145deg, hsl(${tierHue},${tierSat}%,${tierLight}%) 0%, hsl(${tierHue},${tierSat - 4}%,${tierLight - 3}%) 100%); border-color:hsl(${tierHue},${tierBorderSat}%,${tierBorderLight}%); ${tierGlow}"><div class="contrib-scan"></div><div class="contrib-card-top"><div class="contrib-av-wrap"><div class="contrib-av" style="background:linear-gradient(135deg, hsl(${tierHue},${tierSat + 5}%,${tierLight + 4}%) 0%, hsl(${tierHue},${tierSat}%,${tierLight}%) 100%);border-color:hsl(${tierHue},${tierBorderSat + 10}%,${tierBorderLight + 8}%)">${avHtml}</div><div class="contrib-av-ring" style="color:hsl(${tierHue},${tierSat + 25}%,${50 + tier * 1.5}%)"></div>${rankNumHtml}${lvlHtml}</div><div class="contrib-card-info"><div class="contrib-name">${esc(displayName)}</div>${titleHtml}</div></div><div class="contrib-card-bottom"><div class="contrib-stat-bar"><div class="contrib-stat-fill" style="width:${barPct}%; background:linear-gradient(90deg, hsl(${barHue},${barSat}%,${barLight}%) 0%, hsl(${barHue},${barSat + 10}%,${barLight + 8}%) 100%); box-shadow: 0 0 ${tier * 1.5}px hsla(${barHue}, ${barSat}%, ${barLight}%, ${Math.min(tier * 0.05, 0.6)});"></div></div>${footHtml}</div>${censClass ? '<div class="cens-layer"><i></i><i></i><i></i></div>' : ''}</div>`;
   }).join('')}</div></section>` : '';
 
   // ── Единая обложка главной (одно изображение) ──

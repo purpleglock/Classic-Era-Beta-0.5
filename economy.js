@@ -2526,6 +2526,23 @@ async function _ecLoadRestImpl() {
       });
     }
   } catch (e) { EC.ach = EC.ach || []; }
+
+  // Путь становления: сервер сам считает прогресс, закрывает вехи и платит.
+  // Падение этой ветки не должно ронять загрузку кабинета — просто нет панели.
+  try {
+    const path = await ecRpc('path_check');
+    EC.path = path || null;
+    if (path && path.gc != null && EC.eco) EC.eco.gc = path.gc;
+    if (path && path.newly > 0 && Array.isArray(path.new_ids) && path.new_ids.length) {
+      const byId = {};
+      (path.steps || []).forEach(s => byId[s.id] = s);
+      const names = path.new_ids.map(id => (byId[id] || {}).title || id).join(', ');
+      const rew = path.new_ids
+        .map(id => ecRewardText((byId[id] || {}).reward))
+        .filter(Boolean).join(' · ');
+      if (typeof toast === 'function') toast(`🧭 Веха: ${names}${rew ? ` · ${rew}` : ''}`, 'ok');
+    }
+  } catch (e) { EC.path = EC.path || null; }
 }
 
 // Безопасные дефолты подсистем фазы 2 — ставятся ДО первой отрисовки кабинета, чтобы
@@ -4923,6 +4940,107 @@ function ecAchOverviewTeaser() {
   </div>`;
 }
 
+// ════════════════════════════════════════════════════════════
+// ПУТЬ СТАНОВЛЕНИЯ + ПРОМОКОДЫ (_promo_path.sql)
+// Каталог вех и все суммы приходят С СЕРВЕРА (правятся в админке) — здесь
+// НЕТ ни одной зашитой награды, только отрисовка того, что отдал path_check.
+// ════════════════════════════════════════════════════════════
+
+// Человекочитаемая расшифровка награды: {gc, science, res, coupons, shards, research}.
+function ecRewardText(r) {
+  if (!r || typeof r !== 'object') return '';
+  const p = [];
+  if (r.gc)      p.push(`+${ecNum(r.gc)} ГС`);
+  if (r.science) p.push(`+${ecNum(r.science)} ОН`);
+  if (r.tnp)     p.push(`+${ecNum(r.tnp)} ТНП`);
+  if (r.res && typeof r.res === 'object')
+    Object.entries(r.res).forEach(([n, v]) => p.push(`+${ecNum(v)} ${n}`));
+  if (r.coupons) p.push(`+${ecNum(r.coupons)} ◈ осколк.`);
+  if (r.shards && typeof r.shards === 'object')
+    Object.entries(r.shards).forEach(([k, v]) => p.push(`+${ecNum(v)} ◈ ${k}`));
+  if (Array.isArray(r.research) && r.research.length) p.push(`технологии: ${r.research.length}`);
+  return p.join(' · ');
+}
+
+// Ввод промокода. Живёт в шапке панели становления и НЕ прячется у ветеранов:
+// код может быть выдан кому угодно (компенсация, событие, конкурс).
+async function ecPromoSubmit() {
+  const inp = document.getElementById('ec-promo-inp');
+  if (!inp) return;
+  const code = (inp.value || '').trim();
+  if (!code) { toast('Введите код', 'err'); return; }
+  if (EC.busy) return; EC.busy = true;
+  try {
+    const res = await ecRpc('promo_redeem', { p_code: code });
+    const what = ecRewardText(res && res.granted) || 'награда зачислена';
+    toast(`🎁 ${(res && res.title) || 'Код принят'} · ${what}`, 'ok');
+    inp.value = '';
+    await ecReloadPaint();
+  } catch (e) {
+    // Сервер отвечает готовым русским текстом («Код исчерпан», «уже применён…») —
+    // показываем как есть, не подменяя своей формулировкой.
+    toast(ecErr(e.message), 'err');
+  } finally { EC.busy = false; }
+}
+function ecPromoKey(ev) { if (ev && ev.key === 'Enter') ecPromoSubmit(); }
+
+// Панель «Путь становления» в «Обзоре». Отдаёт '' только если сервер вообще
+// не ответил — иначе всегда виден хотя бы ввод кода.
+function ecPathPanel() {
+  const P = EC.path;
+  if (!P) return '';
+  const steps = Array.isArray(P.steps) ? P.steps : [];
+  const done = steps.filter(s => s.done).length;
+  const stale = !!P.stale;
+  // Путь пройден целиком (или держава уже взрослая) — блок сворачивается
+  // в одну строку с вводом кода, чтобы не занимать место в кабинете навсегда.
+  const collapsed = stale || (steps.length > 0 && done >= steps.length);
+
+  const promo = `<div class="ec-promo-row">
+    <input id="ec-promo-inp" class="ec-promo-inp" type="text" maxlength="32" autocomplete="off"
+           placeholder="Промокод" onkeydown="ecPromoKey(event)">
+    <button type="button" class="btn btn-gh btn-sm" onclick="ecPromoSubmit()">Применить</button>
+  </div>`;
+
+  if (collapsed) {
+    return `<div class="ec-ovx-panel ec-path-panel" style="grid-column:1/-1">
+      <div class="ec-path-head">
+        <div class="ec-ovx-panel-t" style="margin:0">🎁 Промокод
+          <span class="ec-ovx-panel-sub">${stale ? 'путь становления — для молодых держав' : 'путь становления пройден'}</span></div>
+        ${promo}
+      </div>
+    </div>`;
+  }
+
+  const next = steps.find(s => !s.done);
+  const rows = steps.map(s => {
+    const prog = Number(s.progress || 0), thr = Number(s.threshold || 1);
+    const isNext = next && next.id === s.id;
+    const rew = ecRewardText(s.reward);
+    return `<div class="ec-path-step${s.done ? ' done' : ''}${isNext ? ' next' : ''}">
+      <span class="ec-path-ic">${s.done ? '✓' : esc(s.icon || '•')}</span>
+      <span class="ec-path-main">
+        <span class="ec-path-t">${esc(s.title || s.id)}</span>
+        ${s.done ? '' : `<span class="ec-path-hint">${esc(s.hint || '')}</span>`}
+      </span>
+      <span class="ec-path-side">
+        ${rew ? `<span class="ec-path-rew">${esc(rew)}</span>` : ''}
+        ${s.done || thr <= 1 ? '' : `<span class="ec-path-prog">${ecNum(Math.min(prog, thr))} / ${ecNum(thr)}</span>`}
+      </span>
+    </div>`;
+  }).join('');
+
+  return `<div class="ec-ovx-panel ec-path-panel" style="grid-column:1/-1">
+    <div class="ec-path-head">
+      <div class="ec-ovx-panel-t" style="margin:0">🧭 Путь становления
+        <span class="ec-ovx-panel-sub">шаг ${ecNum(done + 1)} из ${ecNum(steps.length)}</span></div>
+      ${promo}
+    </div>
+    <div class="ec-path-bar">${ecOvBar(done, steps.length, done >= steps.length ? 'fill-gc' : 'fill-amb')}</div>
+    <div class="ec-path-list">${rows}</div>
+  </div>`;
+}
+
 function ecTabOverview() {
   const sumCat = c => EC.roster.filter(r => r.category === c).reduce((a, r) => a + (r.qty || 0), 0);
   const ships = sumCat('ship'), ground = sumCat('ground'), avia = sumCat('aviation');
@@ -5380,7 +5498,9 @@ function ecTabOverview() {
     ${vit('🔬', 'наука / сут', `+${ecNum(inc.science || 0)}`, 'sci', 'research', 'Очки науки со слотов Научных Институтов')}
   </div>`;
 
-  return `<div class="ec-cyb-ov">${statusStrip}<div class="ec-ovx-grid">${budget}${ecStatsPanel()}${resPanel}${empire}${ecPovertyPanel()}${army}${sci}${ecDoctrineHtml()}${achTeaser}</div>${raceNote}
+  // Путь становления — ПЕРВЫМ в сетке: новичку нужен указатель «что нажать»
+  // раньше, чем роспись бюджета.
+  return `<div class="ec-cyb-ov">${statusStrip}<div class="ec-ovx-grid">${ecPathPanel()}${budget}${ecStatsPanel()}${resPanel}${empire}${ecPovertyPanel()}${army}${sci}${ecDoctrineHtml()}${achTeaser}</div>${raceNote}
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
       <button class="btn btn-gh btn-sm" onclick="go('cat-ships')">🚀 Каталоги</button>

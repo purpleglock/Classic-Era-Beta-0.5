@@ -372,6 +372,7 @@ function renderCommentItem(cmt, depth = 0) {
   <div class="cmt-bubble"${facStyle}>
     <div class="cmt-meta">
       <span class="cmt-author"${facStyle}>${esc(displayName)}</span>
+      ${typeof mlBadge === 'function' ? mlBadge(cmt.user_id, 'sm') : ''}
       ${facChip}
       <span class="cmt-time">${timeAgo(cmt.created_at)}</span>
       ${canReply ? `<button class="cmt-reply-btn" onclick="replyToComment('${esc(cmt.id)}')" title="${lang === 'ru' ? 'Ответить' : 'Reply'}">${lang === 'ru' ? 'ответить' : 'reply'}</button>` : ''}
@@ -432,6 +433,12 @@ function renderCommentsList() {
 
   const tree = buildCommentTree(_cmtItems);
   list.innerHTML = tree.map(node => renderCommentTree(node)).join('');
+
+  // Бейджи уровней: витрину могли не тянуть (зашли сразу на статью) —
+  // дозагружаем в фоне и перерисовываем один раз, уже с бейджами.
+  if (typeof mlLoad === 'function' && !ML.loaded && !ML.loading) {
+    mlLoad().then(() => { if (document.getElementById('cmt-list')) renderCommentsList(); }).catch(() => {});
+  }
 }
 
 // ── Рендер всей секции комментариев ────────────────────────

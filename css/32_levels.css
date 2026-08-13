@@ -1,0 +1,98 @@
+/* ── УРОВНИ УЧАСТНИКОВ ──────────────────────────────────────
+   Бейдж у имени, полоса опыта, оси досье. Один акцент — цвет ступени
+   (ml-t0..ml-t5), остальное строгое: см. memory ui-design-rules. */
+
+.ml-t0{--ml-c:#7d8894;--ml-cd:rgba(125,136,148,.14)}
+.ml-t1{--ml-c:#6f9ac4;--ml-cd:rgba(111,154,196,.14)}
+.ml-t2{--ml-c:#59b39a;--ml-cd:rgba(89,179,154,.14)}
+.ml-t3{--ml-c:#c2953f;--ml-cd:rgba(194,149,63,.14)}
+.ml-t4{--ml-c:#c5713f;--ml-cd:rgba(197,113,63,.14)}
+.ml-t5{--ml-c:#b45fc0;--ml-cd:rgba(180,95,192,.16)}
+
+/* ── Бейдж уровня (везде, где мелькает имя) ── */
+.ml-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:17px;height:17px;padding:0 4px;margin:0 4px;
+  font-family: var(--font-display);font-size:9px;font-weight:900;line-height:1;
+  color:var(--ml-c);background:var(--ml-cd);
+  border: var(--deco-frame-w, 1px) solid var(--ml-c);
+  border-radius:2px;vertical-align:middle;flex-shrink:0;
+  cursor:help;
+}
+.ml-badge.ml-sm{min-width:14px;height:14px;font-size:8px;padding:0 3px;margin:0 3px}
+
+/* ── Полоса опыта ── */
+.ml-bar{position:relative;height:3px;background:var(--w1);overflow:hidden;border-radius:2px}
+.ml-bar>i{position:absolute;left:0;top:0;height:100%;background:var(--ml-c,var(--te));
+  border-radius:2px;transition:width .7s cubic-bezier(.4,0,.2,1)}
+.ml-bar-txt{
+  display:flex;justify-content:space-between;gap:8px;margin-top:5px;
+  font-family: var(--font-mono);font-size:8px;color:var(--t4);letter-spacing:.5px;
+}
+
+/* ── Шапка досье ── */
+.ml-head{
+  display:flex;align-items:center;gap:14px;padding:12px 14px;margin-bottom:14px;
+  background:var(--b3);border: var(--deco-frame-w, 1px) solid var(--w2);
+  border-left:2px solid var(--ml-c);
+}
+.ml-head-lvl{display:flex;flex-direction:column;align-items:center;line-height:1;flex-shrink:0}
+.ml-head-num{font-family: var(--font-display);font-size:30px;font-weight:900;color:var(--ml-c)}
+.ml-head-cap{font-family: var(--font-mono);font-size:7px;letter-spacing:2px;color:var(--t4);margin-top:3px}
+.ml-head-body{flex:1;min-width:0}
+.ml-head-title{
+  font-family: var(--font-display);font-size:13px;font-weight:700;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--t1);margin-bottom:8px;
+}
+
+/* ── Оси опыта ── */
+.ml-axes{display:flex;flex-direction:column;gap:9px;margin-bottom:14px}
+.ml-axis-hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.ml-axis-name{font-family: var(--font-mono);font-size:8px;letter-spacing:1.5px;color:var(--t3)}
+.ml-axis-val{font-family: var(--font-display);font-size:11px;font-weight:700;color:var(--t2)}
+.ml-axis-bar{height:2px;background:var(--w1);position:relative;overflow:hidden;border-radius:1px}
+.ml-axis-bar>i{position:absolute;left:0;top:0;height:100%;background:var(--te);opacity:.75;border-radius:1px}
+
+/* ── Сухие цифры ── */
+.ml-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:1px;background:var(--w1)}
+.ml-fact{
+  display:flex;flex-direction:column;gap:3px;padding:8px 10px;background:var(--b2);
+}
+.ml-fact-k{font-family: var(--font-mono);font-size:7px;letter-spacing:1.2px;color:var(--t4)}
+.ml-fact-v{font-family: var(--font-display);font-size:13px;font-weight:700;color:var(--t1)}
+
+.ml-seen{font-family: var(--font-mono);font-size:8px;color:var(--t4);letter-spacing:.5px;margin-top:8px;text-align:center}
+
+/* ── Карточка участника на главной ── */
+.contrib-lvl-ring{
+  position:absolute;bottom:-5px;left:-5px;
+  min-width:22px;height:22px;padding:0 4px;border-radius:11px;
+  display:flex;align-items:center;justify-content:center;
+  font-family: var(--font-display);font-size:9px;font-weight:900;
+  color:var(--ml-c);background:var(--b1);
+  border: var(--deco-frame-w, 1px) solid var(--ml-c);
+  z-index:3;
+}
+.contrib-title{
+  font-family: var(--font-mono);font-size:7px;letter-spacing:1.4px;
+  color:var(--ml-c,var(--t4));margin-top:4px;text-transform:uppercase;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.contrib-xp{font-family: var(--font-mono);font-size:9px;color:var(--t4);letter-spacing:1.4px}
+.contrib-xp b{color:var(--ml-c);font-weight:700}
+
+/* Блок уровня в правой колонке досье. Колонка режет overflow, а список
+   страниц под ним прокручивается сам — поэтому уровню даём свою прокрутку
+   и потолок высоты, иначе оси выдавливали список за край панели. */
+#contrib-mo-lvl:not(:empty){
+  padding:18px 24px 6px;flex-shrink:0;overflow-y:auto;max-height:52%;
+}
+
+/* Телефон: досье в одну колонку, цифры покрупнее */
+@media(max-width:640px){
+  .ml-head-num{font-size:26px}
+  .ml-facts{grid-template-columns:repeat(2,1fr)}
+  /* На телефоне прокручивается вся правая колонка — своя прокрутка и потолок
+     у блока уровня здесь только мешали бы (скролл внутри скролла). */
+  #contrib-mo-lvl:not(:empty){max-height:none;overflow:visible;padding:14px 16px 4px}
+}

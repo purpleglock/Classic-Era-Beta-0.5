@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Стенд: «Рейтинг игроков» в кабинете</title>
+<!-- ВРЕМЕННЫЙ СТЕНД. Воспроизводит разметку _hrRender (render.js) внутри
+     #cab-stage и перестановку полосы вкладок (cabRailify, cabinet.js). -->
+<script>document.write('<link rel="stylesheet" href="css/index.css?b=' + Date.now() + '">')</script>
+<div id="app"><main id="cw"><div id="pg">
+  <div class="cab-stage on" id="cab-stage">
+    <div class="hp-vn-rating show" id="hp-vn-rating"></div>
+  </div>
+</div></main></div>
+<script>
+const rows = [
+  {name:'Соридонский Союз', pct:17.4, color:'#e70488', herald:''},
+  {name:'Шестнадцатая Волна', pct:16.2, color:'#d73920', herald:''},
+  {name:"Ааа'дукиль", pct:11.2, color:'#00508a', herald:''},
+];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const TABS = [['sphere','Сфера влияния'],['flows','Потоки влияния'],['perc','Восприятие'],['tree','Отрасли']];
+const tabs = `<div class="hp-vnr-tabs">` + TABS.map(([k,l],i)=>
+  `<button class="hp-vnr-tab${i?'':' on'}" type="button">${l}</button>`).join('') + `</div>`;
+const vmax = 17.4;
+const body = rows.map((f,i)=>`<div class="hp-vnr-row solo${i?'':' top'}">
+  <span class="hp-vnr-row-r">0${i+1}</span>
+  <span class="hp-vnr-row-f"><i style="--c:${f.color}"></i><b>${esc(f.name.toUpperCase())}</b></span>
+  <span class="hp-vnr-bar solo"><i class="fill" style="width:${(f.pct/vmax*100).toFixed(1)}%"></i></span>
+  <span class="hp-vnr-row-v">${f.pct}%</span>
+</div>`).join('');
+document.getElementById('hp-vn-rating').innerHTML =
+  `<div class="hp-vn-col-head"><span class="hp-vn-col-title">Рейтинг игроков</span>
+   <button class="hp-vn-col-x" type="button">↩ назад</button></div>` + tabs +
+  `<div class="hp-vn-col-body hp-vnr-body">
+    <div class="hp-vnr-panel hp-vnr-main">
+      <span class="hp-vnr-cap hp-vnr-live">Сфера влияния · доля территории</span>
+      <div class="hp-vnr-rows solo">${body}</div>
+      <span class="hp-vnr-lead">◆ ЛИДЕР: СОРИДОНСКИЙ СОЮЗ · 17.4%</span>
+    </div>
+  </div>`;
+
+// ── cabRailify (копия из cabinet.js, только ветка «рельсы нет») ──
+(function(){
+  const host = document.getElementById('cab-stage');
+  host.querySelectorAll('.hp-vnr-tabs').forEach(strip => {
+    const parent = strip.parentNode;
+    const split = document.createElement('div'); split.className = 'cab-split';
+    const railBox = document.createElement('div'); railBox.className = 'cab-split-rail';
+    const col = document.createElement('div'); col.className = 'cab-split-col';
+    const after = []; for (let n = strip.nextSibling; n; n = n.nextSibling) after.push(n);
+    parent.insertBefore(split, strip);
+    strip.dataset.cabRail = '1'; strip.classList.add('cab-vrail');
+    railBox.appendChild(strip); after.forEach(n => col.appendChild(n));
+    split.appendChild(railBox); split.appendChild(col);
+  });
+})();
+</script>

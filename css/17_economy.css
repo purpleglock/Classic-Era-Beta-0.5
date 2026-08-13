@@ -4954,3 +4954,45 @@ canvas.ec-res-thumb-cv { border-radius: 0; background: transparent; box-shadow: 
   .ec-lg-d-k { margin-top: 6px; }
   .ec-lg-fchip, .ec-lg-more { padding: 6px 12px; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   ПУТЬ СТАНОВЛЕНИЯ + ПРОМОКОД (_promo_path.sql, ecPathPanel)
+   Один акцент — янтарь следующего шага; пройденное гасим.
+   ══════════════════════════════════════════════════════════ */
+.ec-path-panel { display: flex; flex-direction: column; gap: 12px; }
+.ec-path-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ec-promo-row { display: flex; align-items: center; gap: 8px; }
+.ec-promo-inp {
+  width: 150px; padding: 7px 10px; border-radius: 8px;
+  background: var(--b1, #0f141b); color: var(--t1, #e8edf2);
+  border: 1px solid var(--w2, #2a3340);
+  font-family: monospace; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+}
+.ec-promo-inp:focus { outline: none; border-color: var(--am, #d8a13a); }
+.ec-path-bar { margin: 0; }
+.ec-path-list { display: flex; flex-direction: column; gap: 2px; }
+.ec-path-step {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 10px; border-radius: 9px; border: 1px solid transparent;
+}
+.ec-path-step.next { border-color: color-mix(in srgb, var(--am, #d8a13a) 45%, transparent);
+  background: color-mix(in srgb, var(--am, #d8a13a) 8%, transparent); }
+.ec-path-step.done { opacity: .5; }
+.ec-path-ic { flex: 0 0 22px; text-align: center; font-size: 14px; line-height: 1.35; }
+.ec-path-step.done .ec-path-ic { color: var(--gd, #3a7fbf); }
+.ec-path-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ec-path-t { font-size: 13px; font-weight: 600; color: var(--t1, #e8edf2); }
+.ec-path-step.done .ec-path-t { text-decoration: line-through; }
+.ec-path-hint { font-size: 11.5px; line-height: 1.45; color: var(--t3, #8aa0b0); }
+.ec-path-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.ec-path-rew { font-family: monospace; font-size: 11px; color: var(--am, #d8a13a); white-space: nowrap; }
+.ec-path-step.done .ec-path-rew { color: var(--t4, #6a7a88); }
+.ec-path-prog { font-family: monospace; font-size: 10px; color: var(--t4, #6a7a88); }
+
+@media (max-width: 720px) {
+  .ec-path-head { flex-direction: column; align-items: stretch; }
+  .ec-promo-row { width: 100%; }
+  .ec-promo-inp { flex: 1 1 auto; width: auto; }
+  .ec-path-step { flex-wrap: wrap; }
+  .ec-path-side { flex-direction: row; align-items: center; gap: 8px; width: 100%; padding-left: 32px; justify-content: flex-start; }
+}
