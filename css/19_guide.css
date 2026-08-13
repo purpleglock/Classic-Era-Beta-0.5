@@ -354,6 +354,38 @@
 }
 .gb-doc-note b { color: var(--color-text); }
 
+/* ── Прикидки аванпоста и бака: единственная «живая» часть страницы ── */
+/* Ровно два элемента управления (чипы режима + ползунок) и та же kv-сетка,
+   что и у остальной страницы: считалка не должна выглядеть отдельным виджетом. */
+.gb-op-calc {
+  border: var(--deco-frame-w, 1px) solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px 4px; margin: 12px 0 18px;
+  background: var(--color-surface-subtle, transparent);
+}
+.gb-op-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gb-op-chip {
+  font-family: var(--font-display); font-size: 12.5px; line-height: 1;
+  padding: 7px 11px; cursor: pointer;
+  color: var(--color-text-muted); background: transparent;
+  border: var(--deco-frame-w, 1px) solid var(--color-border);
+  border-radius: var(--radius-pill); transition: var(--duration-fast);
+}
+.gb-op-chip:hover { color: var(--color-text); border-color: var(--color-border-strong, rgba(255,255,255,.25)); }
+.gb-op-chip-on { color: var(--color-canvas); background: var(--color-accent); border-color: var(--color-accent); }
+.gb-op-slider { display: block; margin: 14px 0 8px; font-size: 13px; color: var(--color-text-muted); }
+.gb-op-slider b { color: var(--color-text); }
+.gb-op-slider input { display: block; width: 100%; max-width: 420px; margin-top: 8px; accent-color: var(--color-accent); }
+/* Шкала укомплектованности: засечка на 50% = порог работоспособности. */
+.gb-op-gauge {
+  position: relative; height: 4px; margin: 0 0 14px; max-width: 420px;
+  background: var(--color-border-subtle); border-radius: 2px; overflow: hidden;
+}
+.gb-op-gauge i { display: block; height: 100%; background: var(--color-accent); }
+.gb-op-gauge-thin i { background: var(--color-danger, #e0654f); }
+.gb-op-gauge b { position: absolute; top: -3px; width: 1px; height: 10px; background: var(--color-text-faint); }
+.gb-dim { color: var(--color-text-faint); font-size: 12px; }
+
 /* ── Список «ключ → значение» (gb-kv) ── */
 .gb-kv-grid {
   border: var(--deco-frame-w, 1px) solid var(--color-border);

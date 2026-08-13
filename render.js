@@ -10435,6 +10435,19 @@ function _hvpScene(en, c) {
   const res = (c.resources || []).map(r => `<span class="hvp-res-row">${rIco(r.name)}${esc(r.name || '')}</span>`).join('')
     || `<span class="hvp-res-none">${en ? 'no deposits' : 'месторождений нет'}</span>`;
 
+  // ⚠️ СИСТЕМНЫЕ ОБЪЕКТЫ НЕ СТОЯТ НА ПОВЕРХНОСТИ. Пост древних стражей ячейку не
+  // занимает и принадлежит СИСТЕМЕ, а не планете, — на сцене его не было вообще,
+  // и построивший игрок решал, что постройка пропала. Показываем отдельной строкой.
+  if (typeof EC !== 'undefined' && !EC._guardPosts && typeof ecGuardLoad === 'function') {
+    ecGuardLoad().then(() => { if (_hvp.mode === 'planet') _hvpRender(); });
+  }
+  const guard = ((typeof EC !== 'undefined' && EC._guardPosts) || [])
+    .find(g => g.system_id === c.system_id && g.faction_id === EC.fid);
+  const sysRow = guard
+    ? `<div class="hvp-info-row" title="${en ? 'Guards the whole system, takes no cell' : 'Прикрывает всю систему, ячейку не занимает'}">
+         <span>⟁ ${en ? 'Guardian post' : 'Пост стражей'}</span><b>${en ? 'in system' : 'в системе'}</b></div>`
+    : '';
+
   return `<div class="hp-vn-col-body hvp-body hvp-body-scene">
     <div class="hvp-scene hvp-look-${look}">
       ${_hvpBgImg(c, 'hvp-scene-art')}
@@ -10449,6 +10462,7 @@ function _hvpScene(en, c) {
       <div class="hp-vn-col-info hvp-info">
         <div class="hvp-info-row"><span>${hvpIco('cells')}${en ? 'Cells' : 'Ячейки'}</span><b>${blds.length + pends.length}/${cells}</b></div>
         <div class="hvp-info-row"><span>${hvpIco('gc')}${en ? 'Treasury' : 'Казна'}</span><b>${typeof ecNum === 'function' ? ecNum((EC.eco && EC.eco.gc) || 0) : ((EC.eco && EC.eco.gc) || 0)} ГС</b></div>
+        ${sysRow}
         <div class="hvp-info-res">${res}</div>
       </div>
       ${manage}

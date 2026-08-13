@@ -4838,6 +4838,10 @@ canvas.ec-res-thumb-cv { border-radius: 0; background: transparent; box-shadow: 
 .ec-lg-card { padding: 12px; background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); }
 .ec-lg-card-h { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--t1); margin-bottom: 10px; }
 .ec-lg-note { font-size: 12.5px; line-height: 1.5; color: var(--t2); margin-bottom: 8px; }
+/* вендетта: та же карточка, но с ржавой рамкой, когда отряд уже в пути */
+.ec-lg-card-hot { border-color: var(--lg-d); }
+.ec-lg-vend { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.ec-lg-vend .ec-lg-note { margin-bottom: 0; }
 .ec-lg-empty { font-size: 12.5px; line-height: 1.5; color: var(--t3); }
 
 /* ── лента подхода ── */
@@ -4859,6 +4863,10 @@ canvas.ec-res-thumb-cv { border-radius: 0; background: transparent; box-shadow: 
 .ec-lg-s3 .ec-lg-mark-c { width: 22px; height: 22px; font-size: 12px; }
 .ec-lg-s4 .ec-lg-mark-c { width: 26px; height: 26px; font-size: 13px; }
 .ec-lg-mine .ec-lg-mark-c { background: var(--lg); color: var(--b1); border-color: var(--lg); }
+/* карательный отряд: сплошная заливка + кольцо — метку мести нельзя спутать
+   с рядовым налётом даже боковым зрением */
+.ec-lg-rev .ec-lg-mark-c { background: var(--lg); color: var(--b1); border-color: var(--lg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--lg) 35%, transparent); }
 .ec-lg-mark:hover .ec-lg-mark-c, .ec-lg-picked .ec-lg-mark-c { box-shadow: 0 0 0 3px color-mix(in srgb, var(--lg) 22%, transparent); }
 
 .ec-lg-detail { margin-top: 6px; padding: 10px; border: 1px solid var(--lg-d); border-radius: var(--radius-sm); }

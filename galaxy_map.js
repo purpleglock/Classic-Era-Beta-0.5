@@ -2182,9 +2182,13 @@ function gmLegionSummary() {
           <span class="gm-r-where">${secs.map(esc).join(', ')} · направление неизвестно</span></span></div>`
     : '';
   const hint = known.length ? '' :
-    `<div class="gm-r-hint">Точнее не видно. Замысел и состав вскрывает только разведывательный аванпост с ПОЛНЫМ экипажем рядом.</div>`;
-  return `<div class="gm-r-group"><div class="gm-r-head">☠ Угрозы</div>${rows}${ghostRow}${hint}</div>`;
+    `<div class="gm-r-hint">Точнее не видно ${gmHelp('legion')}</div>`;
+  return `<div class="gm-r-group"><div class="gm-r-head">☠ Угрозы ${gmHelp('legion')}</div>${rows}${ghostRow}${hint}</div>`;
 }
+// Кнопка «?» на карте — то же окно гайдбука, что и в кабинете: своих
+// описаний правил карта не держит.
+function gmHelp(key) { return (typeof gbHelpBtn === 'function') ? gbHelpBtn(key) : ''; }
+
 // Клик по угрозе: навести камеру на систему, если она известна.
 function gmLegionGo(sysId) {
   if (!sysId) { toast('Направление неизвестно: сигнатура вскрыта только до сектора', 'info'); return; }
@@ -2209,8 +2213,7 @@ function gmOpenOutpostCmd(id) {
       ? `<button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('recon')">🛰 Развернуть: разведка</button>
            <button class="gm-opcmd-btn" onclick="gmOutpostCmdDeployMining()">⛏ Развернуть: добыча</button>
            <button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('depot')">⛽ Развернуть: застава</button>
-           <div class="gm-opcmd-hint">Разведка — срез по соседним державам. Добыча — ОДИН выбранный ресурс системы. Застава — ЗАПРАВКА флота вне своих границ и стоянка: без сети застав вглубь карты не уйти.</div>
-           <div class="gm-opcmd-hint">Любому аванпосту нужен ЭКИПАЖ: половина штата даётся сразу, дальше — наём и жалование. Пустой аванпост сворачивается.</div>`
+           <div class="gm-opcmd-hint">Чем режимы отличаются и во что обходится экипаж ${gmHelp('outposts')}</div>`
       : `<button class="gm-opcmd-btn gm-dis" disabled>⚑ Развернуть в аванпост</button>
            <div class="gm-opcmd-hint">Развернуть нельзя: нужна нейтральная система, не впритык к чужой границе</div>`}
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmOutpostCmdScrap()">✕ Списать носитель</button>
@@ -2850,15 +2853,36 @@ async function gmFleetRaidLoad(id, sysId) {
     const own = esc((owner && owner.name) || '');
     return `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetRaidColony('${id}','${esc(c.id)}')">⛓ Налёт на колонию: ${nm}${own ? ' · ' + own : ''}</button>`;
   }).join('');
-  const colBlock = colRows ? `<div class="gm-opcmd-hint" style="margin-top:6px">⛓ Колонии в системе — угнать население в рабство (риск: заметят):</div>${colRows}` : '';
-
-  if (!GMM._raidList.length && !colRows) { box.innerHTML = `<div class="gm-opcmd-hint">🏴 Чужих караванов и колоний рядом нет.</div>`; return; }
-  const rows = GMM._raidList.map(rt => {
+  GMM._raidCols = enemyCols;
+  const n = GMM._raidList.length + enemyCols.length;
+  // Карточка флота — это МЕНЮ, а не простыня: цели налёта прячем за одну строку
+  // (раньше каждая колония и каждый караван добавляли свою кнопку, и панель
+  // разрасталась на пол-экрана, перекрывая карту). Список — вторым шагом.
+  box.innerHTML = n
+    ? `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetRaidMenu('${id}')">⛓ Налёт — выберите цель (${n})</button>`
+    : `<div class="gm-opcmd-hint">🏴 Чужих караванов и колоний рядом нет.</div>`;
+}
+// Второй шаг налёта: список целей отдельной карточкой. Возврат — в меню флота.
+function gmFleetRaidMenu(id) {
+  const el = document.getElementById('gm-opcmd'); if (!el) return;
+  const cvRows = (GMM._raidList || []).map(rt => {
     const res = rt.resource ? `${esc(rt.resource)} ×${(+rt.volume || 0)}` : `${(+rt.volume || 0)} ед.`;
-    return `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetRaidGo('${id}','${esc(rt.id)}')">🏴 Грабить: ${esc(rt.owner_name || '?')} · ${res} · 🛡${(+rt.convoy || 0)}</button>`;
+    return `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetRaidGo('${id}','${esc(rt.id)}')">🏴 ${esc(rt.owner_name || '?')} · ${res} · 🛡${(+rt.convoy || 0)}</button>`;
   }).join('');
-  const cvBlock = GMM._raidList.length ? `<div class="gm-opcmd-hint" style="margin-top:4px">🏴 Караваны на пути — грабить (риск: заметят):</div>${rows}` : '';
-  box.innerHTML = `${cvBlock}${colBlock}`;
+  const colRows = (GMM._raidCols || []).map(c => {
+    const owner = (GM.factions || []).find(f => f.id === c.faction_id);
+    const own = esc((owner && owner.name) || '');
+    return `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetRaidColony('${id}','${esc(c.id)}')">⛓ ${esc(c.planet_name || 'колония')}${own ? ' · ' + own : ''}</button>`;
+  }).join('');
+  el.innerHTML = `<div class="gm-opcmd-card">
+      <button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
+      <div class="gm-opcmd-title">⛓ Цель налёта</div>
+      <div class="gm-opcmd-hint">Риск: заметят — тогда добычи нет, а отношения испорчены.</div>
+      ${cvRows ? `<div class="gm-opcmd-hint" style="margin-top:4px">🏴 Караваны на пути:</div>${cvRows}` : ''}
+      ${colRows ? `<div class="gm-opcmd-hint" style="margin-top:6px">⛓ Колонии в системе — угон населения в рабство:</div>${colRows}` : ''}
+      <button class="gm-opcmd-btn" onclick="gmOpenFleetCmd('${id}')">← Назад</button>
+    </div>`;
+  el.classList.remove('gm-hidden');
 }
 async function gmFleetRaidColony(id, colonyId) {
   if (GM._defBusy) return; GM._defBusy = true;
@@ -4229,7 +4253,11 @@ function gmmBindCanvas() {
     }
     if (!g || g.mode !== 'pan') return;
     const now = performance.now();
-    if (!g.moved && e.type === 'pointerup' && now - g.t0 < 500) {
+    // Клик = не двигали пальцем/мышью. Времени на прицеливание НЕ лимитируем:
+    // порог в 500 мс глотал каждый неспешный клик (прицельная переброска флота
+    // «не срабатывала с первого раза»). Для пальца оставляем запас — иначе
+    // случайное залипание на экране прилетит тапом.
+    if (!g.moved && e.type === 'pointerup' && (e.pointerType === 'mouse' || now - g.t0 < 1200)) {
       const r = GMM.rect || cv.getBoundingClientRect();
       gmmTapAt(e.clientX - r.left, e.clientY - r.top);
     } else if (g.moved && now - g.lt < 60 && Math.hypot(g.vx, g.vy) > 0.08) {

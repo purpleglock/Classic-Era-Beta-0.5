@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260813legionbrief';
+  var BUILD = '20260813gbop';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -60,7 +60,7 @@
      никогда не грузился — у кого Inter стоял локально (часто старый, без курсива),
      браузер синтезировал «косой» faux-italic в цитатах, у остальных шёл Exo 2. -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:ital,wght@0,200;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400&family=Orbitron:wght@400;500;700;900&family=Audiowide&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/index.css?v=20260813legionbrief">
+<link rel="stylesheet" href="css/index.css?v=20260813gbop">
 </head>
 <body>
 <!-- Экран загрузки после входа по почте. Рисуется ДО первого кадра приложения
@@ -460,7 +460,7 @@
 <script src="galaxy_gen.js?v=20260715multistar1"></script>
 <script src="precursor_gen.js?v=20260727pcart1"></script>
 <script src="precursor_ui.js?v=20260727pcart1"></script>
-<script src="galaxy_map.js?v=20260809closecab"></script>
+<script src="galaxy_map.js?v=20260813gbop"></script>
 <script src="faction_reg.js?v=20260809members2"></script>
 <script src="locations.js?v=20260624a"></script>
 <script src="faction_news.js?v=20260809vnmob"></script>
@@ -477,7 +477,7 @@
 <script src="turret_forge_ui.js?v=20260801turret1"></script>
 <script src="reactor_forge_ui.js?v=20260808rgtech"></script>
 <script src="faction_members.js?v=20260809closecab"></script>
-<script src="economy.js?v=20260813legionbrief"></script>
+<script src="economy.js?v=20260813gbop"></script>
 <!-- Ведомства «Внутренняя»/«Внешняя политика»: рамка и прологи свои,
      тела разделов отдают economy.js (ecTab*) и faction_members.js (двор). -->
 <script src="politics.js?v=20260810subrail2"></script>
@@ -487,7 +487,7 @@
 <!-- КАБИНЕТ ДЕРЖАВЫ (#economy) — рабочая комната и единственная дверь в работу.
      Грузится ПОСЛЕ politics/estate: приёмная зовёт их открывашки (polOpen,
      estOpen) и хостит контейнеры экранов у себя (vnScreenHosts из render.js). -->
-<script src="cabinet.js?v=20260811colvoid"></script>
+<script src="cabinet.js?v=20260813gbop"></script>
 <!-- НАВИГАЦИЯ КАБИНЕТА НА ТЕЛЕФОНЕ: нижняя панель #mnav + листы ведомств и
      разделов (mobile_nav.js, 31_mobile_nav.css); та же метка `html.mnav-on`
      держит мобильную вёрстку тел ведомств.
@@ -508,7 +508,7 @@
      играешь за корабль. Пришла на смену берегу из fishing.js — тот файл
      удалён, RPC рыбалки (fishing_cast/land) остались под тралом. -->
 <script src="garden.js?v=20260813gdrare"></script>
-<script src="guide.js?v=20260809gbhelp"></script>
+<script src="guide.js?v=20260813gbop"></script>
 <script src="tickets.js?v=20260607a"></script>
 <script src="chat.js?v=20260727ghost2"></script>
 <script>

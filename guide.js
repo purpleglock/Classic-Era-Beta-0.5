@@ -181,6 +181,114 @@ function gbRichTable() {
   </table></div>`;
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// АВАНПОСТЫ: РЕЖИМЫ, ЭКИПАЖ, ЗАСТАВЫ И БАК ФЛОТА
+// Зеркало _defense_outpost.sql + _outpost_depot.sql + _fleet_tank.sql.
+// Правила живут ТОЛЬКО здесь: и карта, и кабинет ссылаются сюда кнопкой «?».
+// ══════════════════════════════════════════════════════════════════════
+const GB_OPC = {           // зеркало _defense_const()
+  ship: 2000, buildH: 24, refund: 0.50, flyH: [2, 18],
+  hire: 20, wage: 2, desert: 0.25, emptyDays: 5,
+  mineGc: 75, cap: 20, depotCap: 30,
+};
+const GB_OP_MODES = [
+  { k: 'recon',  ic: '🛰', name: 'Разведка', crew: 10,
+    what: 'Вскрывает оборону своей системы и даёт размытый срез по соседям вдоль гиперпутей. С <b>полным</b> штатом контакты рядом приходят с целью и составом — без него видны только силуэты.',
+    thin: 'Ниже половины штата аванпост слепнет: ни обзора соседей, ни вскрытия чужих объектов.' },
+  { k: 'mining', ic: '⛏', name: 'Добыча', crew: 25,
+    what: `Тянет все ресурсы планет своей системы, кроме эпических и легендарных, плюс <b>${GB_OPC.mineGc} ГС/сут</b>. Служит стоянкой: <b>+${GB_OPC.cap}</b> мест под корабли.`,
+    thin: 'Добыча умножается на укомплектованность: половина экипажа — половина выхода.' },
+  { k: 'depot',  ic: '⛽', name: 'Застава', crew: 20,
+    what: `Единственная <b>заправка вне своих границ</b>: у заставы флот доливает бак так же, как у своей верфи. Стоянка: <b>+${GB_OPC.depotCap}</b> мест под корабли.`,
+    thin: 'Ниже половины штата заправлять нечем — застава не работает.' },
+];
+const GB_TANK = [['Корвет', 6], ['Фрегат', 8], ['Эсминец', 10], ['Крейсер', 12], ['Линкор', 14], ['Дредноут', 16]];
+
+function gbOpModeTable() {
+  const rows = GB_OP_MODES.map(m => `<tr>
+      <td>${m.ic} <b>${m.name}</b></td>
+      <td><b>${m.crew}</b> чел.<br><span class="gb-dim">${m.crew * GB_OPC.hire} ГС наём · ${m.crew * GB_OPC.wage} ГС/сут</span></td>
+      <td>${m.what}</td>
+      <td>${m.thin}</td>
+    </tr>`).join('');
+  return `<div class="gb-table-wrap"><table class="gb-table">
+    <thead><tr><th>Режим</th><th>Штат и цена</th><th>Что даёт</th><th>Неполный экипаж</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+// ── Прикидка экипажа: режим + сколько людей на борту ──
+// Ровно те же три числа, что считает сервер: k, эффект и жалование в сутки.
+let GB_OP_UI = { mode: 'depot', crew: 10 };
+function gbOpPick(m) { GB_OP_UI.mode = m; const d = GB_OP_MODES.find(x => x.k === m); if (GB_OP_UI.crew > d.crew) GB_OP_UI.crew = d.crew; gbOpPaint(); }
+function gbOpCrew(v) { GB_OP_UI.crew = Math.max(0, +v || 0); gbOpPaint(); }
+function gbOpPaint() {
+  const box = document.getElementById('gb-op-calc');
+  if (!box) return;
+  box.innerHTML = gbOpCalcInner();
+}
+function gbOpCalcInner() {
+  const m = GB_OP_MODES.find(x => x.k === GB_OP_UI.mode) || GB_OP_MODES[0];
+  const crew = Math.min(GB_OP_UI.crew, m.crew);
+  const k = m.crew ? crew / m.crew : 0;
+  const works = k >= 0.5;
+  const effect = m.k === 'mining'
+    ? `добыча <b>×${k.toFixed(2)}</b> — ${Math.round(GB_OPC.mineGc * k)} ГС/сут вместо ${GB_OPC.mineGc}`
+    : works ? (m.k === 'recon' ? (k >= 1 ? 'видим <b>цель и состав</b> контактов' : 'видим <b>силуэты</b>: замысел не вскрывается') : 'флот <b>заправляется</b>')
+            : (m.k === 'recon' ? 'аванпост <b>слеп</b>' : 'заправка <b>не работает</b>');
+  const chips = GB_OP_MODES.map(x =>
+    `<button class="gb-op-chip${x.k === m.k ? ' gb-op-chip-on' : ''}" type="button" onclick="gbOpPick('${x.k}')">${x.ic} ${x.name}</button>`).join('');
+  const wage = crew * GB_OPC.wage;
+  const gone = crew ? Math.max(1, Math.ceil(crew * GB_OPC.desert)) : 0;
+  return `<div class="gb-op-chips">${chips}</div>
+    <label class="gb-op-slider">Экипаж на борту: <b>${crew}</b> из ${m.crew}
+      <input type="range" min="0" max="${m.crew}" value="${crew}" oninput="gbOpCrew(this.value)">
+    </label>
+    <div class="gb-op-gauge${works ? '' : ' gb-op-gauge-thin'}"><i style="width:${(k * 100).toFixed(0)}%"></i><b style="left:50%"></b></div>
+    <div class="gb-kv-grid">
+      <div class="gb-kv-row"><span class="gb-kv-key">Укомплектованность</span><span class="gb-kv-val"><b>${(k * 100).toFixed(0)}%</b> ${works ? '— порог половины пройден' : '— ниже порога половины'}</span></div>
+      <div class="gb-kv-row"><span class="gb-kv-key">Что это даёт</span><span class="gb-kv-val">${effect}</span></div>
+      <div class="gb-kv-row"><span class="gb-kv-key">Жалование</span><span class="gb-kv-val"><b>${wage} ГС/сут</b>${crew < m.crew ? ` · добрать ${m.crew - crew} чел. = ${(m.crew - crew) * GB_OPC.hire} ГС` : ' · штат полон'}</span></div>
+      <div class="gb-kv-row"><span class="gb-kv-key">Если нечем платить</span><span class="gb-kv-val">за каждые неоплаченные сутки уходит ${Math.round(GB_OPC.desert * 100)}% экипажа${crew ? ` (сейчас — ${gone} чел.)` : ''}</span></div>
+    </div>`;
+}
+function gbOpCalc() { return `<div id="gb-op-calc" class="gb-op-calc">${gbOpCalcInner()}</div>`; }
+
+// ── Бак и дальность: сколько плеч даёт состав и докуда с ним дойти ──
+let GB_TK_UI = { cls: 'Фрегат', depots: 0 };
+function gbTkPick(c) { GB_TK_UI.cls = c; gbTkPaint(); }
+function gbTkDepots(v) { GB_TK_UI.depots = Math.max(0, +v || 0); gbTkPaint(); }
+function gbTkPaint() { const b = document.getElementById('gb-tk-calc'); if (b) b.innerHTML = gbTkCalcInner(); }
+function gbTankTable() {
+  const rows = GB_TANK.map(([n, c]) => `<tr><td>${n}</td><td><b>${c}</b> плеч</td></tr>`).join('');
+  return `<div class="gb-table-wrap"><table class="gb-table">
+    <thead><tr><th>Класс корабля</th><th>Бак (прыжков по трассам)</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+function gbPlural(n, one, few, many) {
+  const a = Math.abs(n) % 100, b = a % 10;
+  return a > 10 && a < 20 ? many : b > 1 && b < 5 ? few : b === 1 ? one : many;
+}
+function gbTkCalcInner() {
+  const cap = (GB_TANK.find(x => x[0] === GB_TK_UI.cls) || GB_TANK[1])[1];
+  const d = GB_TK_UI.depots;
+  const one = cap * (d + 1);
+  const chips = GB_TANK.map(([n, c]) =>
+    `<button class="gb-op-chip${n === GB_TK_UI.cls ? ' gb-op-chip-on' : ''}" type="button" onclick="gbTkPick('${n}')">${n} · ${c}</button>`).join('');
+  return `<div class="gb-op-chips">${chips}</div>
+    <label class="gb-op-slider">Заправок по дороге (свои верфи и заставы): <b>${d}</b>
+      <input type="range" min="0" max="4" value="${d}" oninput="gbTkDepots(this.value)">
+    </label>
+    <div class="gb-kv-grid">
+      <div class="gb-kv-row"><span class="gb-kv-key">Бак флота</span><span class="gb-kv-val"><b>${cap}</b> плеч — по самому короткоплечему кораблю состава</span></div>
+      <div class="gb-kv-row"><span class="gb-kv-key">В один конец</span><span class="gb-kv-val"><b>${one}</b> ${gbPlural(one, 'прыжок', 'прыжка', 'прыжков')} ≈ ${one} ч хода</span></div>
+      <div class="gb-kv-row"><span class="gb-kv-key">С возвратом</span><span class="gb-kv-val"><b>${Math.floor(one / 2)}</b> ${gbPlural(Math.floor(one / 2), 'прыжок', 'прыжка', 'прыжков')} от точки старта</span></div>
+      <div class="gb-kv-row"><span class="gb-kv-key">Край ↔ край карты</span><span class="gb-kv-val">≈ 29 прыжков — ${one >= 29 ? 'этой цепочки хватает' : `не хватает ${29 - one}: нужны ещё заставы`}</span></div>
+    </div>`;
+}
+function gbTkCalc() { return `<div id="gb-tk-calc" class="gb-op-calc">${gbTkCalcInner()}</div>`; }
+
 // Полная таблица ресурсов: иконка, редкость, персональная цена, добыча/слот и
 // ГС/слот/сутки (цена × добыча). Данные — из каталога GalaxyGen (один источник).
 const GB_RES_RATE = { common: 25, uncommon: 12, rare: 6, epic: 3, legendary: 1 };   // зеркало живого economy_accrue (сверено 2026-07-29)
@@ -801,7 +909,7 @@ function renderGuidebook() {
       </div>
 
       <h3 class="gb-h3">Топливо для перелётов флота</h3>
-      <p>Отдельная роль ресурсов — <b>топливо гиперпрыжков</b>: каждый переброс <a class="gb-link" onclick="gbScrollTo('gb-army')">флота</a> по карте тратит топливо со склада по классам кораблей. За что отвечает каждое топливо:</p>
+      <p>Отдельная роль ресурсов — <b>топливо гиперпрыжков</b>. Со склада оно уходит <b>не в момент вылета, а при заправке</b>: топливо живёт в <b>баке на борту</b> и заливается только у своей верфи или у своей <b>заставы</b> (см. «Аванпосты» ниже). За что отвечает каждое топливо:</p>
       <div class="gb-kv-grid">
         <div class="gb-kv-row"><span class="gb-kv-key">Гелий-3 · Метан</span><span class="gb-kv-val">Лёгкие корабли — корветы и фрегаты.</span></div>
         <div class="gb-kv-row"><span class="gb-kv-key">Дейтерий · Углерод</span><span class="gb-kv-val">Средние корабли — эсминцы и крейсеры.</span></div>
@@ -810,6 +918,36 @@ function renderGuidebook() {
       <div class="gb-note gb-note-info">
         <span class="gb-note-i">∑</span>
         <div>Многие ресурсы носят <b>двойную роль</b>: то же сырьё и кормит постройку кораблей, и горит в их двигателях, и продаётся за ГС. Точная раскладка топлива по классам — в разделе <a class="gb-link" onclick="gbScrollTo('gb-army')">«Армия и флот»</a>.</div>
+      </div>
+
+      <h3 class="gb-h3">Аванпосты <span class="gb-badge">🛰</span></h3>
+      <p>Аванпост — единственный способ работать <b>вне своих границ</b>. Сначала на <b>Корабельной Верфи</b> закладывается носитель (<b>${GB_OPC.ship} ГС</b>, ${GB_OPC.buildH} ч), затем с карты он летит в <b>нейтральную</b> систему (${GB_OPC.flyH[0]}–${GB_OPC.flyH[1]} ч в зависимости от дальности) и разворачивается в одном из трёх режимов. В чужие границы носитель не войдёт и впритык к ним не встанет; разбор развёрнутого аванпоста возвращает <b>${Math.round(GB_OPC.refund * 100)}%</b> стоимости.</p>
+      ${gbOpModeTable()}
+      <p><b>Режим переключается на месте</b> — но штат у режимов разный, и лишние люди при переводе <b>срезаются безвозвратно</b>: перевод добычи (${GB_OP_MODES[1].crew} чел.) в разведку (${GB_OP_MODES[0].crew} чел.) стоит ${GB_OP_MODES[1].crew - GB_OP_MODES[0].crew} человек. Добытое до смены режима зачисляется на склад.</p>
+
+      <h3 class="gb-h3">Экипаж: наём, жалование, дезертирство</h3>
+      <ul class="gb-ul">
+        <li>При развёртывании на борту оказывается <b>половина штата</b> — остальных набирают вручную по <b>${GB_OPC.hire} ГС</b> за человека.</li>
+        <li>Каждые сутки экипаж требует <b>${GB_OPC.wage} ГС на человека</b>. Списание ленивое: долг снимается разом за все прошедшие сутки.</li>
+        <li>Казна пуста — за каждые неоплаченные сутки уходит <b>${Math.round(GB_OPC.desert * 100)}%</b> экипажа.</li>
+        <li>Порог работоспособности — <b>половина штата</b>. Добыча просто множится на укомплектованность, а разведка и застава ниже порога <b>не работают вовсе</b>.</li>
+        <li>Полностью брошенный аванпост через <b>${GB_OPC.emptyDays} суток</b> сворачивается сам — без возврата.</li>
+      </ul>
+      <p>Прикиньте цену содержания заранее — режим и ползунок считают ровно то же, что сервер:</p>
+      ${gbOpCalc()}
+      <div class="gb-note gb-note-warn">
+        <span class="gb-note-i">!</span>
+        <div>Экипаж — <b>постоянный расход</b>, а не разовая покупка: сеть из пяти застав полного штата стоит <b>${5 * GB_OP_MODES[2].crew * GB_OPC.wage} ГС/сут</b>. Аванпост, который забыли укомплектовать, не приносит ничего и всё равно тает.</div>
+      </div>
+
+      <h3 class="gb-h3">Заставы и запас хода флота <span class="gb-badge">⛽</span></h3>
+      <p>Топливо больше не берётся из столицы: у флота есть <b>бак</b>, измеряемый в <b>плечах</b> (прыжках по гиперпутям, около часа на прыжок). Бак флота равен баку <b>самого короткоплечего</b> корабля в составе, а заправка возможна только там, где есть <b>своя верфь</b> или <b>своя застава</b>. Цена похода не изменилась — изменилось место оплаты.</p>
+      ${gbTankTable()}
+      <p>Отсюда и стратегический смысл застав: лучший бак — 16 плеч, а карта от края до края ≈ 29 прыжков. Без цепочки застав на другой конец галактики не попасть — и ровно эти точки <a class="gb-link" onclick="gbScrollTo('gb-raids')">Железный Легион</a> выбивает первыми.</p>
+      ${gbTkCalc()}
+      <div class="gb-note gb-note-tip">
+        <span class="gb-note-i">★</span>
+        <div>На карте флот показывает <b>два кольца</b>: докуда хватит бака в один конец и докуда — с возвратом. Планируйте рейд по внутреннему кольцу, если возвращаться некуда.</div>
       </div>
 
       <h3 class="gb-h3">Как превратить ресурсы в ГС</h3>
@@ -1863,10 +2001,16 @@ const GB_TOPICS = {
     note: ['warn', 'Если заёмщик тянет, кредитор поднимает спор — дело уходит в МГА, и его исход бьёт по отношениям должника со всеми, кто это видит.'],
   },
   outposts: {
-    sec: 'gb-resources', icon: '🛰', title: 'Аванпосты', tag: 'форпосты в нейтральном космосе',
-    lead: 'Носитель строится на верфи, летит в нейтральную систему и разворачивается в одном из двух режимов. <b>Разведка</b> — раскрывает оборону системы и даёт размытый срез по соседям по гиперпутям. <b>Добыча</b> — тянет все ресурсы системы, кроме эпических и легендарных, и служит стоянкой флота.',
-    steps: ['Построить носитель на верфи', 'Перелёт в нейтральную систему', 'Выбрать режим: разведка или добыча'],
-    note: ['info', 'Режим переключается на месте. В чужие границы аванпост не войдёт и впритык к ним не встанет.'],
+    sec: 'gb-resources', icon: '🛰', title: 'Аванпосты', tag: 'режимы, экипаж, заставы',
+    lead: `Единственный способ работать вне своих границ. Носитель строится на верфи (${GB_OPC.ship} ГС, ${GB_OPC.buildH} ч), летит в <b>нейтральную</b> систему и разворачивается в одном из режимов: <b>🛰 разведка</b> (${GB_OP_MODES[0].crew} чел.) — оборона системы и срез по соседям вдоль гиперпутей, с полным экипажем вскрывает цель и состав контактов; <b>⛏ добыча</b> (${GB_OP_MODES[1].crew} чел.) — все ресурсы системы, кроме эпических и легендарных, плюс ${GB_OPC.mineGc} ГС/сут; <b>⛽ застава</b> (${GB_OP_MODES[2].crew} чел.) — единственная заправка флота вне своих границ. Экипаж стоит ${GB_OPC.hire} ГС за человека при найме и <b>${GB_OPC.wage} ГС на человека в сутки</b>; ниже половины штата добыча идёт вполсилы, а разведка и застава не работают вовсе.`,
+    steps: ['Заложить носитель на Верфи', 'Развернуть в нейтральной системе', 'Добрать экипаж до штата', 'Держать казну под жалование'],
+    note: ['warn', `Нечем платить — уходит ${Math.round(GB_OPC.desert * 100)}% экипажа за сутки, брошенный аванпост сворачивается через ${GB_OPC.emptyDays} суток. Топливо флота живёт в баке (корвет 6 … дредноут 16 плеч), а карта ≈ 29 прыжков: без цепочки застав вглубь галактики не уйти.`],
+  },
+  legion: {
+    sec: 'gb-raids', icon: '☠', title: 'Железный Легион', tag: 'злоба, вендетта, вероятные ходы',
+    lead: 'Пираты копят давление по секторам и выходят к нам флотом. <b>Злоба</b> — попадание в их память: выше порога наши системы выбирают охотнее чужих, тает сама (полураспад около недели). <b>Вендетта</b> — именной счёт за наши выходки: долг выше порога собирает карательный отряд (сила 16 + долг×1.5, потолок 72), и закрыть его может только пришедшая ватага. Цель выбирается как <b>ценность ÷ оборона</b> — берут не самое богатое, а то, что плохо лежит.',
+    steps: ['Держать разведаванпосты с полным экипажем', 'Смотреть ленту подхода и долг', 'Прикрывать верх списка вероятных ходов'],
+    note: ['info', 'Ступень осведомлённости даёт зритель: без разведки рядом контакт виден лишь как «в секторе неспокойно» — без курса и срока.'],
   },
 
   // ── ⛏ Добыча ресурсов ─────────────────────────────────────
