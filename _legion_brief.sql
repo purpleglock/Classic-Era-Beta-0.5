@@ -121,15 +121,22 @@ begin
             ), '[]'::jsonb),
 
     -- ВЕРОЯТНЫЕ ХОДЫ: наши системы, отсортированные той же формулой, что в тике
+    -- Отдаём верхушку, а не весь реестр: у крупной державы это 300+ систем, а
+    -- смысл среза — «куда придут», то есть первые строки. Хвост списка это
+    -- просто «здесь Легиону нечего ловить», и его незачем возить на клиент.
     'targets', coalesce((select jsonb_agg(jsonb_build_object(
-                 'sys', t.sys, 'name', coalesce(ms.name, t.sys),
+                 'sys', q.sys, 'name', coalesce(ms.name, q.sys),
                  'sector', sec.name,
-                 'kind', t.kind, 'value', t.value, 'guard', t.guard, 'score', t.score)
-                 order by t.score desc)
-                 from public._legion_my_targets(fid) t
-                 left join public.map_systems ms on ms.id = t.sys
-                 left join public.map_sectors sec on t.sys = any(sec.system_ids)
+                 'kind', q.kind, 'value', q.value, 'guard', q.guard, 'score', q.score)
+                 order by q.score desc)
+                 from (select * from public._legion_my_targets(fid)
+                        order by score desc limit 40) q
+                 left join public.map_systems ms on ms.id = q.sys
+                 left join public.map_sectors sec on q.sys = any(sec.system_ids)
                ), '[]'::jsonb),
+    -- сколько всего наших систем вообще попало в поле зрения формулы —
+    -- иначе «40 целей» читалось бы как «у нас всего 40 систем»
+    'targets_total', (select count(*) from public._legion_my_targets(fid)),
 
     -- ЧТО БЫЛО: налёты по нам за 30 суток. Это наша собственная память —
     -- по каждому такому контакту нам уже приходила депеша.

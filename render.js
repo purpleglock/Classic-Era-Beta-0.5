@@ -10410,7 +10410,17 @@ function _hvpScene(en, c) {
       <span class="hvp-tile-nm">${esc(NAME(b.btype))}</span>
       <span class="hvp-tile-sl">${b.slots_open || 0}${hvpIco('slot')}</span>
     </button>`).join('')
-    + pends.map(p => `<span class="hvp-tile hvp-tile-pend" title="${esc(p.label || '')}"><span class="hvp-tile-ic">${hvpIco('time')}</span><span class="hvp-tile-nm">${en ? 'building…' : 'строится…'}</span></span>`).join('')
+    // ⚠️ НЕДОСТРОЙ ПОДПИСАН. Плитка говорила только «строится…» — игрок, поставив
+    // мегасооружение, не находил его нигде и жал «построить» снова, ловя отказ
+    // сервера. Теперь на плитке имя постройки и остаток времени.
+    + pends.map(p => {
+      const eta = (typeof ecProjEtaTxt === 'function') ? ecProjEtaTxt(p) : '';
+      return `<span class="hvp-tile hvp-tile-pend" title="${esc((p.label || NAME(p.btype)) + (eta ? ' · ' + eta : ''))}">
+        <span class="hvp-tile-ic">${typeof ecIco === 'function' ? ecIco(p.btype) : (ICON[p.btype] || hvpIco('time'))}</span>
+        <span class="hvp-tile-nm">${esc(NAME(p.btype))}</span>
+        <span class="hvp-tile-sl">${en ? 'building…' : esc(eta || 'строится…')}</span>
+      </span>`;
+    }).join('')
     + Array.from({ length: Math.max(0, free) }, () => `<button class="hvp-tile hvp-tile-free" type="button" title="${en ? 'Build' : 'Построить'}" onclick="event.stopPropagation();heroVNPlanetsBuild('${jsq(c.id)}')"><span class="hvp-tile-ic">${hvpIco('plus')}</span><span class="hvp-tile-nm">${en ? 'build' : 'построить'}</span></button>`).join('');
 
   // панель управления выбранным зданием — РАБОЧАЯ строка кабинета (слоты/добыча/снос)

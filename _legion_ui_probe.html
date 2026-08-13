@@ -1,63 +1,58 @@
 <!doctype html>
-<html lang="ru"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Пробник: угрозы Легиона</title>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Проба: ☠ Легион в «Войне»</title>
 <link rel="stylesheet" href="css/index.css">
-<style>
-  body{margin:0;background:#07090d;font-family:system-ui}
-  .cap{color:#8aa;font:600 12px/2.4 system-ui;padding:0 16px}
-  .page{padding:0 16px 24px;max-width:960px}
-  .cell{position:relative;width:300px;height:460px;border:1px solid #223;background:#0a0e14;margin:0 16px}
-  .cell #gm-roster{position:absolute;top:8px;left:8px;width:284px;max-height:calc(100% - 16px);overflow-y:auto}
-</style></head><body>
-<div id="root"></div>
+<style>body{padding:16px;background:var(--b0,#0b0d10)}</style>
+</head><body>
+<div class="ec-wrap"><div id="host"></div></div>
 <script>
-const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const h = n => new Date(Date.now()+n*36e5).toISOString();
-
-/* ── 1:1 с battle_board.js (hsThreatsBlock) ── */
-const HS_LEGION_KIND = { strike:'Удар по колонии', blind:'Налёт на аванпост', probe:'Разбой на трассе' };
-function hsEta(iso){ if(!iso) return ''; const x=(new Date(iso)-Date.now())/36e5;
-  if(x<=0) return 'на месте'; if(x<1) return 'меньше часа';
-  if(x<48) return '~'+Math.round(x)+' ч'; return '~'+Math.round(x/24)+' сут'; }
-function hsThreatsBlock(list){
-  if(!list||!list.length) return '';
-  const known=list.filter(t=>t.grade!=='ghost').sort((a,b)=>new Date(a.eta||0)-new Date(b.eta||0));
-  const secs=[...new Set(list.filter(t=>t.grade==='ghost').map(t=>t.sector).filter(Boolean))];
-  const cards=known.map(t=>{const res=t.grade==='resolved';
-    return `<div class="hs-card hs-card-threat${t.mine?' hs-card-hot':''}">
-      <div class="hs-card-top">
-        <span class="hs-kind">☠ ${res?esc(HS_LEGION_KIND[t.kind]||'налёт'):'Неопознанная сигнатура'}</span>
-        <span class="hs-st${t.mine?' hs-st-hot':''}">${hsEta(t.eta)}</span></div>
-      <div class="hs-card-t">${esc(t.sys||'направление неизвестно')}</div>
-      <div class="hs-card-foe">Железный Легион${t.mine?' · <b>цель — вы</b>':''}</div>
-      <div class="hs-card-fl">${res?'Оценка сил: '+(+t.ships||1)+' кор.'
-        :'Сила: '+esc(t.band||'?')+' · замысел не вскрыт'}</div></div>`;}).join('');
-  const ghost=secs.length?`<div class="hs-hint" style="margin-top:10px">☠ Неспокойно в секторах: <b>${secs.map(esc).join(', ')}</b>. Направление и замысел не вскрыты.</div>`:'';
-  const hint=known.length?'':`<div class="hs-hint" style="margin-top:10px">Чтобы видеть, куда и зачем идут, нужен разведывательный аванпост с <b>полным экипажем</b> рядом с трассой. Без сети застав удар приходит без предупреждения.</div>`;
-  return `<div class="hs-sec-ttl">☠ Угрозы</div>${cards?`<div class="hs-grid">${cards}</div>`:''}${ghost}${hint}`;
-}
-const battleCard = `<div class="hs-card hs-card-hot">
-  <div class="hs-card-top"><span class="hs-kind">⚔ встреча флотов</span><span class="hs-st hs-st-hot">идёт бой</span></div>
-  <div class="hs-card-t">Кор Каройи</div>
-  <div class="hs-card-foe">против <b>Республика Синли</b> · вы — обороняющиеся</div>
-  <div class="hs-card-fl">Скованы боем: Северный кулак</div>
-  <button class="btn btn-gd">К доске боя</button></div>`;
-
-const HEAD = `<div class="cn-wrap"><div class="cn-head"><div class="cn-eyebrow">◈ СВОДКА</div><h1>Горячие точки</h1></div>`;
-const CASES = [
-  ['Слепой игрок: только ghost, боёв нет', [
-      {grade:'ghost',sector:'Шер-Маан'},{grade:'ghost',sector:'Лимбо'}], false],
-  ['Есть сеть: вскрытые + сигнатура + бой', [
-      {grade:'resolved',kind:'strike',mine:true,sys:'Тау Волопаса',eta:h(9),ships:6},
-      {grade:'signature',band:'заметная',sys:'Кассандра',eta:h(21)},
-      {grade:'resolved',kind:'blind',mine:false,sys:'Приют',eta:h(3),ships:3},
-      {grade:'ghost',sector:'Альтакс'}], true],
-];
-document.getElementById('root').innerHTML = CASES.map(([cap,list,withBattle])=>`
-  <div class="cap">${cap}</div>
-  <div class="page">${HEAD}${hsThreatsBlock(list)}
-    ${withBattle?`<div class="hs-grid" style="margin-top:14px">${battleCard}</div>`
-      :`<div class="hs-empty"><div class="hs-empty-ic">🕊</div>Сейчас ваши флоты не скованы боем.</div>`}
-  </div></div>`).join('');
-</script></body></html>
+// Заглушки кабинета: проба рисует ТОЛЬКО блок Легиона, без Supabase и авторизации.
+window.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+window.jsq = s => String(s == null ? '' : s).replace(/['\\]/g, '\\$&');
+window.toast = (m) => console.log('[toast]', m);
+window.go = (s) => console.log('[go]', s);
+const H = h => new Date(Date.now() + h*36e5).toISOString();
+const D = d => new Date(Date.now() - d*864e5).toISOString();
+// economy.js объявляет свой EC — данные кладём ПОСЛЕ его загрузки (см. ниже).
+window.LG_FIXTURE = {
+  fid: 'fac_test',
+  aggro: { v: 14.2, bite: 12, reason: 'разбита ватага в системе Найри', at: D(2) },
+  eyes: { recon_full: 1, recon_weak: 2, depot: 1 },
+  here: [{ fleet:'f1', sys:'sys_b', ships: 6 }],
+  contacts: [
+    { id:'c1', grade:'resolved', sector:'Илокан', sys:'sys_a', target_sys:'sys_a', mine:true, kind:'strike', ships:11, eta:H(3), since:D(1), band:'крупная' },
+    { id:'c2', grade:'signature', sector:'Илокан', sys:'sys_b', eta:H(19), since:D(0.5), band:'заметная' },
+    { id:'c3', grade:'resolved', sector:'Креос', sys:'sys_c', target_sys:'sys_c', mine:false, kind:'blind', ships:3, eta:H(40), since:D(3) },
+    { id:'c4', grade:'ghost', sector:'Эрлендийская пустота', since:D(1) }
+  ],
+  targets_total: 47,
+  targets: [
+    { sys:'sys_a', name:'Зоцид', sector:'Илокан', kind:'strike', value:16.29, guard:1.00, score:16.29 },
+    { sys:'sys_b', name:'Найри', sector:'Креос',  kind:'strike', value:19.33, guard:1.35, score:14.32 },
+    { sys:'sys_c', name:'Лумея', sector:'Креос',  kind:'blind',  value:3.00,  guard:1.70, score:1.76 },
+    { sys:'sys_d', name:'Рифтвид', sector:'Креос', kind:'probe', value:4.20, guard:2.05, score:2.05 },
+    { sys:'sys_e', name:'Вайрон', sector:'Илокан', kind:'strike', value:11.0, guard:1.00, score:11.04 },
+    { sys:'sys_f', name:'Ретус', sector:'Илокан', kind:'strike', value:10.8, guard:1.00, score:10.85 },
+    { sys:'sys_g', name:'Цзаони', sector:'Креос', kind:'probe', value:9.5, guard:1.00, score:9.55 }
+  ],
+  history: [
+    { kind:'probe', sys:'sys_c', name:'Лумея', at:D(1), state:'spent' },
+    { kind:'strike', sys:'sys_a', name:'Зоцид', at:D(4), state:'engaged' },
+    { kind:'blind', sys:'sys_b', name:'Найри', at:D(4), state:'spent' },
+    { kind:'probe', sys:'sys_c', name:'Лумея', at:D(11), state:'spent' },
+    { kind:'probe', sys:'sys_c', name:'Лумея', at:D(11), state:'spent' },
+    { kind:'probe', sys:'sys_c', name:'Лумея', at:D(11), state:'gone' },
+    { kind:'strike', sys:'sys_a', name:'Зоцид', at:D(23), state:'spent' }
+  ]
+};
+</script>
+<script src="economy.js"></script>
+<script>
+EC.fid = 'fac_test';
+EC.allSystems = [{id:'sys_a',name:'Зоцид'},{id:'sys_b',name:'Найри'},{id:'sys_c',name:'Лумея'}];
+EC.legion = window.LG_FIXTURE;
+document.getElementById('host').innerHTML = ecLegionBlock();
+console.log('[probe] отрисовано');
+</script>
+</body></html>

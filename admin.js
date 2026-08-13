@@ -4105,8 +4105,8 @@ function adTabTesting(e) {
     <div class="fm-danger-banner" style="background:rgba(95,176,230,.12);border-color:rgba(95,176,230,.4);color:var(--gdl,#5fb0e6)">🧪 Тестовые инструменты — ускоряют игровые таймеры и резолвят отложенные действия немедленно, не дожидаясь суточного тика.</div>
     ${row('🏴‍☠️ Завершить рейды немедленно', 'Все активные рейды этой фракции (как атакующего и как цели) резолвятся сейчас: бой, добыча, потери, раскрытие.', `<button class="btn btn-gd" onclick="adTestSpeedRaids()">Завершить рейды</button>`)}
     ${row('🕵 Завершить шпионаж немедленно', 'Агенты мгновенно дообучаются, активные операции резолвятся сейчас.', `<button class="btn btn-gd" onclick="adTestSpeedSpy()">Завершить шпионаж</button>`)}
-    ${row('⏩ Форсировать тик дохода', `Начислить доход за сутки немедленно (last_tick откатится на 25 ч). Последний доход: ${fmtT(lastTick)}.`, `<button class="btn btn-gd" onclick="adTestForceTick()" ${eco ? '' : 'disabled'}>Начислить доход</button>`)}
-    ${row('➕ +1 тик', 'Прокрутить экономику ровно на один суточный тик — быстро, без подтверждения. Можно жать несколько раз подряд, чтобы отмотать несколько дней.', `<button class="btn btn-gd" onclick="adTestPlusTick()" ${eco ? '' : 'disabled'}>+1 тик</button>`)}
+    ${row('⏩ Форсировать тик дохода', `Начислить доход за сутки немедленно (last_tick откатится на 25 ч) и приблизить недострои на сутки. Последний доход: ${fmtT(lastTick)}.`, `<button class="btn btn-gd" onclick="adTestForceTick()" ${eco ? '' : 'disabled'}>Начислить доход</button>`)}
+    ${row('➕ +1 тик', 'Прокрутить державу ровно на один суточный тик: доход + недострои (стройка, слоты, обустройство среды, терраформ) приближаются на сутки. Можно жать несколько раз подряд — но каждый клик ждёт ответа сервера. Флоты — отдельной кнопкой «Пропустить полёт».', `<button class="btn btn-gd" onclick="adTestPlusTick()" ${eco ? '' : 'disabled'}>+1 тик</button>`)}
     ${row('🚀 Пропустить полёт', 'Все флоты фракции, что сейчас в пути, прибывают немедленно — без ожидания времени полёта. Границы, перехват и бой на прибытии считаются как обычно.', `<button class="btn btn-gd" onclick="adTestSkipFlight()">Пропустить полёт</button>`)}
     ${row('🜨 Приземлить залп артиллерии', 'Все снаряды «Длани Неотвратимости» этой фракции, что в полёте, мгновенно поражают цель: планета-цель превращается в мёртвый камень, колония на ней стирается.', `<button class="btn btn-gd" onclick="adTestSpeedDoom()">Приземлить залп</button>`)}
     ${row('🜨 Выдать орудие судного дня', 'Поставить готовую «Длань Неотвратимости» (целостность 100%) на первую колонию фракции со свободной ячейкой — без исследования и затрат. Заодно открывает технологию «Сама неотвратимость».', `<button class="btn btn-gd" onclick="adGrantDoomgun()">Выдать орудие</button>`)}
@@ -4653,12 +4653,18 @@ async function adTestForceTick() {
   finally { AD.busy = false; }
 }
 
+// ⚠️ ТИК СЧИТАЕТСЯ ДОЛГО. economy_accrue прокручивает всю державу, и пока запрос
+// в полёте, AD.busy глотал повторные нажатия МОЛЧА — со стороны это выглядело
+// как «кнопка сломалась после первого клика». Теперь молчания нет: занятость
+// проговаривается тостом, а сам тик отчитывается, сколько строек он подвинул.
 async function adTestPlusTick() {
-  if (!AD.sel || AD.busy) return;
+  if (!AD.sel) return;
+  if (AD.busy) { toast('Тик уже считается — дождитесь ответа сервера', 'err'); return; }
   AD.busy = true;
   try {
-    await apiFetch('rpc/admin_test_force_tick', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel }) });
-    toast('+1 тик начислен', 'ok');
+    const r = await apiFetch('rpc/admin_test_force_tick', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel }) });
+    const mv = r && r.projects_advanced;
+    toast('+1 тик начислен' + (mv ? ` · стройки сдвинуты на сутки (${mv})` : ''), 'ok');
     await adReloadPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }

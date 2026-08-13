@@ -4800,3 +4800,149 @@ canvas.ec-res-thumb-cv { border-radius: 0; background: transparent; box-shadow: 
 .hint-pop-body b { color: var(--t1); }
 .hint-pop-gb { margin-top: 12px; padding-top: 10px; border-top: var(--deco-frame-w, 1px) solid var(--w2); }
 .ec-empty.hint-folded .hint-chip { margin-left: 4px; vertical-align: middle; }
+
+/* ════════════════════════════════════════════════════════════
+   ☠ ЖЕЛЕЗНЫЙ ЛЕГИОН — пиратский срез вкладки «⚔ Война» (economy.js, ecLegionBlock)
+   Один акцент на весь блок — ржавый --lg. Всё остальное на общих токенах:
+   пираты должны читаться как ветка кабинета, а не как отдельное приложение.
+   ⚠ Мобильные правила — В КОНЦЕ файла, после десктопных: поздний десктопный
+   блок перебивает ранний @media (грабли из mobile-late-desktop-override).
+   ════════════════════════════════════════════════════════════ */
+.ec-lg { --lg: rgba(196,74,42,1); --lg-d: rgba(196,74,42,.30); display: flex; flex-direction: column; gap: 10px; }
+
+/* ── плитки ── */
+.ec-lg-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.ec-lg-tile { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--b1);
+  border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); }
+.ec-lg-tile-hot { border-color: var(--lg-d); }
+.ec-lg-t-h { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--t3); }
+.ec-lg-t-v { font-size: 17px; line-height: 1.2; color: var(--t1); }
+.ec-lg-t-v i { font-style: normal; font-size: 12px; color: var(--t3); }
+.ec-lg-t-s { font-size: 12px; line-height: 1.45; color: var(--t2); }
+.ec-lg-t-why { font-size: 12px; line-height: 1.45; color: var(--t2); padding-top: 6px; border-top: 1px solid var(--w2); }
+.ec-lg-t-alarm { color: var(--lg); }
+.ec-lg-dim { color: var(--t3); font-size: 11px; }
+.ec-lg-link { background: none; border: 0; padding: 0; color: var(--lg); font: inherit; cursor: pointer; text-decoration: underline dotted; }
+
+.ec-lg-gauge { position: relative; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--w2) 70%, transparent); }
+.ec-lg-gauge > span { display: block; height: 100%; border-radius: 3px; background: var(--lg); }
+.ec-lg-gauge > b { position: absolute; top: -3px; width: 1px; height: 11px; background: var(--t3); }
+
+.ec-lg-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.ec-lg-chip { font-size: 11px; line-height: 1.5; padding: 1px 8px; border-radius: var(--radius-pill);
+  border: 1px solid var(--w2); color: var(--t3); }
+.ec-lg-chip-on { border-color: var(--lg-d); color: var(--t1); }
+.ec-lg-chip-warn { color: var(--lg); border-color: var(--lg-d); }
+
+/* ── карточка секции ── */
+.ec-lg-card { padding: 12px; background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); }
+.ec-lg-card-h { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--t1); margin-bottom: 10px; }
+.ec-lg-note { font-size: 12.5px; line-height: 1.5; color: var(--t2); margin-bottom: 8px; }
+.ec-lg-empty { font-size: 12.5px; line-height: 1.5; color: var(--t3); }
+
+/* ── лента подхода ── */
+.ec-lg-line { position: relative; height: 62px; margin: 4px 0 2px; }
+.ec-lg-axis { position: absolute; left: 0; right: 0; bottom: 16px; height: 1px; background: var(--w2); }
+.ec-lg-tick { position: absolute; top: 0; width: 1px; height: 5px; background: var(--w2); }
+.ec-lg-tick i { position: absolute; top: 7px; left: 0; transform: translateX(-50%); font-style: normal;
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; color: var(--t3); white-space: nowrap; }
+.ec-lg-tick:first-child i { transform: none; }
+.ec-lg-tick:last-child i { transform: translateX(-100%); }
+.ec-lg-marks { position: absolute; left: 0; right: 0; top: 0; bottom: 17px; }
+.ec-lg-mark { position: absolute; bottom: 0; transform: translateX(-50%); display: flex; align-items: flex-end;
+  justify-content: center; width: 26px; height: 100%; padding: 0; background: none; border: 0; cursor: pointer; }
+.ec-lg-mark-c { display: flex; align-items: center; justify-content: center; border-radius: 50%;
+  border: 1px solid var(--lg-d); background: color-mix(in srgb, var(--lg) 14%, transparent);
+  color: var(--lg); font-size: 10px; line-height: 1; }
+.ec-lg-s1 .ec-lg-mark-c { width: 14px; height: 14px; }
+.ec-lg-s2 .ec-lg-mark-c { width: 18px; height: 18px; }
+.ec-lg-s3 .ec-lg-mark-c { width: 22px; height: 22px; font-size: 12px; }
+.ec-lg-s4 .ec-lg-mark-c { width: 26px; height: 26px; font-size: 13px; }
+.ec-lg-mine .ec-lg-mark-c { background: var(--lg); color: var(--b1); border-color: var(--lg); }
+.ec-lg-mark:hover .ec-lg-mark-c, .ec-lg-picked .ec-lg-mark-c { box-shadow: 0 0 0 3px color-mix(in srgb, var(--lg) 22%, transparent); }
+
+.ec-lg-detail { margin-top: 6px; padding: 10px; border: 1px solid var(--lg-d); border-radius: var(--radius-sm); }
+.ec-lg-d-h { font-size: 13px; color: var(--t1); margin-bottom: 8px; }
+.ec-lg-d-mine { color: var(--lg); font-size: 11px; }
+.ec-lg-d-grid { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12.5px; }
+.ec-lg-d-k { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--t3); align-self: center; }
+.ec-lg-d-v { color: var(--t2); }
+.ec-lg-d-a { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ec-lg-d-hint { margin-top: 8px; font-size: 11.5px; line-height: 1.45; color: var(--t3); }
+.ec-lg-ghosts { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--w2); font-size: 12.5px; color: var(--t2); }
+.ec-lg-ghosts i { font-style: normal; color: var(--t3); }
+
+/* ── вероятные ходы ── */
+.ec-lg-filters { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.ec-lg-fchip { padding: 2px 10px; border-radius: var(--radius-pill); border: 1px solid var(--w2);
+  background: none; color: var(--t3); font: inherit; font-size: 11.5px; cursor: pointer; }
+.ec-lg-fchip-on { border-color: var(--lg-d); color: var(--t1); background: color-mix(in srgb, var(--lg) 10%, transparent); }
+.ec-lg-legend { display: flex; gap: 12px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--t3); margin-bottom: 4px; }
+.ec-lg-legend span::before { content: ""; display: inline-block; width: 8px; height: 4px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.ec-lg-lg-v::before { background: var(--lg); }
+.ec-lg-lg-g::before { background: var(--t3); }
+
+.ec-lg-row { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr) minmax(90px,1.2fr) auto;
+  align-items: center; gap: 10px; width: 100%; padding: 7px 6px; background: none; border: 0;
+  border-bottom: 1px solid var(--w2); color: var(--t2); font: inherit; text-align: left; cursor: pointer; }
+.ec-lg-row:hover { background: color-mix(in srgb, var(--lg) 6%, transparent); }
+.ec-lg-r-name { min-width: 0; font-size: 13px; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-lg-r-name i { display: block; font-style: normal; font-size: 11px; color: var(--t3); }
+.ec-lg-r-kind { min-width: 0; font-size: 11.5px; color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-lg-bars { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ec-lg-bar { display: block; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--w2) 60%, transparent); }
+.ec-lg-bar > i { display: block; height: 100%; border-radius: 2px; }
+.ec-lg-bar-v > i { background: var(--lg); }
+.ec-lg-bar-g > i { background: var(--t3); }
+.ec-lg-r-verd { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.ec-lg-v-bad { color: var(--lg); }
+.ec-lg-v-mid { color: var(--t2); }
+.ec-lg-v-ok  { color: var(--t3); }
+.ec-lg-more { margin-top: 8px; padding: 4px 12px; border-radius: var(--radius-pill); border: 1px solid var(--w2);
+  background: none; color: var(--t3); font: inherit; font-size: 11.5px; cursor: pointer; }
+.ec-lg-more:hover { color: var(--t1); }
+
+/* ── хроника ── */
+.ec-lg-days { display: flex; gap: 2px; margin-bottom: 10px; }
+.ec-lg-day { flex: 1 1 0; min-width: 0; height: 16px; border-radius: 2px; background: color-mix(in srgb, var(--w2) 55%, transparent); }
+.ec-lg-d1 { background: color-mix(in srgb, var(--lg) 30%, transparent); }
+.ec-lg-d2 { background: color-mix(in srgb, var(--lg) 60%, transparent); }
+.ec-lg-d3 { background: var(--lg); }
+.ec-lg-hrow { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr) auto auto; align-items: center;
+  gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--w2); font-size: 12.5px; }
+.ec-lg-h-k { min-width: 0; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-lg-h-s { min-width: 0; color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-lg-h-t { font-size: 11px; color: var(--t3); white-space: nowrap; }
+
+/* ── ТЕЛЕФОН ── */
+@media (max-width: 720px) {
+  .ec-lg-tiles { grid-template-columns: 1fr; gap: 8px; }
+  .ec-lg-tile { padding: 10px; }
+  /* Лента выше: метки становятся пальцевыми, им нужен воздух */
+  .ec-lg-line { height: 72px; }
+  .ec-lg-marks { bottom: 19px; }
+  .ec-lg-mark { width: 32px; }
+  .ec-lg-s1 .ec-lg-mark-c, .ec-lg-s2 .ec-lg-mark-c { width: 20px; height: 20px; }
+  .ec-lg-s3 .ec-lg-mark-c { width: 26px; height: 26px; }
+  .ec-lg-s4 .ec-lg-mark-c { width: 30px; height: 30px; }
+  .ec-lg-tick i { font-size: 8px; }
+  /* Строка цели складывается в три этажа: имя+вердикт, замысел, полосы.
+     Четыре колонки на 360 px схлопывали полосы в невидимую щель. */
+  .ec-lg-row { grid-template-columns: 1fr auto; grid-template-areas: "name verd" "kind kind" "bars bars";
+    gap: 4px 8px; padding: 9px 4px; }
+  .ec-lg-r-name { grid-area: name; }
+  .ec-lg-r-verd { grid-area: verd; }
+  .ec-lg-r-kind { grid-area: kind; }
+  .ec-lg-bars { grid-area: bars; }
+  .ec-lg-hrow { grid-template-columns: 1fr auto; grid-template-areas: "kind verd" "sys time"; gap: 2px 8px; }
+  .ec-lg-h-k { grid-area: kind; }
+  .ec-lg-h-s { grid-area: sys; }
+  .ec-lg-h-t { grid-area: time; text-align: right; }
+  .ec-lg-hrow .ec-lg-r-verd { grid-area: verd; text-align: right; }
+  .ec-lg-days { gap: 1px; }
+  .ec-lg-day { height: 22px; }
+  .ec-lg-d-grid { grid-template-columns: 1fr; gap: 0; }
+  .ec-lg-d-k { margin-top: 6px; }
+  .ec-lg-fchip, .ec-lg-more { padding: 6px 12px; }
+}

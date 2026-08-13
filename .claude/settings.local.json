@@ -721,7 +721,13 @@
       "Bash(node tools/db_q.js \"select proname, pg_get_function_identity_arguments\\(p.oid\\) args from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and \\(proname ilike '%news_push%' or proname ilike '_news%' or proname ilike '%news_add%'\\) order by 1;\")",
       "Bash(node tools/db_run.js _legion_engage.sql)",
       "Bash(node tools/db_q.js \"select public.legion_contacts_notify\\(\\);\")",
-      "Bash(node tools/db_q.js \"select \\(select count\\(*\\) from legion_contacts\\) as контактов, \\(select count\\(*\\) from fleets where faction_id='legion'\\) as ватаг, \\(select count\\(*\\) from legion_sightings\\) as засечек;\")"
+      "Bash(node tools/db_q.js \"select \\(select count\\(*\\) from legion_contacts\\) as контактов, \\(select count\\(*\\) from fleets where faction_id='legion'\\) as ватаг, \\(select count\\(*\\) from legion_sightings\\) as засечек;\")",
+      "Bash(node tools/db_run.js _legion_brief.sql)",
+      "Bash(node tools/_probe.js \"select * from public._legion_my_targets\\('fac_085638a65d'\\) limit 6\")",
+      "Bash(node tools/_probe.js \"explain analyze select * from public._legion_my_targets\\('fac_085638a65d'\\)\")",
+      "Bash(node tools/db_q.js \"select cp.id, cp.faction_id, cp.btype, cp.label, cp.ready_at, now\\(\\) as now_ts, c.planet_name, c.system_id from public.colony_projects cp left join public.colonies c on c.id=cp.colony_id where cp.kind='build' order by cp.ready_at desc limit 20\")",
+      "Bash(node tools/db_q.js \"select table_name, column_name, data_type from information_schema.columns where table_schema='public' and column_name in \\('ready_at','arrive_at','arrives_at','done_at','ends_at','until','eta','depart_at','route_at','built_at','finish_at'\\) order by table_name, column_name\")",
+      "Bash(node tools/db_run.js _admin_tick_projects.sql)"
     ]
   }
 }

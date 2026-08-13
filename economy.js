@@ -2222,7 +2222,7 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, allCols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList, goodsRecipeRows, resRarityRows, autosellCfg, stepLimit] = await Promise.all([
+  const [ecoRows, cols, allCols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList, legionBrief, goodsRecipeRows, resRarityRows, autosellCfg, stepLimit] = await Promise.all([
     // Казна — ЕДИНСТВЕННОЕ, без чего кабинет бессмысленен: её тянем с повтором,
     // и только её осечка имеет право провалить заход целиком.
     _ecRetry(() => dbGet('faction_economy', `faction_id=eq.${fid}`)),
@@ -2276,6 +2276,7 @@ async function _ecLoadCoreImpl() {
     (_uid ? dbGet('galactic_ledger', `owner_id=eq.${_uid}&order=created_at.desc&limit=24`).catch(() => []) : []),  // 🌌 разовые эффекты Ассамблеи/Поэмы (леджер, «Казна» обзора)
     ecRpc('war_status').catch(() => null),   // ⚔ войны: активные конфликты, ноты, история (_war_declare.sql)
     ecRpc('battles_mine').catch(() => null),   // ⚔ завязавшиеся бои: перехваты и встречи флотов (_war_intercept.sql)
+    ecRpc('legion_brief').catch(() => null),   // ☠ Легион: контакты, аггро и вероятные ходы пиратов (_legion_brief.sql)
     dbGet('faction_goods_recipe', `faction_id=eq.${fid}`).catch(() => []),   // 🛍 настраиваемый рецепт фабрики потребления (_consumption_factory.sql)
     dbGet('resource_rarity', `select=name,rarity`).catch(() => []),   // 🛍 редкость ресурсов → качество рецепта (справочник; best-effort)
     ecRpc('market_autosell_list').catch(() => ({})),   // 🔁 автопродажа: приказы «N единиц/тик» (_market_autosell.sql; best-effort)
@@ -2316,6 +2317,7 @@ async function _ecLoadCoreImpl() {
     }
   } catch (e) {}
   EC.war = warStatus || { fid: EC.fid, wars: [], open_wars: [], incoming: [], outgoing: [], history: [] };   // ⚔ войны (_war_declare.sql; пустой объект, если срез не накачен)
+  EC.legion = legionBrief || null;   // ☠ Легион: сводка для «⚔ Война» (_legion_brief.sql; null, если срез не накачен)
   EC.gledger = Array.isArray(gledger) ? gledger : [];    // 🌌 леджер галактических эффектов (Ассамблея/Поэма) — «Казна» обзора
   EC.designs = (designs || []);
   EC.roster = (prod || []).filter(p => p.status === 'done');
@@ -15029,6 +15031,28 @@ function ecHasDoomTech() { return ((EC.eco && EC.eco.research) || []).includes('
 function ecHasHyperTech() { return ((EC.eco && EC.eco.research) || []).includes('pol.hyperpacer'); }
 function ecHasBallTech() { return ((EC.eco && EC.eco.research) || []).includes('pol.ballistics'); }
 function ecHasNemesisTech() { return ((EC.eco && EC.eco.research) || []).includes('pol.nemesis'); }
+
+// Ожерелье — одно на СИСТЕМУ (зеркало проверок nemesis_build). Возвращает
+// {tag, note, title}, если в системе этой колонии Ожерелье уже стоит или
+// собирается, иначе null.
+function ecNemesisSysBusy(colonyId) {
+  const col = (EC.colonies || []).find(c => c.id === colonyId);
+  if (!col) return null;
+  const sysCols = (EC.colonies || []).filter(c => c.system_id === col.system_id).map(c => c.id);
+  const built = (EC.buildings || []).find(b => b.btype === 'nemesis' && sysCols.includes(b.colony_id));
+  if (built) {
+    const where = (EC.colonies.find(c => c.id === built.colony_id) || {}).planet_name || '';
+    return { tag: 'уже стоит', note: 'Система уже прикрыта Ожерельем' + (where ? ` (${where})` : '') + ' — второе не нужно.',
+             title: 'В этой системе уже есть Ожерелье Немезиды' };
+  }
+  const pend = (EC.projects || []).find(p => p.kind === 'build' && p.btype === 'nemesis' && sysCols.includes(p.colony_id));
+  if (pend) {
+    const where = (EC.colonies.find(c => c.id === pend.colony_id) || {}).planet_name || '';
+    return { tag: '⏳ ' + ecProjEtaTxt(pend), note: 'Сборка уже идёт' + (where ? ` над ${where}` : '') + ' — Ожерелье одно на систему.',
+             title: 'Ожерелье Немезиды уже собирается в этой системе' };
+  }
+  return null;
+}
 // Запас построенных снарядов судного дня ('doom' | тир баллистики).
 function ecShellsOf(kind) { return +(((EC.shells || {}).stock || {})[kind] || 0); }
 // Суммарный запас баллистики всех тиров.
@@ -15134,6 +15158,20 @@ function ecBpNeedChip(label, lack) {
 function ecNemesisBuildCard(colonyId, gc) {
   if (!ecHasNemesisTech()) return '';
   const d = EC_BUILD.nemesis;
+  // ОДНО НА СИСТЕМУ. Раньше карточка предлагалась всегда, а сервер отбивал
+  // «nemesis already under construction in this system» — игрок видел ошибку и
+  // не понимал, что Ожерелье уже собирается на соседней (или той же) планете.
+  const busy = ecNemesisSysBusy(colonyId);
+  if (busy) {
+    return `<button class="ec-bp-card ec-bp-mega ec-bp-noaf" disabled title="${esc(busy.title)}">
+      <span class="ec-bp-ic">🪐</span>
+      <span class="ec-bp-info">
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mega">МЕГА</span><span class="ec-bp-cost">${esc(busy.tag)}</span></span>
+        <span class="ec-bp-desc">${esc(d.desc)}</span>
+        <span class="ec-bp-howto">${esc(busy.note)}</span>
+      </span>
+    </button>`;
+  }
   const gcLack = gc < EC_NEMESIS.gc;
   const resLack = {};
   Object.entries(EC_NEMESIS.res).forEach(([n, q]) => { resLack[n] = ecStockOf(n) < q; });
@@ -16791,6 +16829,7 @@ function ecTabWar() {
   return `${intro}
     ${ecWarIncomingBlock()}
     ${ecWarBattlesBlock()}
+    ${ecLegionBlock()}
     <div class="ec-section-title">Текущие войны <span class="ec-hint">— ${wars.length ? wars.length + ' активн.' : 'мир'}</span></div>
     ${wars.length ? wars.map(ecWarCard).join('') : '<div class="ec-dip-grid"><div class="ec-dip-card"><div class="ec-empty">Держава ни с кем не воюет. Тишина — тоже позиция.</div></div></div>'}
     <div class="ec-section-title">Объявить войну <span class="ec-hint">— casus belli</span></div>
@@ -16820,6 +16859,287 @@ function ecWarIncomingBlock() {
     <div class="ec-dip-grid"><div class="ec-dip-card ec-war-hot">
       <div class="ec-dip-t">✉ Входящая дипломатия</div>${rows}
     </div></div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// ☠ ЖЕЛЕЗНЫЙ ЛЕГИОН — пиратский срез вкладки «Война»
+// Зеркало _legion_brief.sql. Отвечает на три вопроса и ровно в таком порядке:
+// кто идёт сейчас (лента подхода) → за что нас навещают (злоба) → куда ударят
+// в следующий раз (вероятные ходы). Ниже — хроника: чем это уже кончалось.
+//
+// ⚠ Клиент НИЧЕГО не досчитывает за сервер. Ступень осведомлённости, состав и
+// замысел приходят уже просеянными через нашу сеть застав: если у контакта нет
+// системы — значит, её и не знают, и рисуем сектор, а не выдуманную точку.
+// Формула вероятных ходов тоже серверная (та же, что в тике Легиона): здесь
+// только раскладка полос, иначе кабинет начал бы врать относительно ИИ.
+// ════════════════════════════════════════════════════════════
+const EC_LG_KIND = {
+  strike: { ic: '☄', label: 'удар по колонии', hint: 'угон населения и вынос склада' },
+  blind:  { ic: '◎', label: 'ослепление',      hint: 'снести заставу: разведку или заправку' },
+  probe:  { ic: '·', label: 'щупальца',        hint: 'разбой на трассе, окраинная колония' }
+};
+function ecLg() { return EC.legion && EC.legion.fid ? EC.legion : null; }
+function ecLgUi() { return (EC.lgUi = EC.lgUi || { kind: 'all', pick: null, more: false }); }
+function ecLgArr(k) { const g = ecLg(); const a = g && g[k]; return Array.isArray(a) ? a : []; }
+function ecLgHours(iso) { return iso ? (new Date(iso) - Date.now()) / 36e5 : null; }
+function ecLgEta(iso) {
+  const h = ecLgHours(iso);
+  if (h === null) return 'срок неизвестен';
+  if (h <= 0) return 'на месте';
+  if (h < 1) return 'меньше часа';
+  if (h < 24) return '~' + Math.round(h) + ' ч';
+  return '~' + Math.round(h / 24) + ' сут';
+}
+function ecLgAgo(iso) {
+  if (!iso) return '';
+  const h = (Date.now() - new Date(iso)) / 36e5;
+  if (h < 1) return 'только что';
+  if (h < 24) return Math.round(h) + ' ч назад';
+  return Math.round(h / 24) + ' сут назад';
+}
+function ecLgPlural(n, one, few, many) {
+  const a = Math.abs(n) % 100, b = a % 10;
+  return a > 10 && a < 20 ? many : b > 1 && b < 5 ? few : b === 1 ? one : many;
+}
+// Имя системы: сначала своя карта кабинета, иначе то, что дал сервер.
+function ecLgSys(id, fallback) {
+  const s = (EC.allSystems || []).find(x => x && x.id === id);
+  return (s && s.name) || fallback || id || '—';
+}
+
+function ecLegionBlock() {
+  if (!ecLg()) return '';   // срез не накачен или мы вне державы — вкладка молчит
+  return `<div class="ec-section-title">Железный Легион <span class="ec-hint">— пираты: подход, злоба, вероятные ходы</span></div>
+    <div id="ec-legion" class="ec-lg">${ecLgInner()}</div>`;
+}
+// Перерисовка только своего куска: переключение фильтра и выбор метки не должны
+// дёргать перезагруз всего кабинета — данные те же, меняется лишь раскладка.
+function ecLgRepaint() {
+  const n = document.getElementById('ec-legion');
+  if (n) n.innerHTML = ecLgInner();
+}
+function ecLgInner() {
+  return ecLgTiles() + ecLgTimeline() + ecLgTargets() + ecLgHistory();
+}
+
+// ── 1. ТРИ ПЛИТКИ: злоба · глаза · подход ───────────────────
+function ecLgTiles() {
+  const g = ecLg();
+  const ag = g.aggro || {};
+  const bite = +ag.bite || 12;
+  const v = +ag.v || 0;
+  // Полоса злобы: отметка «кусают» стоит ровно там, где сервер делает державу
+  // приоритетной целью (_legion_const('aggro_bite')) — игрок видит порог, а не
+  // абстрактный градусник.
+  const pct = Math.max(0, Math.min(100, v / (bite * 2) * 100));
+  const band = v < 1 ? ['спокойно', 'Легион нами не занимался — мы для него фон.']
+    : v < bite ? ['приметили', 'Мы попали в память Легиона, но приоритетом ещё не стали.']
+    : v < bite * 2 ? ['охотятся', 'Аггро выше порога: наши системы Легион выбирает охотнее чужих.']
+    : ['мстят', 'Аггро на пределе: пираты идут к нам в первую очередь.'];
+  const eyes = g.eyes || {};
+  const full = +eyes.recon_full || 0, weak = +eyes.recon_weak || 0, depot = +eyes.depot || 0;
+  const eyeState = full ? ['вскрываем замысел', 'Полный экипаж разведстанции — контакты рядом с ней приходят с целью и составом.']
+    : weak ? ['видим силуэты', 'Разведстанции есть, но экипаж неполный: замысел и состав не вскрываются.']
+    : ['мы слепы', 'Разведстанций с экипажем нет: удар придёт без предупреждения.'];
+  const inb = ecLgArr('contacts');
+  const near = inb.filter(t => t.eta).sort((a, b) => new Date(a.eta) - new Date(b.eta))[0];
+  const here = ecLgArr('here');
+
+  return `<div class="ec-lg-tiles">
+    <div class="ec-lg-tile">
+      <div class="ec-lg-t-h">Злоба Легиона</div>
+      <div class="ec-lg-t-v">${esc(band[0])} <i>${v.toFixed(1)}</i></div>
+      <div class="ec-lg-gauge"><span style="width:${pct.toFixed(1)}%"></span><b style="left:50%" title="Порог: выше него мы приоритетная цель"></b></div>
+      <div class="ec-lg-t-s">${esc(band[1])}</div>
+      ${ag.reason ? `<div class="ec-lg-t-why">За что: «${esc(ag.reason)}»${ag.at ? ' · ' + esc(ecLgAgo(ag.at)) : ''}</div>` : ''}
+      <div class="ec-lg-t-s ec-lg-dim">Злоба тает сама: полураспад около недели.</div>
+    </div>
+    <div class="ec-lg-tile">
+      <div class="ec-lg-t-h">Наши глаза</div>
+      <div class="ec-lg-t-v">${esc(eyeState[0])}</div>
+      <div class="ec-lg-chips">
+        <span class="ec-lg-chip${full ? ' ec-lg-chip-on' : ''}">◎ разведка с полным экипажем · ${full}</span>
+        <span class="ec-lg-chip${weak ? ' ec-lg-chip-warn' : ''}">◌ неполные · ${weak}</span>
+        <span class="ec-lg-chip">⛽ заставы · ${depot}</span>
+      </div>
+      <div class="ec-lg-t-s">${esc(eyeState[1])}</div>
+    </div>
+    <div class="ec-lg-tile${here.length ? ' ec-lg-tile-hot' : ''}">
+      <div class="ec-lg-t-h">В пути к нам</div>
+      <div class="ec-lg-t-v">${inb.length} <i>${ecLgPlural(inb.length, 'контакт', 'контакта', 'контактов')}</i></div>
+      <div class="ec-lg-t-s">${near ? 'Ближайший — ' + esc(ecLgEta(near.eta)) + '.' : 'Сроков не знаем: сигнатуры вскрыты только до сектора.'}</div>
+      ${here.length ? `<div class="ec-lg-t-why ec-lg-t-alarm">☠ Ватага уже стоит у нас: ${here.map(h =>
+          `<button class="ec-lg-link" onclick="ecLgGo('${jsq(h.sys)}')">${esc(ecLgSys(h.sys))} · ${+h.ships || 1} кор.</button>`).join(', ')}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+// ── 2. ЛЕНТА ПОДХОДА ────────────────────────────────────────
+// Ось времени, а не таблица: у пиратов главный ресурс игрока — часы до удара,
+// и «через 3 ч» против «через двое суток» должно читаться взглядом, без чтения.
+function ecLgTimeline() {
+  const list = ecLgArr('contacts');
+  if (!list.length) {
+    return `<div class="ec-lg-card"><div class="ec-lg-empty">В нашу сторону никто не идёт. Либо тихо, либо мы этого не видим — второе проверяется сетью разведстанций.</div></div>`;
+  }
+  const ui = ecLgUi();
+  const known = list.filter(t => t.eta).sort((a, b) => new Date(a.eta) - new Date(b.eta));
+  const ghosts = list.filter(t => !t.eta);
+
+  // Окно ленты: до самого дальнего срока, но не меньше 12 ч — иначе один
+  // контакт «через час» растягивался бы на всю ось и терял смысл масштаба.
+  const maxH = Math.max(12, ...known.map(t => Math.max(0, ecLgHours(t.eta) || 0)));
+  const ticks = [];
+  const step = maxH <= 24 ? 6 : maxH <= 72 ? 12 : 24;
+  for (let h = 0; h <= maxH + 0.01; h += step) {
+    // До двух суток подписываем часами: «36 ч» честнее, чем округлённые «2 сут»
+    ticks.push(`<span class="ec-lg-tick" style="left:${(h / maxH * 100).toFixed(2)}%"><i>${h === 0 ? 'сейчас' : (h < 48 ? h + ' ч' : Math.round(h / 24) + ' сут')}</i></span>`);
+  }
+  const marks = known.map((t, i) => {
+    const h = Math.max(0, ecLgHours(t.eta) || 0);
+    // Держим метку внутри полосы: самый дальний контакт садится ровно на 100 %,
+    // и половина кружка уезжала бы за край карточки.
+    const left = Math.max(1.5, Math.min(98.5, h / maxH * 100));
+    const res = t.grade === 'resolved';
+    const k = EC_LG_KIND[t.kind] || {};
+    const size = res ? Math.max(1, Math.min(4, Math.round((+t.ships || 1) / 4))) : 2;
+    const cls = `ec-lg-mark ec-lg-s${size}` + (res && t.mine ? ' ec-lg-mine' : '') + (ui.pick === t.id ? ' ec-lg-picked' : '');
+    const cap = res ? (k.ic || '☠') : '?';
+    return `<button class="${cls}" style="left:${left.toFixed(2)}%" onclick="ecLgPick('${jsq(t.id)}')"
+        title="${esc((res ? (k.label || 'налёт') : 'неопознанная сигнатура') + ' · ' + ecLgEta(t.eta))}">
+        <span class="ec-lg-mark-c">${cap}</span></button>`;
+  }).join('');
+
+  const picked = list.find(t => t.id === ui.pick);
+  const detail = picked ? ecLgDetail(picked) : '';
+  const ghostRow = ghosts.length
+    ? `<div class="ec-lg-ghosts">☠ Неспокойно: ${[...new Set(ghosts.map(t => t.sector).filter(Boolean))].map(esc).join(', ') || 'сектор неизвестен'}
+        <i>— ${ghosts.length} ${ecLgPlural(ghosts.length, 'сигнатура', 'сигнатуры', 'сигнатур')} без направления. Чтобы увидеть курс, нужна станция сенсоров ближе к ним.</i></div>`
+    : '';
+
+  return `<div class="ec-lg-card">
+    <div class="ec-lg-card-h">Лента подхода <span class="ec-hint">— нажмите метку</span></div>
+    ${known.length ? `<div class="ec-lg-line"><div class="ec-lg-axis">${ticks.join('')}</div><div class="ec-lg-marks">${marks}</div></div>` : ''}
+    ${known.length ? '' : '<div class="ec-lg-empty">Сроков нет: ни один контакт не вскрыт дальше «в секторе неспокойно».</div>'}
+    ${detail}
+    ${ghostRow}
+  </div>`;
+}
+// Карточка выбранной метки. Показываем ровно те поля, что дал сервер: у
+// signature их меньше, и пустоту здесь не заполняем догадками.
+function ecLgDetail(t) {
+  const res = t.grade === 'resolved';
+  const k = EC_LG_KIND[t.kind] || {};
+  const rows = [];
+  rows.push(['Срок', ecLgEta(t.eta)]);
+  if (t.sector) rows.push(['Сектор', t.sector]);
+  if (t.sys) rows.push(['Замечен', ecLgSys(t.sys)]);
+  if (res && t.target_sys) rows.push(['Цель', ecLgSys(t.target_sys) + (t.mine ? ' — наша' : '')]);
+  if (res) rows.push(['Замысел', (k.label || t.kind) + ' — ' + (k.hint || '')]);
+  rows.push(['Состав', res ? (+t.ships || 1) + ' кор. (оценка)' : (t.band ? 'группа ' + t.band : 'неизвестен')]);
+  rows.push(['Ведём с', ecLgAgo(t.since) || '—']);
+  return `<div class="ec-lg-detail">
+    <div class="ec-lg-d-h">${res ? esc((k.ic || '☠') + ' ' + (k.label || 'налёт')) : '? Неопознанная сигнатура'}
+      ${res && t.mine ? '<b class="ec-lg-d-mine">по нам</b>' : ''}</div>
+    <div class="ec-lg-d-grid">${rows.map(r => `<span class="ec-lg-d-k">${esc(r[0])}</span><span class="ec-lg-d-v">${esc(r[1])}</span>`).join('')}</div>
+    <div class="ec-lg-d-a">
+      ${t.sys || t.target_sys ? `<button class="btn btn-gh btn-xs" onclick="ecLgGo('${jsq(t.target_sys || t.sys)}')">Показать на карте</button>` : ''}
+      <button class="btn btn-gh btn-xs" onclick="ecLgPick(null)">Свернуть</button>
+    </div>
+    ${res ? '' : '<div class="ec-lg-d-hint">Замысел и состав вскрывает только разведстанция с ПОЛНЫМ экипажем — в системе контакта или в соседней.</div>'}
+  </div>`;
+}
+function ecLgPick(id) { ecLgUi().pick = (ecLgUi().pick === id ? null : id); ecLgRepaint(); }
+function ecLgGo(sys) {
+  if (!sys) { toast('Направление неизвестно: сигнатура вскрыта только до сектора', 'info'); return; }
+  go('map');
+  setTimeout(() => { try { if (typeof gmmCenterSystem === 'function') gmmCenterSystem(sys); } catch (e) {} }, 700);
+}
+
+// ── 3. ВЕРОЯТНЫЕ ХОДЫ ───────────────────────────────────────
+// Легион выбирает цель по ценность ÷ оборона: значит, игрок МОЖЕТ влиять на
+// выбор, и показывать надо обе половины дроби, а не итоговое число. Полосы
+// нарочно разнонаправленные: приманка вправо, прикрытие влево.
+function ecLgTargets() {
+  const all = ecLgArr('targets');
+  if (!all.length) return '';
+  const ui = ecLgUi();
+  const g = ecLg();
+  const list = ui.kind === 'all' ? all : all.filter(t => t.kind === ui.kind);
+  const maxScore = Math.max(...all.map(t => +t.score || 0), 0.01);
+  const maxVal = Math.max(...all.map(t => +t.value || 0), 0.01);
+  const maxGuard = Math.max(...all.map(t => +t.guard || 0), 1);
+  const shown = ui.more ? list : list.slice(0, 6);
+
+  const chips = [['all', 'все замыслы'], ['strike', '☄ удар'], ['blind', '◎ ослепление'], ['probe', '· щупальца']]
+    .map(([k, lb]) => `<button class="ec-lg-fchip${ui.kind === k ? ' ec-lg-fchip-on' : ''}" onclick="ecLgFilter('${k}')">${esc(lb)}</button>`).join('');
+
+  const rows = shown.map(t => {
+    const rel = (+t.score || 0) / maxScore;
+    const verdict = rel > 0.75 ? ['лежит плохо', 'bad'] : rel > 0.4 ? ['на примете', 'mid'] : ['прикрыта', 'ok'];
+    const k = EC_LG_KIND[t.kind] || {};
+    return `<button class="ec-lg-row" onclick="ecLgGo('${jsq(t.sys)}')" title="Показать на карте">
+      <span class="ec-lg-r-name">${esc(t.name || t.sys)}<i>${esc(t.sector || '')}</i></span>
+      <span class="ec-lg-r-kind" title="${esc(k.hint || '')}">${esc((k.ic || '·') + ' ' + (k.label || t.kind))}</span>
+      <span class="ec-lg-bars">
+        <span class="ec-lg-bar ec-lg-bar-v" title="Приманка: население, достаток, объём трасс — ${(+t.value).toFixed(2)}"><i style="width:${((+t.value || 0) / maxVal * 100).toFixed(1)}%"></i></span>
+        <span class="ec-lg-bar ec-lg-bar-g" title="Прикрытие: флот на приколе, мины, дроны, звёздная база, ПРО, гарнизон — ${(+t.guard).toFixed(2)}"><i style="width:${((+t.guard || 0) / maxGuard * 100).toFixed(1)}%"></i></span>
+      </span>
+      <span class="ec-lg-r-verd ec-lg-v-${verdict[1]}">${esc(verdict[0])}</span>
+    </button>`;
+  }).join('');
+
+  const total = +g.targets_total || all.length;
+  const moreBtn = list.length > 6
+    ? `<button class="ec-lg-more" onclick="ecLgMore()">${ui.more ? 'Свернуть' : 'Показать все — ' + list.length}</button>` : '';
+
+  return `<div class="ec-lg-card">
+    <div class="ec-lg-card-h">Вероятные ходы <span class="ec-hint">— наши системы глазами Легиона</span></div>
+    <div class="ec-lg-note">Пираты берут не самое богатое, а то, что <b>плохо лежит</b>: ценность делится на оборону системы. Верх списка — куда придут скорее всего. Опустить систему вниз можно двумя способами: обеднеть или прикрыть.</div>
+    <div class="ec-lg-filters">${chips}</div>
+    <div class="ec-lg-legend"><span class="ec-lg-lg-v">приманка</span><span class="ec-lg-lg-g">прикрытие</span></div>
+    ${rows || '<div class="ec-lg-empty">С таким замыслом Легиону у нас делать нечего.</div>'}
+    ${moreBtn}
+    ${total > all.length ? `<div class="ec-lg-note ec-lg-dim">Показана верхушка: ещё ${total - all.length} наших систем Легиону неинтересны.</div>` : ''}
+  </div>`;
+}
+function ecLgFilter(k) { ecLgUi().kind = k; ecLgUi().more = false; ecLgRepaint(); }
+function ecLgMore() { ecLgUi().more = !ecLgUi().more; ecLgRepaint(); }
+
+// ── 4. ХРОНИКА ──────────────────────────────────────────────
+// Тридцать клеток — тридцать суток. Смысл полосы: увидеть РИТМ. Ровный частокол
+// мелких точек — это налог щупальцами; пустота и один жирный день — Легион
+// копил на удар, и копит снова.
+function ecLgHistory() {
+  const h = ecLgArr('history');
+  if (!h.length) return '';
+  const day = 864e5, now = Date.now();
+  const cells = [];
+  for (let d = 29; d >= 0; d--) {
+    const t0 = now - (d + 1) * day, t1 = now - d * day;
+    const hits = h.filter(x => { const t = +new Date(x.at); return t >= t0 && t < t1; });
+    const lv = Math.min(3, hits.length);
+    cells.push(`<span class="ec-lg-day ec-lg-d${lv}" title="${d === 0 ? 'сегодня' : d + ' сут назад'}${hits.length ? ' · налётов: ' + hits.length : ''}"></span>`);
+  }
+  const rows = h.slice(0, 8).map(x => {
+    const k = EC_LG_KIND[x.kind] || {};
+    // state — судьба контакта, а не наша оценка: 'engaged' значит, что ватага
+    // материализовалась флотом и её пришлось (или ещё придётся) выбивать.
+    const res = x.state === 'engaged' ? ['вышли флотом', 'bad']
+      : x.state === 'spent' ? ['налёт состоялся', 'mid']
+      : ['без последствий', 'ok'];
+    return `<div class="ec-lg-hrow">
+      <span class="ec-lg-h-k">${esc((k.ic || '☠') + ' ' + (k.label || x.kind))}</span>
+      <span class="ec-lg-h-s">${esc(ecLgSys(x.sys, x.name))}</span>
+      <span class="ec-lg-h-t">${esc(ecLgAgo(x.at))}</span>
+      <span class="ec-lg-r-verd ec-lg-v-${res[1]}">${esc(res[0])}</span>
+    </div>`;
+  }).join('');
+  return `<div class="ec-lg-card">
+    <div class="ec-lg-card-h">Хроника налётов <span class="ec-hint">— 30 суток</span></div>
+    <div class="ec-lg-days">${cells.join('')}</div>
+    ${rows}
+  </div>`;
 }
 
 // ── Карточка активной войны ──
