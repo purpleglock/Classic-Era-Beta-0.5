@@ -1,0 +1,258 @@
+/* © 2025–2026. Все права защищены.
+   ══════════════════════════════════════════════════════════════
+   ПУТЬ СТАНОВЛЕНИЯ — раздел экрана «Статистика державы» (ecTabPath).
+
+   ПОКРОЙ БЕРЁТСЯ У ЭКРАНОВ НОВЕЛЛЫ (27_politics.css / 28_estate.css), а
+   не у панелей широкого кабинета. Там свой язык, и вкладка обязана в него
+   попадать:
+     · фасочный угол `clip-path`, НИКАКИХ скруглений;
+     · рамок-коробок нет — фон на белом альфа + линия-акцент слева 2px
+       (обводка со срезом даёт обрубленный контур, поэтому её не рисуем);
+     · цвет разговора — var(--pol) экрана (у статистики #9a8fe0), а не свой
+       янтарь: экран узнаётся краем глаза по цвету, и своевольный акцент
+       ломает узнавание;
+     · полосы прогресса плоские, 4px, как .pol-stat-bar.
+   Эмодзи нет: значки — инлайновый SVG в currentColor (EC_PATH_GL).
+
+   Телефон — в конце файла.
+   ══════════════════════════════════════════════════════════════ */
+
+.ec-pth-tab { display: flex; flex-direction: column; gap: 18px; }
+.ec-pth-gl { width: 1em; height: 1em; flex: 0 0 auto; vertical-align: -.14em; }
+
+/* Фаска — та же геометрия, что у .pol-card и .ec-door. */
+.ec-pth-hero, .ec-pth-spot, .ec-pth-step, .ec-pth-hero-promo {
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+}
+.ec-pth-plate, .ec-pth-chap-ic, .ec-pth-spot-ic {
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+
+/* ── Шапка ──────────────────────────────────────────────────── */
+.ec-pth-hero {
+  position: relative; overflow: hidden;
+  display: grid; grid-template-columns: auto 1fr minmax(230px, 300px); align-items: center; gap: 26px;
+  padding: 22px 24px;
+  border-left: 2px solid var(--pol, #9a8fe0);
+  background:
+    radial-gradient(110% 150% at 10% -30%, color-mix(in srgb, var(--pol, #9a8fe0) 16%, transparent), transparent 62%),
+    rgba(255, 255, 255, .03);
+}
+/* Сетка-подложка: та же «карта», что на прологах экранов. */
+.ec-pth-hero-grid {
+  position: absolute; inset: 0; pointer-events: none; opacity: .55;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--pol, #9a8fe0) 10%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--pol, #9a8fe0) 10%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(120% 100% at 18% 0%, #000 8%, transparent 70%);
+}
+.ec-pth-hero-ring, .ec-pth-hero-main, .ec-pth-hero-promo { position: relative; z-index: 1; min-width: 0; }
+.ec-pth-kick {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-display); font-size: 12px; font-weight: 700;
+  letter-spacing: .13em; text-transform: uppercase; color: var(--pol, #9a8fe0);
+}
+.ec-pth-kick .ec-pth-gl { width: 15px; height: 15px; }
+.ec-pth-title {
+  margin: 8px 0; font-family: var(--font-display); font-weight: 700;
+  font-size: 25px; letter-spacing: .02em; line-height: 1.12; color: #f0e9db;
+}
+.ec-pth-lead { margin: 0 0 15px; max-width: 78ch; font-size: 12.5px; line-height: 1.55; color: var(--t4); }
+.ec-pth-hero-stats { display: flex; flex-wrap: wrap; gap: 24px; }
+.ec-pth-hs { display: flex; flex-direction: column; gap: 3px; }
+.ec-pth-hs-v { font-family: var(--font-mono); font-size: 21px; line-height: 1; color: #e8e2d4; }
+.ec-pth-hs-of { font-size: 12px; color: var(--t4); }
+.ec-pth-hs-k { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .06em; color: var(--t4); }
+.ec-pth-hero-stats .ec-ovx-c-gc { color: var(--pol, #9a8fe0) !important; }
+
+/* Кольцо: тот же приём, что у .pol-ring, только цифры внутри SVG. */
+.ec-pth-ring { display: block; }
+.ec-pth-ring-bg { fill: none; stroke: rgba(255, 255, 255, .08); stroke-width: 7; }
+.ec-pth-ring-fg {
+  fill: none; stroke: var(--pol, #9a8fe0); stroke-width: 7;
+  transition: stroke-dashoffset .45s ease;
+}
+.ec-pth-ring-pct { fill: #f3eada; font-family: var(--font-display); font-size: 21px; text-anchor: middle; dominant-baseline: middle; }
+.ec-pth-ring-sub { fill: var(--t4); font-family: var(--font-mono); font-size: 8px; letter-spacing: .1em; text-anchor: middle; dominant-baseline: middle; }
+
+/* Промокод */
+.ec-pth-hero-promo {
+  display: flex; flex-direction: column; gap: 8px; padding: 13px 15px;
+  background: rgba(255, 255, 255, .04); border-left: 2px solid var(--pol-dim, rgba(154, 143, 224, .22));
+}
+.ec-pth-promo-t {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-display); font-size: 11px; font-weight: 700;
+  letter-spacing: .13em; text-transform: uppercase; color: var(--t2);
+}
+.ec-pth-promo-t .ec-pth-gl { width: 14px; height: 14px; color: var(--pol, #9a8fe0); }
+.ec-pth-promo-note { margin: 0; font-size: 10.5px; line-height: 1.45; color: var(--t4); font-style: italic; }
+.ec-pth-hero-promo .ec-promo-row { width: 100%; }
+.ec-pth-hero-promo .ec-promo-inp { flex: 1 1 auto; width: auto; min-width: 0; }
+
+/* ── Ближайший шаг ──────────────────────────────────────────── */
+.ec-pth-spot {
+  display: grid; grid-template-columns: auto 1fr minmax(150px, auto); align-items: center; gap: 20px;
+  padding: 17px 19px; background: rgba(255, 255, 255, .045);
+  border-left: 2px solid var(--pol, #9a8fe0);
+}
+.ec-pth-spot.done { border-left-color: var(--ok, #5fc98a); }
+.ec-pth-spot-ic {
+  display: grid; place-items: center; width: 56px; height: 56px;
+  color: var(--pol, #9a8fe0); background: var(--pol-dim, rgba(154, 143, 224, .22));
+}
+.ec-pth-spot.done .ec-pth-spot-ic { color: var(--ok, #5fc98a); background: rgba(95, 201, 138, .18); }
+.ec-pth-spot-ic .ec-pth-gl { width: 27px; height: 27px; }
+.ec-pth-spot-main { min-width: 0; }
+.ec-pth-spot-kick {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--pol, #9a8fe0);
+}
+.ec-pth-spot-t { margin: 5px 0 6px; font-family: var(--font-display); font-weight: 700; font-size: 18px; color: #f0e9db; }
+.ec-pth-spot-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--t3); }
+.ec-pth-spot-rew { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.ec-pth-spot-rew-k { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .06em; color: var(--t4); }
+
+/* ── Фильтр ─────────────────────────────────────────────────── */
+.ec-pth-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ec-pth-fbtn {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 7px 12px; border: none; background: rgba(255, 255, 255, .05); color: var(--t3);
+  font-family: inherit; font-size: 12px;
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+  transition: background .16s ease, color .16s ease;
+}
+.ec-pth-fbtn:hover { background: rgba(255, 255, 255, .09); color: var(--t1); }
+.ec-pth-fbtn.on { background: var(--pol-dim, rgba(154, 143, 224, .22)); color: var(--pol, #9a8fe0); }
+.ec-pth-fbtn .ec-pth-gl { width: 13px; height: 13px; }
+.ec-pth-filter-note { font-size: 11px; color: var(--t4); font-style: italic; }
+
+/* ── Главы ──────────────────────────────────────────────────── */
+/* Заголовок главы — то же, что .pol-h: не карточка, а строка-разделитель. */
+.ec-pth-chap { display: flex; flex-direction: column; gap: 8px; }
+.ec-pth-chap-h {
+  display: grid; grid-template-columns: auto 1fr auto minmax(90px, 150px); align-items: center; gap: 12px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--cyb-line, rgba(58, 155, 220, .32));
+}
+.ec-pth-chap-ic {
+  display: grid; place-items: center; width: 32px; height: 32px;
+  color: var(--pol, #9a8fe0); background: var(--pol-dim, rgba(154, 143, 224, .22));
+}
+.ec-pth-chap.done .ec-pth-chap-ic { color: var(--ok, #5fc98a); background: rgba(95, 201, 138, .16); }
+.ec-pth-chap-ic .ec-pth-gl { width: 17px; height: 17px; }
+.ec-pth-chap-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ec-pth-chap-tx b {
+  font-family: var(--font-display); font-size: 13px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--t2);
+}
+.ec-pth-chap-tx i { font-style: normal; font-size: 11px; color: var(--t4); }
+.ec-pth-chap-n { font-family: var(--font-mono); font-size: 10.5px; color: var(--t4); white-space: nowrap; }
+.ec-pth-chap-bar .ec-ovx-bar { height: 4px; border-radius: 0; background: rgba(255, 255, 255, .07); }
+.ec-pth-chap-bar .ec-ovx-bar-fill { border-radius: 0; background: var(--pol, #9a8fe0) !important; }
+.ec-pth-chap.done .ec-pth-chap-bar .ec-ovx-bar-fill { background: var(--ok, #5fc98a) !important; }
+.ec-pth-chap-list { display: flex; flex-direction: column; gap: 6px; }
+.ec-pth-chap-empty { padding: 9px 2px; font-size: 12px; font-style: italic; color: var(--t4); }
+
+/* ── Веха ───────────────────────────────────────────────────── */
+.ec-pth-step {
+  display: grid; grid-template-columns: auto 1fr minmax(140px, auto); align-items: flex-start; gap: 14px;
+  padding: 12px 14px; background: rgba(255, 255, 255, .03);
+  border-left: 2px solid rgba(255, 255, 255, .12);
+  transition: background .16s ease, transform .16s ease;
+}
+.ec-pth-step:hover { background: rgba(255, 255, 255, .06); transform: translateX(2px); }
+.ec-pth-step.next { border-left-color: var(--pol, #9a8fe0); background: color-mix(in srgb, var(--pol, #9a8fe0) 9%, rgba(255, 255, 255, .03)); }
+.ec-pth-step.done { border-left-color: rgba(95, 201, 138, .5); opacity: .62; }
+.ec-pth-plate {
+  display: grid; place-items: center; width: 38px; height: 38px;
+  color: var(--t3); background: rgba(255, 255, 255, .06);
+}
+.ec-pth-step.next .ec-pth-plate { color: var(--pol, #9a8fe0); background: var(--pol-dim, rgba(154, 143, 224, .22)); }
+.ec-pth-step.done .ec-pth-plate { color: var(--ok, #5fc98a); background: rgba(95, 201, 138, .14); }
+.ec-pth-plate .ec-pth-gl { width: 19px; height: 19px; }
+.ec-pth-step-body { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.ec-pth-step-h { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.ec-pth-step-t { margin: 0; font-size: 13.5px; font-weight: 600; color: #f0e9db; }
+/* Ярлычок — .pol-tag: плоская плашка без рамки и радиуса. */
+.ec-pth-tag {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+  padding: 2px 7px; color: var(--pol, #9a8fe0); background: var(--pol-dim, rgba(154, 143, 224, .22));
+  white-space: nowrap;
+}
+.ec-pth-tag.done { color: var(--ok, #5fc98a); background: rgba(95, 201, 138, .14); }
+.ec-pth-step-hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--t3); }
+.ec-pth-step-lore {
+  margin: 2px 0 0; padding-left: 10px; font-size: 11.5px; line-height: 1.45; font-style: italic;
+  color: var(--t4); border-left: 1px solid rgba(255, 255, 255, .12);
+}
+.ec-pth-step-prog { display: flex; align-items: center; gap: 9px; margin-top: 4px; }
+.ec-pth-track { flex: 1 1 auto; height: 4px; min-width: 60px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+.ec-pth-track-fill { display: block; height: 100%; background: var(--pol, #9a8fe0); transition: width .35s ease; }
+.ec-pth-step.done .ec-pth-track-fill { background: var(--ok, #5fc98a); }
+.ec-pth-track-n { font-family: var(--font-mono); font-size: 10px; color: var(--t4); white-space: nowrap; }
+.ec-pth-step-rew { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.ec-pth-rew {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--pol, #9a8fe0); white-space: nowrap;
+}
+.ec-pth-rew .ec-pth-gl { width: 13px; height: 13px; opacity: .85; }
+.ec-pth-step.done .ec-pth-rew { color: var(--t4); }
+
+/* ── Плитка в «Обзоре» ──────────────────────────────────────── */
+/* Обзор живёт на том же экране, поэтому плитка тоже фасочная. */
+.ec-path-teaser {
+  display: flex; align-items: center; gap: 18px; cursor: pointer;
+  border-left: 2px solid var(--pol, #9a8fe0);
+  transition: background .16s ease, transform .16s ease;
+}
+.ec-path-teaser:hover { transform: translateX(2px); }
+.ec-pth-teaser-ring { flex: 0 0 auto; }
+.ec-pth-teaser-ring .ec-pth-ring { width: 80px; height: 80px; }
+.ec-pth-teaser-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.ec-pth-teaser-bar .ec-ovx-bar { height: 4px; border-radius: 0; background: rgba(255, 255, 255, .07); }
+.ec-pth-teaser-bar .ec-ovx-bar-fill { border-radius: 0; background: var(--pol, #9a8fe0) !important; }
+.ec-pth-teaser-next { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--t3); }
+.ec-pth-teaser-next .ec-pth-gl { width: 15px; height: 15px; color: var(--pol, #9a8fe0); }
+.ec-pth-teaser-rew { font-family: var(--font-mono); font-size: 11px; color: var(--pol, #9a8fe0); }
+.ec-pth-teaser-go { flex: 0 0 auto; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; color: var(--pol, #9a8fe0); }
+.ec-path-panel .ec-path-head .ec-pth-gl { width: 15px; height: 15px; color: var(--pol, #9a8fe0); }
+
+/* ── ТЕЛЕФОН ────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .ec-pth-hero { grid-template-columns: auto 1fr; }
+  .ec-pth-hero-promo { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .ec-pth-tab { gap: 14px; }
+  .ec-pth-hero { grid-template-columns: 1fr; gap: 14px; padding: 16px 15px; }
+  .ec-pth-hero-ring { justify-self: center; }
+  .ec-pth-hero-ring .ec-pth-ring { width: 88px; height: 88px; }
+  .ec-pth-title { font-size: 21px; }
+  .ec-pth-hero-stats { gap: 16px; }
+  .ec-pth-hs-v { font-size: 18px; }
+
+  .ec-pth-spot { grid-template-columns: auto 1fr; gap: 13px; padding: 14px; }
+  .ec-pth-spot-rew { grid-column: 1 / -1; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
+  .ec-pth-spot-ic { width: 46px; height: 46px; }
+  .ec-pth-spot-ic .ec-pth-gl { width: 23px; height: 23px; }
+  .ec-pth-spot-t { font-size: 16px; }
+
+  .ec-pth-chap-h { grid-template-columns: auto 1fr auto; row-gap: 7px; }
+  .ec-pth-chap-bar { grid-column: 1 / -1; }
+
+  .ec-pth-step { grid-template-columns: auto 1fr; gap: 11px; padding: 11px 12px; }
+  .ec-pth-step-rew { grid-column: 2 / -1; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px; }
+  .ec-pth-plate { width: 34px; height: 34px; }
+  .ec-pth-plate .ec-pth-gl { width: 17px; height: 17px; }
+
+  .ec-path-teaser { flex-wrap: wrap; gap: 13px; }
+  .ec-pth-teaser-ring .ec-pth-ring { width: 64px; height: 64px; }
+  .ec-pth-teaser-go { width: 100%; text-align: right; }
+  .ec-path-panel .ec-path-head { flex-direction: column; align-items: stretch; gap: 10px; }
+}
+@media (max-width: 420px) {
+  .ec-pth-hero-stats { gap: 13px; }
+  .ec-pth-step-lore { display: none; }   /* на самом узком экране важнее «что нажать» */
+  .ec-pth-filter-note { display: none; }
+}

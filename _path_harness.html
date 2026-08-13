@@ -1,0 +1,47 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Стенд: вкладка «Путь становления»</title>
+<!-- ВРЕМЕННЫЙ СТЕНД. Зовёт настоящий ecTabPath() из economy.js на снимке
+     ответа path_check — без базы и авторизации. -->
+<script>document.write('<link rel="stylesheet" href="css/index.css?b=' + Date.now() + '">')</script>
+<style>body{padding:18px}</style>
+<div id="app"><main id="cw"><div id="pg">
+  <div class="hp-vn-stat show" style="display:block"><div class="pol-body" id="mount" style="max-width:1180px;margin:0 auto"></div>
+</div></div></main></div>
+<script>
+// ── Стабы окружения (то, что даёт core.js) ──
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const jsq = esc;
+const toast = (m) => console.log('toast:', m);
+</script>
+<script src="economy.js"></script>
+<script>
+EC.app = { name: 'Соридонский Союз' }; EC.pathHideDone = false;
+const CH = [
+  { id:'roots', title:'Основание', sub:'земля, люди, первый камень', glyph:'roots' },
+  { id:'industry', title:'Хозяйство', sub:'сырьё, заводы, торговые пути', glyph:'factory' },
+  { id:'science', title:'Знание', sub:'наука и древо технологий', glyph:'science' },
+  { id:'fleet', title:'Верфи', sub:'свой корабль от чертежа до флота', glyph:'shipyard' },
+];
+const S = (id, ch, gl, t, hint, lore, thr, prog, done, rew) =>
+  ({ id, chapter: ch, glyph: gl, title: t, hint, lore, threshold: thr, progress: prog, done, reward: rew });
+EC.path = {
+  chapters: CH,
+  stale: false, age_days: 3.2, max_age_days: 30,
+  steps: [
+    S('a','roots','house','Столица на месте','Кабинет → «Управление колониями».','Держава начинается с первой распаханной ячейки.',1,1,true,{gc:1000}),
+    S('b','roots','vault','Склад под сырьё','Постройте склад, иначе добыча упрётся в потолок хранения.','Пустой амбар честнее полного обоза.',1,1,true,{gc:1500}),
+    S('c','roots','people','Пять тысяч душ','Стройте жильё и держите благополучие.','Народ — единственный ресурс, который считает себя сам.',5000,3120,false,{gc:2000}),
+    S('d','roots','cells','Шесть отраслей','Займите шесть ячеек любыми постройками.','Шесть труб на горизонте — и соседи считают вас всерьёз.',6,4,false,{gc:2500}),
+    S('e','industry','factory','Первый завод','Поставьте фабрику в столице.','',1,0,false,{gc:1500}),
+    S('f','industry','trade','Тридцать тысяч в казне','Продайте излишек сырья на рынке.','Цена — это чужое мнение о вашем сырье.',30000,11400,false,{gc:3000}),
+    S('g','science','science','Дом науки','Постройте научный центр.','',1,0,false,{gc:1500,science:100}),
+    S('h','science','tech','Пять технологий','Держите очередь исследований непустой.','Знание — единственное, что не отнимут вместе с колонией.',5,1,false,{gc:4000,science:250}),
+    S('i','fleet','design','Три дизайна','Конструктор: корвет, носитель и что-то третье.','Флот из одного класса проигрывает флоту из трёх.',3,0,false,{gc:4000,shards:{corvette:2}}),
+    S('j','fleet','fleet','Два флота','Разведке и линии нужны разные приказы.','',2,0,false,{gc:6000,coupons:1}),
+  ],
+};
+function ecPaintCabinet() { document.getElementById('mount').innerHTML = ecTabPath(); }
+ecPaintCabinet();
+</script>

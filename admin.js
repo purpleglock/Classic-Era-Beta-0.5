@@ -3445,6 +3445,13 @@ async function adReleaseSystem(sysId) {
   finally { AD.busy = false; }
 }
 
+// Мегасооружения и особые постройки: в EC_ORDER их нет (игрок строит их
+// отдельными RPC — doom_build/shellforge_build/ballfab_build/nemesis_build),
+// но админ выдаёт их напрямую строкой в colony_buildings.
+// Ячейку колонии они не занимают. Пост древних стражей сюда НЕ входит —
+// он живёт в своей таблице, а не в colony_buildings.
+const AD_MEGA = ['nemesis', 'doomgun', 'shellforge', 'ballfab'];
+
 // ── Вкладка: Колонии ────────────────────────────────────────────
 function adTabColonies(e) {
   const cols = e.colonies;
@@ -3453,13 +3460,14 @@ function adTabColonies(e) {
 
   const colCards = cols.map(c => {
     const blds = e.buildings.filter(b => b.colony_id === c.id);
-    const used = blds.length, cap = c.cells || 6, full = used >= cap;
+    const used = blds.filter(b => !AD_MEGA.includes(b.btype)).length, cap = c.cells || 6, full = used >= cap;
     const sys = AD.systems.find(s => s.id === c.system_id);
 
     const bldRows = blds.map(b => {
       const d = EC_BUILD_LOCAL[b.btype];
+      const mega = AD_MEGA.includes(b.btype);
       return `<div class="fm-bld-row">
-        <span class="fm-bld-name">${d ? esc(d.name) : esc(b.btype)}</span>
+        <span class="fm-bld-name">${d ? esc(d.name) : esc(b.btype)}${mega ? ' <span class="fm-bld-mega">МЕГА</span>' : ''}</span>
         <span class="fm-bld-slots">
           <button class="btn btn-gh btn-xs" onclick="adSetSlots(${adArg(b.id)},${Math.max(1,b.slots_open-1)})" ${b.slots_open<=1?'disabled':''}>−</button>
           <span class="fm-slot-val">${b.slots_open}/6</span>
@@ -3469,7 +3477,9 @@ function adTabColonies(e) {
       </div>`;
     }).join('') || `<div class="fm-empty" style="padding:4px 0;font-size:11px">Пусто</div>`;
 
-    const bldOpts = EC_ORDER_LOCAL.map(t => { const d = EC_BUILD_LOCAL[t]; return `<option value="${t}">${d ? esc(d.name) : t}</option>`; }).join('');
+    const optOf = t => { const d = EC_BUILD_LOCAL[t]; return `<option value="${t}">${d ? esc(d.name) : t}</option>`; };
+    const bldOpts = `<optgroup label="Обычные">${EC_ORDER_LOCAL.map(optOf).join('')}</optgroup>`
+      + `<optgroup label="⛨ Мегасооружения и особые">${AD_MEGA.map(optOf).join('')}</optgroup>`;
     return `<div class="fm-col-card">
       <div class="fm-col-hd">
         <div>
@@ -3482,7 +3492,7 @@ function adTabColonies(e) {
       <div class="fm-bld-list">${bldRows}</div>
       <div class="fm-col-foot">
         <select id="fm-bsel-${c.id}" class="fi" style="flex:1">${bldOpts}</select>
-        <button class="btn btn-gh btn-sm" ${full ? 'disabled' : ''} onclick="adAddBuilding(${adArg(c.id)})">+ Постройка</button>
+        <button class="btn btn-gh btn-sm" onclick="adAddBuilding(${adArg(c.id)})">+ Постройка</button>
         <button class="btn btn-rd btn-sm" onclick="adRemoveColony(${adArg(c.id)})">✕ Колонию</button>
       </div>
     </div>`;
@@ -3602,6 +3612,20 @@ async function adAddBuilding(colId) {
   const e = adEntry(AD.sel); if (!e) return;
   const btype = document.getElementById('fm-bsel-' + colId)?.value; if (!btype) return;
   const d = (typeof EC_BUILD !== 'undefined') ? EC_BUILD[btype] : null;
+  const col = e.colonies.find(c => c.id === colId);
+  const mega = AD_MEGA.includes(btype);
+  if (!mega) {
+    // ячейки колонии считаем без мегасооружений — они вне сетки
+    const used = e.buildings.filter(b => b.colony_id === colId && !AD_MEGA.includes(b.btype)).length;
+    if (used >= ((col?.cells) || 6)) { toast('Ячейки колонии заняты', 'err'); return; }
+  }
+  // Ожерелье Немезиды — одно на СИСТЕМУ (зеркало проверки nemesis_build)
+  if (btype === 'nemesis' && col) {
+    const sysCols = e.colonies.filter(c => c.system_id === col.system_id).map(c => c.id);
+    if (e.buildings.some(b => b.btype === 'nemesis' && sysCols.includes(b.colony_id))) {
+      toast('В этой системе уже есть Ожерелье Немезиды', 'err'); return;
+    }
+  }
   const ownerId = (e.eco?.owner_id) || e.app?.owner_id;
   AD.busy = true;
   try {
@@ -6510,55 +6534,178 @@ const AD_PATH_KEYS = [
   ['agents',        'агентов'],
   ['gc',            'ГС в казне'],
   ['science',       'очков науки'],
+  ['coupons',       'осколков цикла'],
+  ['pop',           'населения всего'],
+  ['b_warehouse',   'построек: склады'],
+  ['b_goodsfab',    'построек: фабрики товаров'],
+  ['b_temple',      'построек: храмы'],
+  ['b_trade',       'построек: торговые'],
+  ['b_training',    'построек: учебные'],
+  ['b_intel',       'построек: разведка'],
+  ['b_military_factory', 'построек: военпром'],
+  ['turrets',       'орудий своей верфи'],
+  ['armies',        'наземных армий'],
+  ['outposts',      'аванпостов'],
+  ['conc',          'концессий'],
+  ['faith',         'членство в вере'],
+  ['news',          'опубликованных новостей'],
+  ['ach',           'достижений получено'],
+  ['members',       'принято на службу'],
+  ['unions',        'членство в униях'],
+  ['wars',          'участие в войнах'],
+  ['doom',          'орудий «Длани»'],
+];
+
+// Глифы вех: ключи набора EC_PATH_GL (economy.js). Эмодзи в путь не пускаем —
+// он рисуется инлайновым SVG, а незнакомый ключ вылезет пустым кружком.
+const AD_PATH_GLYPHS = [
+  'dot', 'roots', 'house', 'vault', 'people', 'cells', 'factory', 'mining', 'mining_deep',
+  'goodsfab', 'trade', 'caravan', 'pact', 'science', 'sci_giant', 'sci_anomaly', 'tech',
+  'planet', 'colony8', 'systems', 'outpost', 'shipyard', 'design', 'turret', 'build',
+  'fleet', 'army', 'intel', 'battle', 'military_factory', 'doom', 'temple', 'news',
+  'medal', 'gc', 'shield', 'compass', 'gift',
 ];
 
 const AD_INP = 'background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:5px;color:var(--t1,#e8edf2);padding:5px 7px;font-size:12px;box-sizing:border-box;width:100%';
 const AD_LBL = 'display:flex;flex-direction:column;gap:2px;font-size:10px;color:var(--t4,#6a7a88)';
 
-// «Железо: 100, Кремний: 40» ⇄ {Железо:100, Кремний:40}
-function adKvToText(o) {
-  if (!o || typeof o !== 'object') return '';
-  return Object.entries(o).map(([k, v]) => k + ': ' + v).join(', ');
-}
-function adTextToKv(s) {
-  const out = {};
-  (s || '').split(',').forEach(part => {
-    const i = part.lastIndexOf(':');
-    if (i < 0) return;
-    const k = part.slice(0, i).trim(), v = parseFloat(part.slice(i + 1));
-    if (k && !isNaN(v) && v !== 0) out[k] = v;
-  });
-  return out;
+
+// ── КОНСТРУКТОР НАГРАДЫ ─────────────────────────────────────────
+// Награда собирается строками «[что ▾] [позиция ▾] [сколько] ✕», а не
+// печатается текстом: имя ресурса и id технологии руками не набрать без
+// опечатки, а опечатка тут = молча не выданная награда.
+//
+// Черновик живёт в AD.rew[pfx] = [{t, k, v}] и перерисовывается ЛОКАЛЬНО
+// (только контейнер строк): полный adPaint стёр бы всё, что уже набрано
+// в остальных полях карточки.
+//
+// ТНП в списке НЕТ намеренно: товары дематериализованы
+// (_goods_dematerialize.sql) — это поток внутри тика под спрос населения,
+// а не запас на складе; выдать их нельзя.
+const AD_REW_TYPES = [
+  ['gc',       '💰 ГС в казну',            false],
+  ['science',  '🔬 Очки науки',            false],
+  ['res',      '📦 Ресурс на склад',       true ],
+  ['coupons',  '◈ Осколок цикла (любой)',  false],
+  ['shards',   '◈ Осколок класса',         true ],
+  ['research', '🧪 Технология',            true ],
+];
+// Не-флотские ключи осколков — дополняют классы кораблей из EC_SHIP_CLASS_LABELS.
+const AD_UNIT_KINDS = [['ground', 'Наземная техника'], ['aviation', 'Авиация'], ['inf', 'Пехота']];
+
+// Каталог позиций для выпадашки по типу строки.
+function adRewOptions(t) {
+  const cat = (AD.promo && AD.promo.cat) || {};
+  if (t === 'res') return (cat.res || []).map(n => [n, n]);
+  if (t === 'shards') {
+    const cls = (typeof EC_SHIP_CLASS_LABELS !== 'undefined') ? EC_SHIP_CLASS_LABELS : {};
+    // Легаси-классы (frigate/cruiser) новых осколков не получают — в список не пускаем.
+    return Object.keys(cls).filter(k => !/устар/.test(cls[k])).map(k => [k, cls[k]]).concat(AD_UNIT_KINDS);
+  }
+  if (t === 'research') return (cat.tech || []);
+  return [];
 }
 
-// Поля награды (общие для кода и для вехи). pfx — префикс id элементов.
-function adRewardFields(pfx, r) {
+// jsonb награды → строки черновика.
+function adRewFromReward(r) {
+  const rows = [];
   r = r || {};
-  const num = (f, lbl, hint) => `<label style="${AD_LBL}" title="${esc(hint || '')}">${esc(lbl)}
-    <input type="number" id="${pfx}-r-${f}" value="${r[f] != null ? esc(String(r[f])) : ''}" placeholder="0" style="${AD_INP}"></label>`;
-  return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
-      ${num('gc', 'ГС', 'В казну державы')}
-      ${num('science', 'ОН', 'Очки науки')}
-      ${num('tnp', 'ТНП', 'Товары народного потребления')}
-      ${num('coupons', '◈ осколки', 'Универсальные осколки цикла: 1 осколок = 1 бесплатный мгновенный юнит любого класса')}
-    </div>
-    <label style="${AD_LBL}" title="Через запятую: «Железо: 100, Кремний: 40». Кладётся на склад державы.">ресурсы
-      <input type="text" id="${pfx}-r-res" value="${esc(adKvToText(r.res))}" placeholder="Железо: 100, Кремний: 40" style="${AD_INP}"></label>
-    <label style="${AD_LBL}" title="Классовые осколки: годятся только на свой класс. Ключи — как в конструкторе: corvette, destroyer, mediumCruiser, dreadnought, aviation, ground, inf.">◈ осколки по классам
-      <input type="text" id="${pfx}-r-shards" value="${esc(adKvToText(r.shards))}" placeholder="corvette: 3, ground: 2" style="${AD_INP}"></label>
-    <label style="${AD_LBL}" title="id узлов древа через запятую — выдаются как уже изученные.">технологии
-      <input type="text" id="${pfx}-r-research" value="${esc((r.research || []).join(', '))}" placeholder="eng.basic, mil.armor1" style="${AD_INP}"></label>`;
+  if (r.gc)      rows.push({ t: 'gc', k: '', v: r.gc });
+  if (r.science) rows.push({ t: 'science', k: '', v: r.science });
+  if (r.res && typeof r.res === 'object')
+    Object.entries(r.res).forEach(([k, v]) => rows.push({ t: 'res', k, v }));
+  if (r.coupons) rows.push({ t: 'coupons', k: '', v: r.coupons });
+  if (r.shards && typeof r.shards === 'object')
+    Object.entries(r.shards).forEach(([k, v]) => rows.push({ t: 'shards', k, v }));
+  (Array.isArray(r.research) ? r.research : []).forEach(k => rows.push({ t: 'research', k, v: 1 }));
+  return rows;
 }
 
+function adRewDraft(pfx, r) {
+  if (!AD.rew) AD.rew = {};
+  if (!AD.rew[pfx]) AD.rew[pfx] = adRewFromReward(r);
+  return AD.rew[pfx];
+}
+
+// Строки конструктора (перерисовываются локально).
+function adRewRowsHtml(pfx) {
+  const rows = adRewDraft(pfx);
+  if (!rows.length) {
+    return `<div style="padding:8px 10px;border:1px dashed var(--w2,#2a3340);border-radius:8px;font-size:11px;color:var(--t4,#6a7a88)">Награды нет — код/веха ничего не выдаст</div>`;
+  }
+  const sel = 'background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:5px;color:var(--t1,#e8edf2);padding:5px 6px;font-size:12px';
+  return rows.map((row, i) => {
+    const meta = AD_REW_TYPES.find(x => x[0] === row.t) || AD_REW_TYPES[0];
+    const needsKey = meta[2];
+    const opts = needsKey ? adRewOptions(row.t) : [];
+    // Позиция из другого окружения (ресурс снят с рынка, узел выпилен из древа)
+    // не должна молча пропасть из выбора — дописываем её в список как есть.
+    if (needsKey && row.k && !opts.some(o => o[0] === row.k)) opts.unshift([row.k, row.k + ' (нет в каталоге)']);
+    const isTech = row.t === 'research';
+    return `<div style="display:flex;gap:6px;align-items:center">
+      <select style="${sel};flex:0 0 168px" onchange="adRewSet('${pfx}',${i},'t',this.value)">
+        ${AD_REW_TYPES.map(([k, l]) => `<option value="${k}"${row.t === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+      </select>
+      ${needsKey
+        ? `<select style="${sel};flex:1 1 auto;min-width:0" onchange="adRewSet('${pfx}',${i},'k',this.value)">
+             <option value="">— выберите —</option>
+             ${opts.map(([k, l]) => `<option value="${esc(k)}"${row.k === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+           </select>`
+        : `<span style="flex:1 1 auto"></span>`}
+      ${isTech
+        ? `<span style="flex:0 0 78px;font-size:10px;color:var(--t4,#6a7a88);text-align:right">выдаётся</span>`
+        : `<input type="number" step="any" value="${esc(String(row.v != null ? row.v : ''))}" placeholder="0"
+             style="${sel};flex:0 0 78px;text-align:right" oninput="adRewSet('${pfx}',${i},'v',this.value)">`}
+      <button type="button" title="Убрать" onclick="adRewDel('${pfx}',${i})"
+        style="flex:0 0 26px;background:none;border:1px solid var(--w2,#2a3340);border-radius:5px;color:#ff7a7a;cursor:pointer;padding:4px 0">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// Блок «Награда» целиком (общий для кода и для вехи).
+function adRewardFields(pfx, r) {
+  adRewDraft(pfx, r);
+  return `<div style="border:1px solid var(--w2,#2a3340);border-radius:8px;padding:9px;display:flex;flex-direction:column;gap:6px;background:var(--b0,#0c1322)">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3,#8aa0b0)">Награда</span>
+      <span style="flex:1"></span>
+      <button type="button" class="btn btn-gh btn-sm" onclick="adRewAdd('${pfx}')">+ добавить</button>
+    </div>
+    <div id="${pfx}-rew" style="display:flex;flex-direction:column;gap:6px">${adRewRowsHtml(pfx)}</div>
+  </div>`;
+}
+
+function adRewRepaint(pfx) {
+  const el = document.getElementById(`${pfx}-rew`);
+  if (el) el.innerHTML = adRewRowsHtml(pfx);
+}
+function adRewAdd(pfx) { adRewDraft(pfx).push({ t: 'gc', k: '', v: '' }); adRewRepaint(pfx); }
+function adRewDel(pfx, i) { adRewDraft(pfx).splice(i, 1); adRewRepaint(pfx); }
+function adRewSet(pfx, i, field, val) {
+  const rows = adRewDraft(pfx); const row = rows[i]; if (!row) return;
+  if (field === 't') {
+    // Смена типа обнуляет позицию: ресурс «Железо» бессмыслен для осколка.
+    row.t = val; row.k = '';
+    if (val === 'research') row.v = 1;
+    adRewRepaint(pfx);
+    return;
+  }
+  if (field === 'v') { row.v = val; return; }   // без перерисовки — иначе слетит фокус
+  row[field] = val;
+}
+
+// Черновик → jsonb награды. Пустые и неполные строки отбрасываем.
 function adRewardRead(pfx) {
-  const g = f => document.getElementById(`${pfx}-r-${f}`);
-  const n = f => { const el = g(f); const v = el ? parseFloat(el.value) : NaN; return isNaN(v) ? 0 : v; };
   const out = {};
-  ['gc', 'science', 'tnp', 'coupons'].forEach(f => { const v = n(f); if (v) out[f] = v; });
-  const res = adTextToKv((g('res') || {}).value); if (Object.keys(res).length) out.res = res;
-  const sh  = adTextToKv((g('shards') || {}).value); if (Object.keys(sh).length) out.shards = sh;
-  const tech = ((g('research') || {}).value || '').split(',').map(x => x.trim()).filter(Boolean);
-  if (tech.length) out.research = tech;
+  adRewDraft(pfx).forEach(row => {
+    const v = parseFloat(row.v);
+    if (row.t === 'research') { if (row.k) (out.research = out.research || []).push(row.k); return; }
+    if (isNaN(v) || v === 0) return;
+    if (row.t === 'gc' || row.t === 'science' || row.t === 'coupons') { out[row.t] = (out[row.t] || 0) + v; return; }
+    if (!row.k) return;                                     // ресурс/класс без позиции — мусор
+    out[row.t] = out[row.t] || {};
+    out[row.t][row.k] = (out[row.t][row.k] || 0) + v;
+  });
   return out;
 }
 
@@ -6569,8 +6716,26 @@ async function adPromoLoad() {
   } catch (e) {
     AD.promo = { __err: e.message || String(e), codes: [], path: [], recent: [], settings: {} };
   }
+  // Каталоги для выпадашек награды. Ресурсы — живой список рынка; технологии —
+  // то же дерево, что видит игрок (ecBuildResearch синтезирует его из KV).
+  // Оба источника не критичны: без них строка награды просто не предложит выбор.
+  const cat = { res: [], tech: [] };
+  try {
+    const rows = await dbGet('market_resources', 'select=name&order=name');
+    cat.res = (rows || []).map(r => r.name).filter(Boolean);
+  } catch (e) { /* рынка нет — выбор ресурса будет пуст */ }
+  try {
+    if (typeof ecBuildResearch === 'function') {
+      cat.tech = (ecBuildResearch() || []).map(n => [n.id, `${n.name || n.id} · ${n.id}`]);
+    }
+  } catch (e) { /* каталог KV не загружен */ }
+  if (AD.promo) AD.promo.cat = cat;
   if (AD.tab === 'promo') adPaint();
 }
+
+// Сброс кэша вкладки: перечитать с сервера и выкинуть черновики наград
+// (иначе после сохранения в карточке остались бы старые несохранённые строки).
+function adPromoReset() { AD.promo = null; AD.rew = {}; adPaint(); }
 
 function adPromoPanel() {
   if (AD.promo == null) { AD.promo = { __loading: true, codes: [], path: [], recent: [], settings: {} }; adPromoLoad(); }
@@ -6634,16 +6799,28 @@ function adPromoPanel() {
   // ── Вехи пути ──
   const stepCard = s => {
     const p = `ad-ps-${s.id}`;
+    const chaps = (P.chapters || []);
     return card(`<div style="display:flex;align-items:center;gap:8px">
-        <input type="text" id="${p}-icon" value="${esc(s.icon || '')}" maxlength="4" style="${AD_INP};width:46px;text-align:center;font-size:15px">
         <input type="text" id="${p}-title" value="${esc(s.title || '')}" placeholder="Название вехи" style="${AD_INP};flex:1;font-weight:600">
         <label style="${AD_LBL};width:70px" title="Порядок в списке — меньше значит выше.">порядок
           <input type="number" id="${p}-ord" value="${esc(String(s.ord || 100))}" style="${AD_INP}"></label>
         <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3,#8aa0b0)">
           <input type="checkbox" id="${p}-active" ${s.active ? 'checked' : ''}>вкл</label>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <label style="${AD_LBL}" title="Глава пути — в какой блок вехи попадает у игрока.">глава
+          <select id="${p}-chapter" style="${AD_INP}">
+            ${chaps.map(c => `<option value="${esc(c.id)}"${s.chapter === c.id ? ' selected' : ''}>${esc(c.title || c.id)}</option>`).join('')
+              || `<option value="${esc(s.chapter || 'roots')}">${esc(s.chapter || 'roots')}</option>`}
+          </select></label>
+        <label style="${AD_LBL}" title="Значок вехи. Рисуется инлайновым SVG (EC_PATH_GL) — эмодзи не используются.">значок
+          <select id="${p}-glyph" style="${AD_INP}">
+            ${AD_PATH_GLYPHS.map(g => `<option value="${g}"${(s.glyph || 'dot') === g ? ' selected' : ''}>${g}</option>`).join('')}
+          </select></label>
+      </div>
       <textarea id="${p}-hint" rows="2" placeholder="Что именно нажать — этот текст читает новичок"
         style="${AD_INP};line-height:1.4;resize:vertical">${esc(s.hint || '')}</textarea>
+      <input type="text" id="${p}-lore" value="${esc(s.lore || '')}" placeholder="Строка лора — одна фраза под подсказкой (необязательно)" style="${AD_INP}">
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:6px">
         <label style="${AD_LBL}" title="Что считаем. Список закрыт — значения приходят из path_check.">условие
           <select id="${p}-check_key" style="${AD_INP}">
@@ -6697,7 +6874,7 @@ async function adPromoSettingsSave() {
   try {
     await adRpc('admin_promo_settings_save', { p: { max_age_days: isNaN(v) ? 30 : v } });
     toast('Настройки пути сохранены', 'ok');
-    AD.promo = null; adPaint();
+    adPromoReset();
   } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
 }
 
@@ -6708,7 +6885,7 @@ async function adPromoCreate() {
   try {
     await adRpc('admin_promo_save', { p: { code, title: 'Новый код', active: false, reward: {} } });
     toast(`Код ${code} создан (пока выключен — заполните награду и включите)`, 'ok');
-    AD.promo = null; adPaint();
+    adPromoReset();
   } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
 }
 
@@ -6733,7 +6910,7 @@ async function adPromoSave(code) {
     await adRpc('admin_promo_save', { p: body });
     if (st) st.textContent = '✓ сохранено';
     toast(`Код ${code} сохранён`, 'ok');
-    AD.promo = null; adPaint();
+    adPromoReset();
   } catch (e) {
     if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 60); }
     toast('Не удалось: ' + (e.message || e), 'err');
@@ -6745,7 +6922,7 @@ async function adPromoDelete(code) {
   try {
     await adRpc('admin_promo_delete', { p_code: code });
     toast(`Код ${code} удалён`, 'ok');
-    AD.promo = null; adPaint();
+    adPromoReset();
   } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
 }
 
@@ -6756,7 +6933,7 @@ async function adPathCreate() {
   try {
     await adRpc('admin_path_save', { p: { id, title: 'Новая веха', ord: 900, active: false, reward: {} } });
     toast(`Веха ${id} создана (пока выключена)`, 'ok');
-    AD.promo = null; adPaint();
+    adPromoReset();
   } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
 }
 
@@ -6767,7 +6944,10 @@ async function adPathSave(id) {
   const body = {
     id,
     ord: parseInt(val('ord')) || 100,
-    icon: val('icon') || '•',
+    icon: '•',                       // легаси-поле таблицы: значок теперь в glyph
+    glyph: val('glyph') || 'dot',
+    chapter: val('chapter') || 'roots',
+    lore: val('lore'),
     title: val('title'), hint: val('hint'),
     check_key: val('check_key') || 'gc',
     threshold: parseFloat(val('threshold')) || 1,
@@ -6779,7 +6959,7 @@ async function adPathSave(id) {
     await adRpc('admin_path_save', { p: body });
     if (st) st.textContent = '✓ сохранено';
     toast(`Веха «${body.title}» сохранена`, 'ok');
-    AD.promo = null; adPaint();
+    adPromoReset();
   } catch (e) {
     if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 60); }
     toast('Не удалось: ' + (e.message || e), 'err');
@@ -6791,6 +6971,6 @@ async function adPathDelete(id) {
   try {
     await adRpc('admin_path_delete', { p_id: id });
     toast(`Веха ${id} удалена`, 'ok');
-    AD.promo = null; adPaint();
+    adPromoReset();
   } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
 }

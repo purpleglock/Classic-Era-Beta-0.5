@@ -68,11 +68,11 @@ const EC_SPY_OPS = {
   recon_deep:    { label: 'Глубокая разведка',   diff: 15, base: 2, need: '',      recon: 'deep',  icon: '🛰', desc: 'Постройки, флот, армия, изученные технологии. Открывает сложные операции.' },
   steal_gc:      { label: 'Кража казны',         diff: 25, base: 2, need: 'basic', icon: '💰', desc: 'Похитить часть ГС цели (до 30%, растёт с числом агентов).' },
   steal_res:     { label: 'Кража ресурсов',      diff: 28, base: 2, need: 'basic', icon: '📦', desc: 'Похитить сырьё со складов цели (до 25%, растёт с числом агентов). Инфильтратор усиливает.' },
-  sabotage:      { label: 'Саботаж постройки',   diff: 30, base: 2, need: 'deep',  icon: '💥', desc: 'Вывести из строя одно здание цели.' },
+  sabotage:      { label: 'Саботаж постройки',   diff: 30, base: 2, need: 'deep',  icon: '💥', desc: 'Вывести из строя одно здание цели. Мегасооружения агентам не по зубам.' },
   destabilize:   { label: 'Дестабилизация',      diff: 35, base: 3, need: 'basic', icon: '🔥', desc: 'Снизить ГС-доход цели на несколько ходов.' },
   kill_agent:    { label: 'Ликвидация агента',   diff: 38, base: 2, need: 'basic', icon: '🗡', desc: 'Устранить одного готового агента цели. Призрак повышает шанс успеха.' },
   steal_tech:    { label: 'Кража технологий',    diff: 45, base: 4, need: 'deep',  icon: '🧪', desc: 'Украсть технологию (мин. 2 агента). Добавится в ваше дерево.' },
-  mass_demolish: { label: 'Массовый снос',       diff: 45, base: 3, need: 'deep',  minAgents: 2, icon: '🏚', desc: 'Уничтожить сразу N зданий цели (N = число агентов, max 5). Мин. 2 агента. Саботёр усиливает.' },
+  mass_demolish: { label: 'Массовый снос',       diff: 45, base: 3, need: 'deep',  minAgents: 2, icon: '🏚', desc: 'Уничтожить сразу N зданий цели (N = число агентов, max 5). Мин. 2 агента. Саботёр усиливает. Мегасооружения не сносятся.' },
   faith_impose:  { label: 'Тайная секта',        diff: 28, base: 3, need: 'basic', icon: '🛐', desc: 'Внедрить тайную секту вашей веры в чужую державу. Работает как храм (доход и сила — вам), пока контрразведка цели её не вскроет. Нужна исповедуемая вера.' },
   subspace_hunt: { label: 'Подпространственная охота', diff: 40, base: 2, need: '', tactical: true, icon: '🛰', desc: 'Вскрыть скрытые гиперкрейсера цели — при успехе они подсветятся на карте на 2 суток (крит — 4). Иначе их не видно ни с разведкой, ни без.' },
   fleet_sabotage:{ label: 'Диверсия против флота', diff: 34, base: 2, need: '', tactical: true, targetFleet: true, icon: '⚙', desc: 'Подрыв вражеского флота. По степени успеха: крит → выводит из строя часть кораблей состава; обычный успех → обездвиживает флот на сутки. Сопротивление — «защита ВС» цели.' },
@@ -685,7 +685,7 @@ const EC_BLD_HOWTO = {
   doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 1 ПОСТРОЕННЫЙ снаряд Длани (собирается в Арсенале Судного Дня). Снаряд летит тем дольше, чем дальше цель: от ~3 ч до соседней системы и до суток — от края до края галактики. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
   shellforge:       'Заказывайте снаряды Длани прямо на строке арсенала (стирают планету; нужны Длани и Гиперпейсеру). 1 снаряд = 1 день работы; готовые ложатся на общий склад снарядов державы.',
   ballfab:          'Заказывайте баллистику на строке завода: Х19 «Хазар» (быстрый, слабый), Х69 «Фантом» (не виден планетарной ПРО), Х05 «Сурей» (2–4 постройки), Х0414 «Отей» (1 Гравиядро, гарантированно 5 построек, бьёт ×2 радиуса). Носит только Гиперпейсер.',
-  nemesis:          'Работает само: ГАРАНТИРОВАННО перехватывает ЛЮБОЙ залп Длани и Гиперпейсера по ЛЮБОЙ планете этой системы — без зарядов и осечек. Пока Ожерелье стоит, система неуязвима для ударов из космоса. Одно Ожерелье на систему.',
+  nemesis:          'Работает само: ГАРАНТИРОВАННО перехватывает ЛЮБОЙ залп Длани и Гиперпейсера по ЛЮБОЙ планете этой системы — без зарядов и осечек. Пока Ожерелье стоит, система неуязвима для ударов из космоса. Одно Ожерелье на систему. Диверсанты его не сносят — только война.',
 };
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
@@ -4946,21 +4946,85 @@ function ecAchOverviewTeaser() {
 // НЕТ ни одной зашитой награды, только отрисовка того, что отдал path_check.
 // ════════════════════════════════════════════════════════════
 
+// ── ГЛИФЫ ПУТИ ────────────────────────────────────────────────
+// Один штриховой набор 24×24 в currentColor. ЭМОДЗИ ЗДЕСЬ НЕ МЕСТО: путь —
+// первое, что видит новичок, а эмодзи рисуются шрифтом ОС (свой цвет, вес и
+// размер на каждой платформе) и не красятся темой. Ключ приходит с сервера
+// (starter_path.glyph); неизвестный ключ падает на 'dot', а не ломает верстку.
+const EC_PATH_GL = {
+  dot:      '<circle cx="12" cy="12" r="3.2"/>',
+  check:    '<path d="M4.5 12.6l5 5 10-10.6"/>',
+  lock:     '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.4 10.5V8a3.6 3.6 0 017.2 0v2.5"/>',
+  gift:     '<path d="M3.5 9.5h17v3.2h-17z"/><path d="M5 12.7v8h14v-8"/><path d="M12 9.5v11"/><path d="M12 9.5C9 9.5 7 8.6 7 6.9S9.6 4.6 12 9.5c2.4-4.9 5 -1.4 5 .5s-2 2.6-5 2.6z"/>',
+  compass:  '<circle cx="12" cy="12" r="9"/><path d="M15.6 8.4l-2 5.2-5.2 2 2-5.2z"/>',
+  // главы
+  roots:    '<path d="M12 3v10"/><path d="M12 13c0-3-2.5-4.5-5.5-4.8M12 13c0-3 2.5-4.5 5.5-4.8"/><path d="M6.5 20.5h11"/><path d="M9 20.5V13h6v7.5"/>',
+  // вехи: земля и хозяйство
+  house:    '<path d="M3.5 11L12 4l8.5 7"/><path d="M5.5 9.8V20.5h13V9.8"/><path d="M9.8 20.5V14h4.4v6.5"/>',
+  vault:    '<path d="M3 9.5L12 4.2l9 5.3"/><path d="M4.8 9.8v10.7M19.2 9.8v10.7M9.6 9.8v10.7M14.4 9.8v10.7"/><path d="M3 20.5h18"/>',
+  people:   '<circle cx="9" cy="8.4" r="3"/><path d="M3.5 20c0-3.3 2.5-5.6 5.5-5.6s5.5 2.3 5.5 5.6"/><path d="M15.8 6.2a3 3 0 010 5.6"/><path d="M17 14.8c2.2.6 3.6 2.6 3.6 5.2"/>',
+  cells:    '<rect x="3.5" y="3.5" width="17" height="17" rx="1.6"/><path d="M12 3.5v17M3.5 12h17"/>',
+  factory:  '<path d="M3 20.5h18"/><path d="M3.5 20.5V10l5 3.2V10l5 3.2V5h7v15.5"/>',
+  mining:   '<path d="M4 20l10-10"/><path d="M6 8.4c4.4-3.6 9.6-3.4 13.4.7"/><path d="M12.6 6.4l4.8 4.8"/>',
+  mining_deep: '<path d="M4 20l9-9"/><path d="M10.5 5h8.5v4.4"/><path d="M12.6 11.4L19 5"/>',
+  goodsfab: '<path d="M5 8.5h14l1.4 12H3.6z"/><path d="M8.8 8.5V6.4a3.2 3.2 0 016.4 0v2.1"/>',
+  trade:    '<path d="M4 8.5h14l-4-4"/><path d="M20 15.5H6l4 4"/>',
+  caravan:  '<path d="M3 16.5V7.5h12v9"/><path d="M15 10.5h3.6l2.6 3.2v2.8H15"/><circle cx="7.4" cy="18.4" r="1.9"/><circle cx="17.6" cy="18.4" r="1.9"/>',
+  pact:     '<path d="M7.5 12.5l3.2-3.2 3 3 3.2-3.2"/><path d="M3.5 10.5l4-3.5h9l4 3.5"/><path d="M4.5 13.5l4.6 4.6a2 2 0 002.8 0l1.1-1.1"/>',
+  // наука
+  science:  '<path d="M9.5 3v6.2L4.4 18a2 2 0 001.7 3h11.8a2 2 0 001.7-3L14.5 9.2V3"/><path d="M8 3h8"/><path d="M7.4 14.6h9.2"/>',
+  sci_giant:'<circle cx="12" cy="12" r="6"/><path d="M3.2 15.8c4.8 2.6 12.4 2.2 16.8-1.7"/><path d="M12 3v2M12 19v2"/>',
+  sci_anomaly:'<path d="M2.5 12S6.4 6.5 12 6.5 21.5 12 21.5 12 17.6 17.5 12 17.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.4"/>',
+  tech:     '<path d="M10 3.5h4v3.2l2.8 1.6 2.8-1.6"/><circle cx="12" cy="12.5" r="3.2"/><path d="M12 3.5v5.8M12 15.7v4.8M8.8 10.9L4.2 8.2M15.2 10.9l4.6-2.7M8.8 14.1l-4.6 2.7M15.2 14.1l4.6 2.7"/>',
+  // расширение
+  planet:   '<circle cx="12" cy="11" r="6"/><path d="M2.6 15.8c5.2 2.9 13.2 2.4 18.4-1.6"/>',
+  colony8:  '<circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="3.4" r="1.6"/><circle cx="20.6" cy="12" r="1.6"/>',
+  systems:  '<circle cx="5.5" cy="6.5" r="2.2"/><circle cx="18.5" cy="9" r="2.2"/><circle cx="10" cy="18.5" r="2.2"/><path d="M7.4 7.6l9 1M17 11l-5.6 5.8M8.4 16.7L6.4 8.6"/>',
+  outpost:  '<path d="M12 3.5v6"/><path d="M6 20.5l6-11 6 11z"/><path d="M8.4 16.5h7.2"/><circle cx="12" cy="3.5" r="1.4"/>',
+  // верфи и флот
+  shipyard: '<path d="M12 2.6c3 2.8 4.5 6.3 4.5 10.1L12 17.4l-4.5-4.7C7.5 8.9 9 5.4 12 2.6z"/><circle cx="12" cy="9.4" r="1.7"/><path d="M7.6 17.6l-2.6 3M16.4 17.6l2.6 3"/>',
+  design:   '<path d="M4 20.5L20 4.5"/><path d="M4 20.5v-4.2l12-11.8 4.2 4L8.2 20.5z"/><path d="M14 6.6l4 4"/>',
+  turret:   '<path d="M3.5 15.5h7l9-6.5-2.2-2.6-8.6 5.4h-5.2z"/><path d="M3.5 15.5v3.2h9"/><circle cx="7" cy="12.4" r="1.2"/>',
+  build:    '<path d="M2.5 20.5h19"/><path d="M5.5 20.5V9.5L11 6v14.5"/><path d="M11 20.5v-9l5.5 3v6"/><path d="M8 12.5h.01M8 16h.01"/>',
+  fleet:    '<path d="M12 3.2c2.2 2.2 3.3 4.8 3.3 7.6L12 14.4 8.7 10.8c0-2.8 1.1-5.4 3.3-7.6z"/><path d="M4.5 16l2.6-2.4 1.3 3.2M19.5 16l-2.6-2.4-1.3 3.2"/><path d="M12 17v4"/>',
+  // сила
+  army:     '<path d="M4 19.5h16"/><path d="M6.5 19.5v-4.2h11v4.2"/><path d="M8.8 15.3l3.2-6.6 3.2 6.6"/><circle cx="12" cy="5.6" r="2.2"/>',
+  intel:    '<path d="M2.6 9.6h18.8"/><circle cx="7.6" cy="14.2" r="3.6"/><circle cx="16.4" cy="14.2" r="3.6"/><path d="M11.2 13.6h1.6"/>',
+  battle:   '<path d="M4 4.5h3l11 11-3 3-11-11z"/><path d="M20 4.5h-3l-5.4 5.4"/><path d="M14 17l3 3M7.6 17l-3 3"/>',
+  military_factory: '<circle cx="12" cy="12" r="3.4"/><path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.4 5.4l2.1 2.1M16.5 16.5l2.1 2.1M18.6 5.4l-2.1 2.1M7.5 16.5l-2.1 2.1"/>',
+  doom:     '<circle cx="12" cy="12" r="8.4"/><path d="M12 3.6v16.8M3.6 12h16.8"/>',
+  // голос
+  temple:   '<path d="M12 2.6v4.6M10 4.6h4"/><path d="M6 20.5V12a6 6 0 0112 0v8.5"/><path d="M4 20.5h16"/>',
+  news:     '<path d="M4 5h13v14.5H4z"/><path d="M17 8.5h3v9a2 2 0 01-3 1.8"/><path d="M7 8.5h7M7 12h7M7 15.5h4.5"/>',
+  medal:    '<circle cx="12" cy="15" r="5.6"/><path d="M12 12.6l1 2 2.1.3-1.5 1.4.4 2.1-2-1-2 1 .4-2.1-1.5-1.4 2.1-.3z"/><path d="M8.2 3.2l2 6M15.8 3.2l-2 6"/>',
+  gc:       '<circle cx="12" cy="12" r="8.4"/><path d="M12 6.8v10.4M9.2 9.4h5.6M9.2 14.6h5.6"/>',
+  shield:   '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 8v7"/>',
+};
+function ecPathIco(key, cls) {
+  const d = EC_PATH_GL[key] || EC_PATH_GL.dot;
+  return `<svg class="ec-pth-gl${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${d}</svg>`;
+}
+
 // Человекочитаемая расшифровка награды: {gc, science, res, coupons, shards, research}.
+// ТНП нет намеренно — товары дематериализованы (_goods_dematerialize.sql).
 function ecRewardText(r) {
   if (!r || typeof r !== 'object') return '';
   const p = [];
   if (r.gc)      p.push(`+${ecNum(r.gc)} ГС`);
   if (r.science) p.push(`+${ecNum(r.science)} ОН`);
-  if (r.tnp)     p.push(`+${ecNum(r.tnp)} ТНП`);
   if (r.res && typeof r.res === 'object')
     Object.entries(r.res).forEach(([n, v]) => p.push(`+${ecNum(v)} ${n}`));
   if (r.coupons) p.push(`+${ecNum(r.coupons)} ◈ осколк.`);
   if (r.shards && typeof r.shards === 'object')
-    Object.entries(r.shards).forEach(([k, v]) => p.push(`+${ecNum(v)} ◈ ${k}`));
+    Object.entries(r.shards).forEach(([k, v]) =>
+      p.push(`+${ecNum(v)} ◈ ${(typeof EC_SHIP_CLASS_LABELS !== 'undefined' && EC_SHIP_CLASS_LABELS[k]) || EC_UNIT_KIND_LABELS[k] || k}`));
   if (Array.isArray(r.research) && r.research.length) p.push(`технологии: ${r.research.length}`);
   return p.join(' · ');
 }
+
+// Не-флотские ключи осколков (ship-классы живут в EC_SHIP_CLASS_LABELS).
+const EC_UNIT_KIND_LABELS = { ground: 'Наземная техника', aviation: 'Авиация', inf: 'Пехота' };
 
 // Ввод промокода. Живёт в шапке панели становления и НЕ прячется у ветеранов:
 // код может быть выдан кому угодно (компенсация, событие, конкурс).
@@ -4984,60 +5048,231 @@ async function ecPromoSubmit() {
 }
 function ecPromoKey(ev) { if (ev && ev.key === 'Enter') ecPromoSubmit(); }
 
-// Панель «Путь становления» в «Обзоре». Отдаёт '' только если сервер вообще
-// не ответил — иначе всегда виден хотя бы ввод кода.
-function ecPathPanel() {
-  const P = EC.path;
-  if (!P) return '';
+// ── Свод по пути: числа считаются один раз и разбираются всеми панелями ──
+function ecPathStats() {
+  const P = EC.path || {};
   const steps = Array.isArray(P.steps) ? P.steps : [];
   const done = steps.filter(s => s.done).length;
-  const stale = !!P.stale;
-  // Путь пройден целиком (или держава уже взрослая) — блок сворачивается
-  // в одну строку с вводом кода, чтобы не занимать место в кабинете навсегда.
-  const collapsed = stale || (steps.length > 0 && done >= steps.length);
+  const pct = steps.length ? Math.round(done / steps.length * 100) : 0;
+  const num = (r, k) => Number((r || {})[k] || 0);
+  const gcGot = steps.reduce((a, s) => a + (s.done ? num(s.reward, 'gc') : 0), 0);
+  const gcLeft = steps.reduce((a, s) => a + (s.done ? 0 : num(s.reward, 'gc')), 0);
+  const next = steps.find(s => !s.done) || null;
+  return { steps, done, total: steps.length, pct, gcGot, gcLeft, next,
+           stale: !!P.stale, ageDays: Number(P.age_days || 0), maxAge: Number(P.max_age_days || 0) };
+}
 
-  const promo = `<div class="ec-promo-row">
+// Кольцо прогресса пути. Тот же приём, что у зала достижений, но со своим
+// текстом внутри — это два разных счётчика, и путать их нельзя.
+function ecPathRing(pct) {
+  const r = 46, c = 2 * Math.PI * r, p = Math.max(0, Math.min(100, pct));
+  return `<svg class="ec-pth-ring" viewBox="0 0 110 110" width="110" height="110" aria-hidden="true">
+    <circle class="ec-pth-ring-bg" cx="55" cy="55" r="${r}"></circle>
+    <circle class="ec-pth-ring-fg" cx="55" cy="55" r="${r}"
+      stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${(c * (1 - p / 100)).toFixed(1)}"
+      transform="rotate(-90 55 55)"></circle>
+    <text class="ec-pth-ring-pct" x="55" y="52">${p}%</text>
+    <text class="ec-pth-ring-sub" x="55" y="70">пути</text>
+  </svg>`;
+}
+
+// Награда плитками с глифами (вместо строки через точки) — для карточек вех.
+function ecRewardChips(r) {
+  if (!r || typeof r !== 'object') return '';
+  const chip = (gl, txt) => `<span class="ec-pth-rew"> ${ecPathIco(gl)}<b>${esc(txt)}</b></span>`;
+  const out = [];
+  if (r.gc)      out.push(chip('gc', `+${ecNum(r.gc)} ГС`));
+  if (r.science) out.push(chip('science', `+${ecNum(r.science)} ОН`));
+  if (r.res && typeof r.res === 'object')
+    Object.entries(r.res).forEach(([n, v]) => out.push(chip('mining', `+${ecNum(v)} ${n}`)));
+  if (r.coupons) out.push(chip('build', `+${ecNum(r.coupons)} осколк.`));
+  if (r.shards && typeof r.shards === 'object')
+    Object.entries(r.shards).forEach(([k, v]) => out.push(chip('shipyard',
+      `+${ecNum(v)} ${(typeof EC_SHIP_CLASS_LABELS !== 'undefined' && EC_SHIP_CLASS_LABELS[k]) || EC_UNIT_KIND_LABELS[k] || k}`)));
+  if (Array.isArray(r.research) && r.research.length) out.push(chip('tech', `технологий: ${r.research.length}`));
+  return out.join('');
+}
+
+// Строка ввода промокода — живёт и в шапке вкладки, и в свёрнутом виде у ветеранов.
+function ecPromoRow() {
+  return `<div class="ec-promo-row">
     <input id="ec-promo-inp" class="ec-promo-inp" type="text" maxlength="32" autocomplete="off"
            placeholder="Промокод" onkeydown="ecPromoKey(event)">
     <button type="button" class="btn btn-gh btn-sm" onclick="ecPromoSubmit()">Применить</button>
   </div>`;
+}
+
+// Открыть вкладку пути (она живёт разделом экрана «Статистика державы»).
+function ecPathOpen() {
+  if (typeof EST === 'object' && EST.tab) EST.tab.stat = 'path';
+  if (typeof estGoto === 'function' && typeof EST_SCR === 'object') { estGoto(EST_SCR.stat.view); return; }
+  ecSetTab('overview');
+}
+
+// Скрывать ли уже пройденные вехи (состояние живёт до перезагрузки страницы).
+function ecPathToggleDone() { EC.pathHideDone = !EC.pathHideDone; ecPaintCabinet(); }
+
+// ── Карточка вехи ─────────────────────────────────────────────
+function ecPathStepCard(s, isNext) {
+  const prog = Number(s.progress || 0), thr = Number(s.threshold || 1);
+  const pct = thr > 0 ? Math.min(100, Math.round(prog / thr * 100)) : 0;
+  const rew = ecRewardChips(s.reward);
+  const gl = s.glyph || 'dot';
+  return `<article class="ec-pth-step${s.done ? ' done' : ''}${isNext ? ' next' : ''}">
+    <div class="ec-pth-step-ic">
+      <span class="ec-pth-plate">${ecPathIco(s.done ? 'check' : gl)}</span>
+    </div>
+    <div class="ec-pth-step-body">
+      <div class="ec-pth-step-h">
+        <h4 class="ec-pth-step-t">${esc(s.title || s.id)}</h4>
+        ${isNext ? '<span class="ec-pth-tag">сейчас</span>' : ''}
+        ${s.done ? '<span class="ec-pth-tag done">пройдено</span>' : ''}
+      </div>
+      ${s.hint ? `<p class="ec-pth-step-hint">${esc(s.hint)}</p>` : ''}
+      ${s.lore ? `<p class="ec-pth-step-lore">${esc(s.lore)}</p>` : ''}
+      ${!s.done && thr > 1 ? `<div class="ec-pth-step-prog">
+          <span class="ec-pth-track"><span class="ec-pth-track-fill" style="width:${pct}%"></span></span>
+          <span class="ec-pth-track-n">${ecNum(Math.min(prog, thr))} / ${ecNum(thr)}</span>
+        </div>` : ''}
+    </div>
+    ${rew ? `<div class="ec-pth-step-rew">${rew}</div>` : ''}
+  </article>`;
+}
+
+// ── Вкладка «Путь становления» ────────────────────────────────
+// Витрина игры: шапка с кольцом, крупная карточка ближайшего шага, главы
+// пути и ввод промокода. Всё содержимое приходит из path_check — здесь
+// НЕТ ни одной зашитой награды, ни одного зашитого текста вехи.
+function ecTabPath() {
+  const P = EC.path;
+  if (!P) return `<div class="ec-empty">Путь становления не загрузился — обновите страницу.</div>`;
+  const S = ecPathStats();
+  const chapters = Array.isArray(P.chapters) && P.chapters.length
+    ? P.chapters
+    : [{ id: '', title: 'Вехи', sub: '', glyph: 'compass' }];
+
+  // Шапка. У взрослой державы путь остаётся справочником (награды не идут) —
+  // об этом говорится прямо, а не скрытым «почему мне не заплатили».
+  const hero = `<header class="ec-pth-hero">
+    <div class="ec-pth-hero-grid" aria-hidden="true"></div>
+    <div class="ec-pth-hero-ring">${ecPathRing(S.pct)}</div>
+    <div class="ec-pth-hero-main">
+      <div class="ec-pth-kick">${ecPathIco('compass')}<span>Путь становления</span></div>
+      <h2 class="ec-pth-title">${esc((EC.app && EC.app.name) || 'Моя держава')}</h2>
+      <p class="ec-pth-lead">${S.stale
+        ? `Державе ${ecNum(Math.round(S.ageDays))} сут. — путь открыт как справочник: награды выдаются державам младше ${ecNum(S.maxAge)} сут.`
+        : 'Десятки шагов от первой шахты до собственного флота. Каждый закрывается сам, как только держава выполнила условие, — награда приходит без единой кнопки.'}</p>
+      <div class="ec-pth-hero-stats">
+        <div class="ec-pth-hs"><span class="ec-pth-hs-v">${ecNum(S.done)}<span class="ec-pth-hs-of">/${ecNum(S.total)}</span></span><span class="ec-pth-hs-k">вех пройдено</span></div>
+        <div class="ec-pth-hs"><span class="ec-pth-hs-v ec-ovx-c-gc">+${ecNum(S.gcGot)}</span><span class="ec-pth-hs-k">ГС получено</span></div>
+        <div class="ec-pth-hs"><span class="ec-pth-hs-v">${ecNum(S.gcLeft)}</span><span class="ec-pth-hs-k">ГС ещё ждёт</span></div>
+      </div>
+    </div>
+    <div class="ec-pth-hero-promo">
+      <div class="ec-pth-promo-t">${ecPathIco('gift')}<span>Промокод</span></div>
+      ${ecPromoRow()}
+      <p class="ec-pth-promo-note">Коды выдаёт администрация: за событие, конкурс или компенсацию. Ветеранам тоже.</p>
+    </div>
+  </header>`;
+
+  // Ближайший шаг — отдельной крупной карточкой: новичок не должен искать
+  // «что дальше» глазами по списку из сорока строк.
+  const n = S.next;
+  const spot = n ? `<section class="ec-pth-spot">
+      <div class="ec-pth-spot-ic">${ecPathIco(n.glyph || 'dot')}</div>
+      <div class="ec-pth-spot-main">
+        <div class="ec-pth-spot-kick">Следующий шаг · ${ecNum(S.done + 1)} из ${ecNum(S.total)}</div>
+        <h3 class="ec-pth-spot-t">${esc(n.title || n.id)}</h3>
+        <p class="ec-pth-spot-hint">${esc(n.hint || '')}</p>
+        ${Number(n.threshold || 1) > 1 ? `<div class="ec-pth-step-prog">
+            <span class="ec-pth-track"><span class="ec-pth-track-fill" style="width:${Math.min(100, Math.round(Number(n.progress || 0) / Number(n.threshold) * 100))}%"></span></span>
+            <span class="ec-pth-track-n">${ecNum(Math.min(Number(n.progress || 0), Number(n.threshold)))} / ${ecNum(n.threshold)}</span>
+          </div>` : ''}
+      </div>
+      <div class="ec-pth-spot-rew">
+        <span class="ec-pth-spot-rew-k">награда</span>
+        ${ecRewardChips(n.reward) || '<span class="ec-pth-rew"><b>—</b></span>'}
+      </div>
+    </section>`
+    : `<section class="ec-pth-spot done">
+      <div class="ec-pth-spot-ic">${ecPathIco('medal')}</div>
+      <div class="ec-pth-spot-main">
+        <div class="ec-pth-spot-kick">Путь пройден</div>
+        <h3 class="ec-pth-spot-t">Держава состоялась</h3>
+        <p class="ec-pth-spot-hint">Все вехи закрыты. Дальше — зал достижений и своя история.</p>
+      </div>
+      <div class="ec-pth-spot-rew"><button class="btn btn-gh btn-sm" onclick="ecSetTab('achievements')">Зал достижений</button></div>
+    </section>`;
+
+  // Главы. Порядок и подписи приходят из starter_chapters; вехи без главы
+  // (или с неизвестным ключом) собираются в «Прочее», а не пропадают.
+  const known = new Set(chapters.map(c => c.id));
+  const hide = !!EC.pathHideDone;
+  const secs = chapters.map(c => {
+    const list = S.steps.filter(s => (s.chapter || '') === c.id);
+    return [c, list];
+  });
+  const rest = S.steps.filter(s => !known.has(s.chapter || ''));
+  if (rest.length) secs.push([{ id: '', title: 'Прочее', sub: 'вехи вне глав', glyph: 'dot' }, rest]);
+
+  const body = secs.filter(([, l]) => l.length).map(([c, list]) => {
+    const d = list.filter(s => s.done).length;
+    const shown = hide ? list.filter(s => !s.done) : list;
+    const cards = shown.map(s => ecPathStepCard(s, n && n.id === s.id)).join('')
+      || `<div class="ec-pth-chap-empty">Глава пройдена целиком</div>`;
+    return `<section class="ec-pth-chap${d >= list.length ? ' done' : ''}">
+      <header class="ec-pth-chap-h">
+        <span class="ec-pth-chap-ic">${ecPathIco(c.glyph || 'dot')}</span>
+        <span class="ec-pth-chap-tx">
+          <b>${esc(c.title || '')}</b>
+          ${c.sub ? `<i>${esc(c.sub)}</i>` : ''}
+        </span>
+        <span class="ec-pth-chap-n">${ecNum(d)} / ${ecNum(list.length)}</span>
+        <span class="ec-pth-chap-bar">${ecOvBar(d, list.length, d >= list.length ? 'fill-gc' : 'fill-amb')}</span>
+      </header>
+      <div class="ec-pth-chap-list">${cards}</div>
+    </section>`;
+  }).join('');
+
+  const filter = `<div class="ec-pth-filter">
+    <button type="button" class="ec-pth-fbtn${hide ? ' on' : ''}" onclick="ecPathToggleDone()">
+      ${ecPathIco(hide ? 'lock' : 'check')}<span>${hide ? 'Показать пройденные' : 'Скрыть пройденные'}</span></button>
+    <span class="ec-pth-filter-note">Вехи закрываются автоматически при следующем заходе в кабинет.</span>
+  </div>`;
+
+  return `<div class="ec-pth-tab">${hero}${spot}${filter}${body}</div>`;
+}
+
+// Компактная плитка в «Обзоре»: только состояние и дверь во вкладку. Полный
+// список вех здесь больше НЕ рисуется — он раздувал обзор на два экрана.
+function ecPathPanel() {
+  const P = EC.path;
+  if (!P) return '';
+  const S = ecPathStats();
+  const collapsed = S.stale || (S.total > 0 && S.done >= S.total);
 
   if (collapsed) {
     return `<div class="ec-ovx-panel ec-path-panel" style="grid-column:1/-1">
       <div class="ec-path-head">
-        <div class="ec-ovx-panel-t" style="margin:0">🎁 Промокод
-          <span class="ec-ovx-panel-sub">${stale ? 'путь становления — для молодых держав' : 'путь становления пройден'}</span></div>
-        ${promo}
+        <div class="ec-ovx-panel-t" style="margin:0">${ecPathIco('gift')} Промокод
+          <span class="ec-ovx-panel-sub">${S.stale ? 'путь становления — для молодых держав' : 'путь становления пройден'}</span></div>
+        ${ecPromoRow()}
+        <button class="btn btn-gh btn-sm" onclick="ecPathOpen()">Открыть путь</button>
       </div>
     </div>`;
   }
 
-  const next = steps.find(s => !s.done);
-  const rows = steps.map(s => {
-    const prog = Number(s.progress || 0), thr = Number(s.threshold || 1);
-    const isNext = next && next.id === s.id;
-    const rew = ecRewardText(s.reward);
-    return `<div class="ec-path-step${s.done ? ' done' : ''}${isNext ? ' next' : ''}">
-      <span class="ec-path-ic">${s.done ? '✓' : esc(s.icon || '•')}</span>
-      <span class="ec-path-main">
-        <span class="ec-path-t">${esc(s.title || s.id)}</span>
-        ${s.done ? '' : `<span class="ec-path-hint">${esc(s.hint || '')}</span>`}
-      </span>
-      <span class="ec-path-side">
-        ${rew ? `<span class="ec-path-rew">${esc(rew)}</span>` : ''}
-        ${s.done || thr <= 1 ? '' : `<span class="ec-path-prog">${ecNum(Math.min(prog, thr))} / ${ecNum(thr)}</span>`}
-      </span>
-    </div>`;
-  }).join('');
-
-  return `<div class="ec-ovx-panel ec-path-panel" style="grid-column:1/-1">
-    <div class="ec-path-head">
-      <div class="ec-ovx-panel-t" style="margin:0">🧭 Путь становления
-        <span class="ec-ovx-panel-sub">шаг ${ecNum(done + 1)} из ${ecNum(steps.length)}</span></div>
-      ${promo}
+  const n = S.next;
+  return `<div class="ec-ovx-panel ec-path-teaser ec-ov-clk" style="grid-column:1/-1" onclick="ecPathOpen()">
+    <div class="ec-pth-teaser-ring">${ecPathRing(S.pct)}</div>
+    <div class="ec-pth-teaser-main">
+      <div class="ec-ovx-panel-t" style="margin:0">${ecPathIco('compass')} Путь становления
+        <span class="ec-ovx-panel-sub">шаг ${ecNum(S.done + 1)} из ${ecNum(S.total)}</span></div>
+      <div class="ec-pth-teaser-bar">${ecOvBar(S.done, S.total, 'fill-amb')}</div>
+      ${n ? `<div class="ec-pth-teaser-next">${ecPathIco(n.glyph || 'dot')}<span>дальше: <b>${esc(n.title || '')}</b></span>
+        <span class="ec-pth-teaser-rew">${esc(ecRewardText(n.reward))}</span></div>` : ''}
     </div>
-    <div class="ec-path-bar">${ecOvBar(done, steps.length, done >= steps.length ? 'fill-gc' : 'fill-amb')}</div>
-    <div class="ec-path-list">${rows}</div>
+    <div class="ec-pth-teaser-go">Открыть путь →</div>
   </div>`;
 }
 

@@ -158,6 +158,12 @@ const EST_SCR = {
         nm: 'Достижения', scene: 'medal', help: 'ach',
         body: () => (typeof ecTabAchievements === 'function' ? ecTabAchievements() : ''),
       },
+      // «Путь становления» — своя дверь, а не панель в обзоре: это витрина
+      // игры для новичка, и в общей простыне статистики её никто не находил.
+      path: {
+        nm: 'Путь становления', scene: 'compass', help: 'path',
+        body: () => (typeof ecTabPath === 'function' ? ecTabPath() : ''),
+      },
     },
   },
 };
@@ -186,6 +192,7 @@ const EST_GL = {
   medal:   '<circle cx="12" cy="15" r="6"/><path d="M12 12.5l1 2 2 .3-1.5 1.4.4 2-1.9-1-1.9 1 .4-2L9 14.8l2-.3z"/><path d="M8 3l2 6M16 3l-2 6"/>',
   ping:    '<circle cx="12" cy="12" r="2.5"/><path d="M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9"/><path d="M4.5 4.5a10.6 10.6 0 0 0 0 15M19.5 4.5a10.6 10.6 0 0 1 0 15"/>',
   quill:   '<path d="M4 20c6-1 9-4 12-10l3-6-6 3C7 10 5 14 4 20z"/><path d="M4 20l7-7"/>',
+  compass: '<circle cx="12" cy="12" r="9"/><path d="M15.6 8.4l-2 5.2-5.2 2 2-5.2z"/>',
 };
 const EST_SV = {
   pick: `<g class="pol-sv-tilt"><path d="M40 104 L104 44"/><path d="M34 40 Q90 4 146 40"/><path d="M90 20 L90 44"/></g>
@@ -231,6 +238,10 @@ const EST_SV = {
   quill: `<g class="pol-sv-tilt"><path d="M38 112 C74 100 100 76 122 36 L136 12 L104 28 C64 50 46 78 38 112 Z"/>
       <path d="M38 112 L84 66"/></g>
     <circle class="pol-sv-pulse" cx="46" cy="112" r="5"/>`,
+  compass: `<circle cx="90" cy="62" r="46"/>
+    <g class="pol-sv-tilt"><path d="M110 42 L100 72 L70 82 L80 52 Z"/></g>
+    <path d="M90 8 L90 20 M90 104 L90 116 M36 62 L24 62 M156 62 L144 62"/>
+    <g class="pol-sv-halo"><circle cx="90" cy="62" r="58" class="pol-sv-ring"/></g>`,
 };
 if (typeof polGlyph === 'function') {
   const _polGlyphRaw = polGlyph;

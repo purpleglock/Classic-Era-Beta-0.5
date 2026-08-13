@@ -13,7 +13,7 @@
 -- была бы ровно та дыра, что уже ловили (см. память: client-write RLS hole).
 --
 -- НАГРАДЫ — единый jsonb для промокода и для вехи пути:
---   { "gc": 5000, "science": 200, "tnp": 50,
+--   { "gc": 5000, "science": 200,
 --     "res":      {"Железо": 100, "Кремний": 40},   -- склад
 --     "coupons":  2,                                 -- универсальные осколки цикла
 --     "shards":   {"corvette": 3, "ground": 2},      -- классовые осколки
@@ -36,22 +36,22 @@ declare
   out_j  jsonb := '{}'::jsonb;
   v_gc   numeric := coalesce((r->>'gc')::numeric, 0);
   v_sci  numeric := coalesce((r->>'science')::numeric, 0);
-  v_tnp  numeric := coalesce((r->>'tnp')::numeric, 0);
   v_cpn  int     := coalesce((r->>'coupons')::int, 0);
   k text; v numeric; n int;
 begin
   if p_fid is null then return out_j; end if;
 
   -- ── Казна ──
-  if v_gc <> 0 or v_sci <> 0 or v_tnp <> 0 then
+  -- ТНП тут НЕТ намеренно: товары дематериализованы (_goods_dematerialize.sql) —
+  -- это поток внутри тика под спрос населения, а не запас на складе. Колонка
+  -- faction_economy.tnp — легаси, выдавать в неё нечего.
+  if v_gc <> 0 or v_sci <> 0 then
     update public.faction_economy
        set gc      = coalesce(gc,0)      + v_gc,
-           science = coalesce(science,0) + v_sci,
-           tnp     = coalesce(tnp,0)     + v_tnp
+           science = coalesce(science,0) + v_sci
      where faction_id = p_fid;
     if v_gc  <> 0 then out_j := out_j || jsonb_build_object('gc',  v_gc);  end if;
     if v_sci <> 0 then out_j := out_j || jsonb_build_object('science', v_sci); end if;
-    if v_tnp <> 0 then out_j := out_j || jsonb_build_object('tnp', v_tnp); end if;
   end if;
 
   -- ── Склад ──

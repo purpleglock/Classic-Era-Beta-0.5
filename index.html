@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260813promo';
+  var BUILD = '20260814admmega';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -60,7 +60,7 @@
      никогда не грузился — у кого Inter стоял локально (часто старый, без курсива),
      браузер синтезировал «косой» faux-italic в цитатах, у остальных шёл Exo 2. -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:ital,wght@0,200;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400&family=Orbitron:wght@400;500;700;900&family=Audiowide&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/index.css?v=20260813promo">
+<link rel="stylesheet" href="css/index.css?v=20260813path2">
 </head>
 <body>
 <!-- Экран загрузки после входа по почте. Рисуется ДО первого кадра приложения
@@ -483,13 +483,13 @@
 <script src="turret_forge_ui.js?v=20260801turret1"></script>
 <script src="reactor_forge_ui.js?v=20260808rgtech"></script>
 <script src="faction_members.js?v=20260809closecab"></script>
-<script src="economy.js?v=20260813promo"></script>
+<script src="economy.js?v=20260813path2"></script>
 <!-- Ведомства «Внутренняя»/«Внешняя политика»: рамка и прологи свои,
      тела разделов отдают economy.js (ecTab*) и faction_members.js (двор). -->
 <script src="politics.js?v=20260810subrail2"></script>
 <!-- Ведомства «Добыча»/«Торговля»/«Биржа»/«Армия»/«Статистика»/«Вестник»:
      тот же каркас, что у политики, тела — те же ecTab*. -->
-<script src="estate.js?v=20260811colvoid"></script>
+<script src="estate.js?v=20260813path2"></script>
 <!-- КАБИНЕТ ДЕРЖАВЫ (#economy) — рабочая комната и единственная дверь в работу.
      Грузится ПОСЛЕ politics/estate: приёмная зовёт их открывашки (polOpen,
      estOpen) и хостит контейнеры экранов у себя (vnScreenHosts из render.js). -->
@@ -509,12 +509,12 @@
      что игрок разложил на палубе. Грузится после battle_gl.js — берёт его
      геометрию корпуса; three.js так же лениво (bgLoadThree). -->
 <script src="ship_preview.js?v=20260808battleview6"></script>
-<script src="admin.js?v=20260813promo"></script>
+<script src="admin.js?v=20260813path2"></script>
 <!-- «Пойдём к течению»: звёздная отмель на карте галактики (изометрия),
      играешь за корабль. Пришла на смену берегу из fishing.js — тот файл
      удалён, RPC рыбалки (fishing_cast/land) остались под тралом. -->
 <script src="garden.js?v=20260813gdrare"></script>
-<script src="guide.js?v=20260813gbop"></script>
+<script src="guide.js?v=20260813path2"></script>
 <script src="tickets.js?v=20260607a"></script>
 <script src="chat.js?v=20260727ghost2"></script>
 <script>
