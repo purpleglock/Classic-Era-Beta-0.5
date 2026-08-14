@@ -454,7 +454,10 @@ async function chSpend(stat) {
     FM.office = await fmRpc('ch_spend', { p_stat: stat });
     FM.council = FM.office.council || FM.council;
     if (typeof EC !== 'undefined') EC.council = FM.council;
-    toast('Очко вложено', 'ok'); fmRenderCourt();
+    toast('Очко вложено', 'ok');
+    // «Двор» живёт в politics.js: старый fmRenderCourt подменил бы его вёрстку.
+    if (typeof polRefresh === 'function' && document.querySelector('.pol-office')) polRefresh();
+    else fmRenderCourt();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
 

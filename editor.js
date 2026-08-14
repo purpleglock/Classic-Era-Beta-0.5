@@ -2209,18 +2209,49 @@ async function compressImageFile(file, maxDim = 1920, quality = 0.82) {
   } catch (e) { return file; }   // любой сбой — грузим как есть
 }
 
+// Прочитать байты файла всеми доступными способами. У облачных провайдеров
+// (Google Фото, iCloud, «Недавние») поток открывается лениво и первая попытка
+// часто рвётся, пока файл докачивается, — поэтому даём второй заход и запасной
+// FileReader: движки читают такие ссылки разными путями.
+async function readFileBytes(file) {
+  const viaReader = () => new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(r.error || new Error('FileReader'));
+    r.readAsArrayBuffer(file);
+  });
+  const tries = [() => file.arrayBuffer(), viaReader,
+                 () => new Promise(r => setTimeout(r, 500)).then(() => file.arrayBuffer())];
+  let last;
+  for (const t of tries) {
+    try { const buf = await t(); if (buf && buf.byteLength) return buf; last = new Error('пустой файл'); }
+    catch (e) { last = e; }
+  }
+  throw last || new Error('файл недоступен');
+}
+
 async function handleImgUpload(file, onUrl) {
   if (!file) return;
   if (!user) { toast('Необходима авторизация','err'); return; }
-  const ALLOWED=['image/jpeg','image/png','image/gif','image/webp']; if (!ALLOWED.includes(file.type)) { toast('Только JPEG / PNG / GIF / WebP','err'); return; }
+  const ALLOWED=['image/jpeg','image/png','image/gif','image/webp'];
+  // Провайдер может отдать файл без MIME — тогда судим по расширению, а не отказываем.
+  let type = file.type;
+  if (!type) { const ext=(file.name||'').toLowerCase().match(/\.(jpe?g|png|gif|webp)$/);
+    type = ext ? ({jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp'})[ext[1]] : ''; }
+  if (!ALLOWED.includes(type)) {
+    toast(/hei[cf]/i.test(file.type + (file.name||''))
+      ? 'HEIC с айфона не принимается: в настройках камеры выбери «Наиболее совместимый» или пришли скриншот.'
+      : 'Только JPEG / PNG / GIF / WebP','err');
+    return;
+  }
   if (file.size>4*1024*1024) { toast('Файл слишком большой (макс. 4 МБ)','err'); return; }
   toast('Загрузка...','inf');
   // Материализуем байты ДО всего остального. Файл, выбранный из облачного провайдера
   // (Google Фото, iCloud, «Недавние»), — это ссылка без данных: чтение рвётся уже
   // внутри fetch, и наружу это выглядит как невнятное «Failed to fetch».
   try {
-    const buf = await file.arrayBuffer();
-    file = new File([buf], file.name || 'image', { type: file.type });
+    const buf = await readFileBytes(file);
+    file = new File([buf], file.name || 'image', { type });
   } catch (e) {
     toast('Не удалось прочитать файл. Сохрани картинку в галерею/на устройство и выбери её оттуда.','err');
     return;

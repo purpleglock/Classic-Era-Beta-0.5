@@ -783,7 +783,7 @@ function gardenStart(cv, world, spawn) {
       gardenToast('Далеко: подойди к грядке.'); return;
     }
     const plot = _gdPlots()[_gdPlotKey(best.l.sys, best.i)];
-    if (plot && !plot.mine) { gardenToast('Чужая плантация. Смотреть можно, трогать — нет.'); return; }
+    if (plot && !plot.mine) { gardenToast(`Здесь ${plot.fnm || 'чужая держава'}. Смотреть можно, трогать — нет.`); return; }
     gardenPanel({ kind: 'plot', sys: best.l.sys, cell: best.i, land: best.l, plot,
                   tx: best.cc.tx, ty: best.cc.ty });
   }
@@ -1686,6 +1686,113 @@ function gardenStart(cv, world, spawn) {
     ctx.restore();
   }
 
+  // ══════════════════════════════════════════════════════════
+  // ФЛАГ НАД ЯЧЕЙКОЙ
+  // ══════════════════════════════════════════════════════════
+  // ⚠️ ЧЬЯ ГРЯДКА — УЗНАВАЛИ ТОЛЬКО ТЫКНУВ В НЕЁ. Своя от чужой отличалась
+  // лишь тем, что чужая бледнее, а имя державы выдавал отказ «Чужая
+  // плантация». В саду на двоих и больше это значит, что сосед безымянный до
+  // касания. Над развёрнутой ячейкой встаёт флагшток: полотнище цвета державы,
+  // на нём герб (или литеры имени, пока герб не долетел).
+  //
+  // Цвет державы в реестре лежит с альфой .34 — он рассчитан на ЗАЛИВКУ
+  // области карты, а не на ткань. Гасим прозрачность и подтягиваем совсем
+  // тёмные (у Железного Дивизиона он чёрный: флаг был бы дырой в кадре).
+  const _gdColCache = {};
+  function flagCol(css) {
+    const k = css || '#8fd3ff';
+    if (_gdColCache[k]) return _gdColCache[k];
+    let r = 143, g = 211, b = 255;
+    const m = /rgba?\(([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(k);
+    if (m) { r = +m[1]; g = +m[2]; b = +m[3]; }
+    else {
+      const h = /^#([0-9a-f]{6})$/i.exec(k.trim());
+      if (h) { const v = parseInt(h[1], 16); r = v >> 16 & 255; g = v >> 8 & 255; b = v & 255; }
+    }
+    const lum = (r * .3 + g * .59 + b * .11) / 255;
+    if (lum < .26) { const k2 = .26 / Math.max(.04, lum); r = Math.min(255, r * k2 + 42); g = Math.min(255, g * k2 + 46); b = Math.min(255, b * k2 + 52); }
+    const o = { s: `rgb(${r | 0},${g | 0},${b | 0})`, d: `rgb(${r * .45 | 0},${g * .45 | 0},${b * .45 | 0})` };
+    _gdColCache[k] = o; return o;
+  }
+
+  // Герб грузим один раз на державу и только если он ей задан. Битый адрес
+  // помечаем — иначе браузер дёргает Storage каждым кадром (егресс).
+  const _gdHer = {};
+  function herald(url) {
+    if (!url) return null;
+    let h = _gdHer[url];
+    if (h === undefined) {
+      h = _gdHer[url] = { img: new Image(), ok: false };
+      h.img.onload = () => { h.ok = true; };
+      h.img.onerror = () => { _gdHer[url] = null; };
+      h.img.src = url;
+    }
+    return h && h.ok ? h.img : null;
+  }
+
+  const flagTag = nm => (String(nm || '?').trim().split(/\s+/).slice(0, 2)
+    .map(w => w[0] || '').join('') || '?').toUpperCase();
+
+  function drawFlag(p, t, x, y, mine) {
+    const col = flagCol(p.fcol);
+    const H = 52 * PS, CW = 25 * PS, CH = 14 * PS;
+    // Шток стоит на дальней кромке грядки, полотнище уходит НАРУЖУ — иначе
+    // ткань ложится ровно туда, где поднимается культура, и прячет её.
+    const mx = x - 17 * PS, my = y - 3 * PS, dir = -1;
+    const a = mine ? 1 : .74;
+    ctx.globalAlpha = a;
+
+    ctx.strokeStyle = 'rgba(196,206,216,.85)'; ctx.lineWidth = 1.5 * PS; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx, my - H); ctx.stroke();
+    ctx.fillStyle = mine ? '#cfe6ff' : '#9aa6b4';
+    ctx.beginPath(); ctx.arc(mx, my - H - 1.6 * PS, 1.9 * PS, 0, 7); ctx.fill();
+
+    // Полотнище — не прямоугольник: волна бежит по ткани, у древка почти
+    // затухая. Ветра в пустоте нет, но флаг на кольце живёт вместе со станцией.
+    const ph = t * 2.1 + gSeedOf(p.fid || '') % 100;
+    const wave = u => Math.sin(ph + u * 5.2) * 2.4 * PS * u;
+    const top = my - H + 2 * PS;
+    const path = () => {
+      ctx.beginPath();
+      for (let i = 0; i <= 10; i++) { const u = i / 10; ctx.lineTo(mx + dir * CW * u, top + wave(u)); }
+      for (let i = 10; i >= 0; i--) { const u = i / 10; ctx.lineTo(mx + dir * CW * u, top + CH + wave(u)); }
+      ctx.closePath();
+    };
+    path(); ctx.fillStyle = col.s; ctx.fill();
+    // Тень по нижней кромке: без неё ткань читается наклейкой.
+    ctx.save(); path(); ctx.clip();
+    const gr = ctx.createLinearGradient(mx, top, mx, top + CH);
+    gr.addColorStop(0, 'rgba(255,255,255,.20)'); gr.addColorStop(.55, 'rgba(255,255,255,0)');
+    gr.addColorStop(1, 'rgba(0,0,0,.28)');
+    ctx.fillStyle = gr; ctx.fillRect(mx + dir * CW, top, CW, CH);
+
+    const im = herald(p.fher);
+    if (im && im.width) {
+      // ⚠️ ГЕРБ — НЕ ЗНАЧОК В УГЛУ ТКАНИ. Гербы держав это широкие полотна
+      // (736×491, 1920×1280): вписанные в квадратик, они мялись в кашу и с
+      // орбиты читались грязным пятном. Герб СТАНОВИТСЯ полотнищем — кроем
+      // его по ткани, как настоящий флаг, а цвет державы остаётся кромкой и
+      // полосой у древка.
+      const iw = im.width, ih = im.height, k = Math.max(CW / iw, CH / ih);
+      const dw = iw * k, dh = ih * k;
+      const lx = Math.min(mx, mx + dir * CW);
+      ctx.drawImage(im, lx + (CW - dw) / 2, top + (CH - dh) / 2, dw, dh);
+      // Полоса у древка: без неё цвет державы теряется совсем, а он читается
+      // быстрее рисунка.
+      ctx.fillStyle = col.s;
+      ctx.fillRect(mx - (dir < 0 ? CW * .16 : 0), top - CH, CW * .16, CH * 3);
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,.88)';
+      ctx.font = `700 ${Math.round(8.5 * PS)}px system-ui,sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(flagTag(p.fnm), mx + dir * CW * .55, top + CH / 2 + wave(.55));
+      ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+    }
+    ctx.restore();
+    path(); ctx.strokeStyle = col.d; ctx.lineWidth = 1 * PS; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
   function drawPlot(p, t, x, y, mine) {
     // ГРЯДКА, А НЕ ЗНАЧОК: вскопанная земля, борозды и кромка. Раньше здесь были
     // два волосяных кольца — на них не читалось ни что это грядка, ни чья она.
@@ -1700,6 +1807,11 @@ function gardenStart(cv, world, spawn) {
     ctx.strokeStyle = mine ? 'rgba(143,211,255,.46)' : 'rgba(140,160,180,.20)';
     ctx.lineWidth = 1.2 * PS;
     ctx.beginPath(); ctx.ellipse(x, y, RX, RY, 0, 0, 7); ctx.stroke();
+
+    // Флаг — у РАЗВЁРНУТОЙ ячейки, посев тут ни при чём: держава заявляет
+    // место, а не урожай. Пустая нарезка (`|| {}` у своих клеток) флага не
+    // получает — там ещё нечего метить.
+    if (p.id && p.fid) drawFlag(p, t, x, y, mine);
 
     const pl = p.plant;
     if (!pl) return;
@@ -2765,7 +2877,7 @@ function gardenNear(world, P) {
       const p = plots[_gdPlotKey(l.sys, i)];
       let hint;
       if (!p) hint = 'развернуть ячейку';
-      else if (!p.mine) hint = 'чужая плантация';
+      else if (!p.mine) hint = p.fnm ? `плантация: ${p.fnm}` : 'чужая плантация';
       else if (!p.plant) hint = 'засеять';
       else if (p.plant.ripe) hint = 'снять урожай';
       else hint = 'обслужить';
@@ -2804,7 +2916,7 @@ function gardenAct() {
   _gd.actAt = performance.now() / 1000;
   if (n.kind === 'hyper') { _gd.P.hyper = true; _gd.P.tx = n.tx + .5; _gd.P.ty = n.ty + .5; return; }
   if (n.kind === 'land')  { _gd.P.hyper = false; _gd.P.tx = n.tx; _gd.P.ty = n.ty; return; }
-  if (n.plot && !n.plot.mine) { gardenToast('Чужая плантация. Смотреть можно, трогать — нет.'); return; }
+  if (n.plot && !n.plot.mine) { gardenToast(`Здесь ${n.plot.fnm || 'чужая держава'}. Смотреть можно, трогать — нет.`); return; }
   gardenPanel(n);
 }
 

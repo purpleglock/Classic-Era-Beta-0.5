@@ -130,8 +130,23 @@ Deno.serve(async (req) => {
   }
 
   // Обрезать текст до maxSent предложений (и maxChars символов), добавив «…» при усечении.
+  // ⚠ Раньше предложения ВЫРЕЗАЛИСЬ регуляркой .match(/…+[.!?…]+(?:\s|$)|…$/g).
+  // Такая склейка молча ТЕРЯЕТ текст между совпадениями: в «идёт ватага силой
+  // 49.0 — крупнее…» точка внутри числа не заканчивает предложение (после неё
+  // нет пробела), совпадение не находится вовсе, и сканер перепрыгивает через
+  // весь кусок «К системе «Геликон» идёт ватага силой 49.», оставляя в беседе
+  // огрызок «0 — крупнее всего…». Теперь режем ПО ГРАНИЦАМ, ничего не выбрасывая:
+  // граница — знак конца, за которым пробел или конец строки.
   function sentClip(s: string, maxSent: number, maxChars: number): string {
-    const parts = s.match(/[^.!?…]+[.!?…]+(?:\s|$)|[^.!?…]+$/g) ?? [];
+    const parts: string[] = [];
+    const re = /[.!?…]+(?=\s|$)/g;
+    let last = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) {
+      const end = m.index + m[0].length;
+      parts.push(s.slice(last, end));
+      last = end;
+    }
+    if (last < s.length) parts.push(s.slice(last));
     let out = parts.slice(0, maxSent).join("").trim();
     const cut = parts.length > maxSent;
     if (out.length > maxChars) out = out.slice(0, maxChars).replace(/\S*$/, "").trim() + "…";
