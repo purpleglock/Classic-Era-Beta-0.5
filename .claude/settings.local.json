@@ -823,7 +823,17 @@
       "Bash(node tools/db_q.js \"select count\\(*\\) from public.faction_applications\")",
       "Bash(node tools/db_q.js \"select faction_id, count\\(*\\) n from public.faction_applications group by 1 having count\\(*\\)>1\")",
       "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('garden.js','utf8'\\)\\);console.log\\('syntax ok'\\)\")",
-      "Bash(node -)"
+      "Bash(node -)",
+      "Bash(node --check army_forge.js)",
+      "Bash(node prev.js)",
+      "Bash(cp prev.html \"C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5/_afprev.html\")",
+      "Bash(curl -sL --max-time 25 \"https://openclipart.org/download/221992/soldier-with-rifle-silhouette.svg\" -o oc1.svg)",
+      "Bash(cp gal.html \"C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5/_gal.html\")",
+      "WebFetch(domain:game-icons.net)",
+      "Bash(curl -s --max-time 30 \"https://api.github.com/repos/game-icons/icons/git/trees/master?recursive=1\")",
+      "Bash(sed -i \"s|34_army.css?v=20260814army1|34_army.css?v=20260815afkit|\" css/index.css)",
+      "Bash(sed -i \"s|var BUILD = '20260814army1'|var BUILD = '20260815afkit'|\" index.html)",
+      "Bash(node \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/52eadd23-9ee5-4e6f-859a-e2caf80be239/scratchpad/af_gen.js\" \"C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5/_af.svg\")"
     ]
   }
 }

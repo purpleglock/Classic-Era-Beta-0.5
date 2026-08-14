@@ -1,0 +1,50 @@
+<meta charset="utf-8">
+<title>AF test</title>
+<style>
+  :root{--w1:#2a3138;--te:#39d3e6;--t4:#7a8794;--err:#ff5470;--font-mono:ui-monospace,monospace}
+  body{background:#10151a;margin:0;font-family:var(--font-mono);color:#ccc}
+  h3{color:#39d3e6;font:600 13px var(--font-mono);margin:14px 0 4px}
+  svg{background:#161c22;display:block}
+</style>
+<div id="out"></div>
+<script>
+  // ── стабы конструктора ────────────────────────────────────
+  window.esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  window.cnNum = n => String(Math.round(n));
+  window.CN = { cat:'army', def:{ db:{ data:{}, armors:{}, shields:{}, engines:{}, reactors:{}, weapons:{} } }, shipLayout:{mounts:[],bays:[]} };
+</script>
+<script src="army_forge.js"></script>
+<script>
+  const armor = { name:'Композит', armor:80, category:'heavy' };
+  const eng   = { name:'Дизель' };
+  // capacityPenalty — «вес» орудия; от него пляшут калибр и длина ствола
+  const W = cp => ({ name:'Орудие cp'+cp, capacityPenalty:cp, dmg:100 });
+
+  function scene(k, C, title){
+    const D = AF_DIM[k], pxm = AF_PXM, VW = 1100, VH = 470, gy = VH - 96;
+    const x0 = -2.6, x1 = 1.3 + Math.max(D.len, afReach(k, C));
+    const ox = (VW - (x1-x0)*pxm)/2 - x0*pxm;
+    const X = m => ox + m*pxm, Y = m => gy - m*pxm;
+    AF_DEFS.length = 0;
+    const body = afVehicleSvg(k, C, X, Y);
+    const ruler = afRulerSvg(X, Y, pxm, x0, x1, gy) + afDimsSvg(X, Y, D, gy);
+    return `<h3>${title}</h3><svg viewBox="0 0 ${VW} ${VH}" width="${VW}" height="${VH}">`
+      + `<defs>${AF_DEFS.join('')}</defs>${ruler}${body}</svg>`;
+  }
+  const mk = (k, cps, dead) => ({ armorObj:armor, shieldObj:null,
+      engObj: dead ? null : eng, reactObj:null, crew:3, aRt:0.6,
+      weapons: cps.map(W) });
+
+  const cases = [
+    ['btr',   [3],        'БТР · лёгкое орудие (cp 3)'],
+    ['btr',   [25],       'БТР · тяжёлое (cp 25)'],
+    ['btr',   [100],      'БТР · сверхтяжёлое (cp 100) — предел'],
+    ['btr',   [25, 5, 5], 'БТР · тяжёлое + два вспомогательных'],
+    ['tanki', [25],       'ТАНК · тяжёлое (cp 25)'],
+    ['tanki', [100],      'ТАНК · сверхтяжёлое (cp 100)'],
+    ['arta',  [100],      'САУ · сверхтяжёлое (cp 100)'],
+    ['btr',   [25],       'БТР · БЕЗ ДВИГАТЕЛЯ'],
+  ];
+  document.getElementById('out').innerHTML = cases.map(([k,cps,t],i) =>
+    scene(k, mk(k, cps, i===cases.length-1), t)).join('');
+</script>

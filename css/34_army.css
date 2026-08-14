@@ -1,0 +1,75 @@
+/* ============================================================
+   АРМЕЙСКИЙ ФОРЖ — пехота и наземная техника (army_forge.js)
+   .af-on   — в конструкторе открыт армейский наземный класс
+   .af-foot — открыта ПЕХОТА: палубы, батарей и ангаров у бойца нет
+   ============================================================ */
+
+/* Пехота не воюет палубой: прячем всё корабельное управление разом.
+   Прятать в JS по одному элементу мы уже пробовали — при каждой смене
+   класса что-нибудь оставалось видимым. Один класс на обёртке надёжнее. */
+.cn-builder.af-foot .cn-schem-toggles,
+.cn-builder.af-foot .cn-schem-tools,
+.cn-builder.af-foot #cn-battery-panel,
+.cn-builder.af-foot .cn-hangars-panel,
+.cn-builder.af-foot .cn-schem-foot { display: none !important; }
+
+/* Подсказка под схемой у техники говорит про палубу — оставляем, но легенду
+   с ангарами и «энергия/ракеты» у наземки убираем: ангаров у неё нет. */
+.cn-builder.af-on .cn-schem-foot .cn-lg-hangar { display: none; }
+
+/* Выкладка бойца живёт в .cn-schem-list, а тот на ДЕСКТОПЕ скрыт (корабль там
+   вооружают кликом по узлу на схеме). У пехоты узлов на схеме нет и палуба
+   спрятана — без этой строки оружие выбрать нечем вообще. */
+.cn-builder.af-on .cn-schem-list { display: flex; }
+
+/* ── ВЫКЛАДКА БОЙЦА ───────────────────────────────────────── */
+.af-kit { display: flex; flex-direction: column; gap: 8px; }
+.af-kit-h {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  font: 700 11px var(--font-mono); letter-spacing: 2px; text-transform: uppercase;
+  color: var(--t4); padding: 10px 2px 2px;
+}
+.af-kit-h span { font-weight: 600; letter-spacing: 1px; text-transform: none; color: var(--te); }
+
+.af-slot {
+  display: flex; align-items: stretch; gap: 0;
+  border: 1px solid var(--w1); border-radius: 8px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+}
+.af-slot.on { border-color: var(--te); }
+.af-slot-main {
+  flex: 1; display: grid; grid-template-columns: 92px 1fr; grid-template-rows: auto auto;
+  gap: 0 12px; align-items: center; text-align: left; cursor: pointer;
+  padding: 10px 12px; background: none; border: 0; color: inherit; font: inherit;
+}
+.af-slot-main:hover { background: rgba(255, 255, 255, 0.045); }
+.af-slot-n {
+  grid-row: 1 / 3; font: 600 10px var(--font-mono); letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--t4);
+}
+.af-slot-name { font-weight: 600; }
+.af-slot.on .af-slot-name { color: var(--te); }
+.af-slot-sub { font: 500 11px var(--font-mono); color: var(--t4); }
+.af-slot-x {
+  width: 40px; border: 0; border-left: 1px solid var(--w1); background: none;
+  color: var(--t4); cursor: pointer; font-size: 13px;
+}
+.af-slot-x:hover { color: var(--err); background: rgba(255, 255, 255, 0.045); }
+
+.af-squad { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-sq {
+  border: 1px solid var(--w1); border-radius: 999px; padding: 4px 11px;
+  font: 500 12px var(--font-mono); color: var(--t4);
+}
+.af-sq b { color: var(--te); font-weight: 700; margin-right: 4px; }
+
+.af-note {
+  font: 500 11.5px/1.5 var(--font-mono); color: var(--t4);
+  border-left: 2px solid var(--w1); padding: 2px 0 2px 10px;
+}
+.af-note b { color: var(--te); font-weight: 700; }
+
+@media (max-width: 640px) {
+  .af-slot-main { grid-template-columns: 1fr; gap: 2px; }
+  .af-slot-n { grid-row: auto; }
+}

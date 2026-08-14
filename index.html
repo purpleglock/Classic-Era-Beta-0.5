@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260814gdflag';
+  var BUILD = '20260815afkit';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -478,6 +478,8 @@
 <script src="turret_gen.js?v=20260801turret1"></script>
 <script src="reactor_gen.js?v=20260808rgtech"></script>
 <script src="hull_gen.js?v=20260808colossus2"></script>
+<!-- Пехота и наземная техника: свой рендер и свой экран выкладки (не корабельный движок) -->
+<script src="army_forge.js?v=20260814army1"></script>
 <script src="constructors.js?v=20260809perks2"></script>
 <script src="armor_forge_ui.js?v=20260721alloy4"></script>
 <script src="turret_forge_ui.js?v=20260801turret1"></script>

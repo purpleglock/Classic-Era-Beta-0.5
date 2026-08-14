@@ -3337,6 +3337,14 @@ function cnRigFamGlyph(fam, x, y, col) {
 function cnDrawShip() {
   if (!CN.def || !CN.def.cardUI) return;
   const host = cnId('cn-schematic'); if (!host) return;
+  // ── АРМИЯ РИСУЕТСЯ НЕ ЗДЕСЬ ─────────────────────────────────────────────
+  // Пехота и наземная техника уходят в army_forge.js: там профиль (вид сбоку)
+  // в АБСОЛЮТНОМ масштабе, метровая линейка и силуэт бойца 1.8 м рядом. Здесь
+  // они получали корабельное полотно, где любой юнит вписывался в кадр, — и
+  // боец выходил ростом с дредноут. Авиация остаётся на этом движке: у крыла
+  // вид сверху осмыслен.
+  if (typeof afDraw === 'function' && afDraw()) { cnRenderBatteries(); return; }
+  const _afw = document.querySelector('.cn-builder'); if (_afw) _afw.classList.remove('af-on', 'af-foot');
   if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] };
   if (!CN.schemShow) CN.schemShow = { weapons: true, bays: true };
   const db = CN.def.db, k = cnId('cn-class').value, cls = db.data[k];
