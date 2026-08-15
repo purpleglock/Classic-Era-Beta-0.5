@@ -94,10 +94,10 @@ async function cnRenderHub() {
   const facLine = fac
     ? `<div class="cn-hub-faction">От имени фракции: <b style="color:${esc(frReadable(fac.faction_color))}">${esc(fac.faction_name || '—')}</b></div>`
     : cnIsStaff() ? `<div class="cn-hub-faction">Режим администрации — фракция выбирается при публикации.</div>` : '';
-  const cards = CN_HUB.map(h => `<div class="cn-hub-card" onclick="${h.url ? `location.href='${h.url}'` : `go('${h.slug}')`}">
+  const cards = CN_HUB.map(h => `<div class="cn-hub-card${cnFrozenCat(h.cat) ? ' cn-hub-frozen' : ''}" onclick="${h.url ? `location.href='${h.url}'` : `go('${h.slug}')`}">
       <div class="cn-hub-ico">${h.ico}</div>
       <div class="cn-hub-main">
-        <div class="cn-hub-name">${esc(h.name)}</div>
+        <div class="cn-hub-name">${esc(h.name)}${cnFrozenCat(h.cat) ? '<span class="cn-hub-tag">заморожен · регистрация закрыта</span>' : ''}</div>
         <div class="cn-hub-desc">${esc(h.desc)}</div>
       </div>
       <div class="cn-hub-arr">→</div>
@@ -309,11 +309,28 @@ const CN_DEFS = {
   army: {
     cat: 'army', db: _KVD ? _KVD.army : CN_GROUND, title: 'Планетарный арсенал', subtitle: 'ArmyForge — пехота, техника, авиация',
     nameLabel: 'Серийное название модели', classLabel: 'Класс юнита', engineLabel: 'Ходовая / маршевые двигатели',
-    // Тот же визуальный движок, что у корабельной верфи (карточки + схема узлов)
-    hasType: false, hasReactor: true, hasEnergy: false, hasHangars: false, cardUI: !!_KVD,
+    // ⚠️ ЗАМОРОЗКА (15.08.2026). Карточно-схемный движок верфи (cardUI) наземке
+    // снят: до конца обновления «Убей или спаси» армия не разрабатывается, а
+    // палуба/схема/навесная броня — это ровно то, что ещё будет переписано.
+    // Пока держим ПЕРЕЧЕНЬ ВЫБОРОВ: список слотов, ТТХ, никакой сцены.
+    hasType: false, hasReactor: true, hasEnergy: false, hasHangars: false, cardUI: false,
     excl: () => false,
   },
 };
+
+// ── ЗАМОРОЗКА НАЗЕМКИ И АВИАЦИИ («Убей или спаси») ───────────
+// Регистрация проектов армии закрыта: движок наземного боя переписывается, и
+// всё, что зарегистрируют сейчас, после обновления пришлось бы пересчитывать
+// или сносить. Конструктор остаётся ОТКРЫТЫМ на просмотр и прикидку — закрыта
+// только публикация (здесь) и заказ производства (economy.js, ecProduceUnit).
+const CN_FROZEN_TITLE = 'Регистрация проектов закрыта';
+const CN_FROZEN_TEXT = 'До конца обновления «Убей или спаси» работы над наземкой и авиацией не ведутся. Новые проекты после переработки могут стать неактуальными, поэтому регистрация закрыта, а производство наземных юнитов и авиации приостановлено. Конструктор открыт для прикидки: считайте ТТХ и сравнивайте компоновки — сохранить проект нельзя.';
+function cnFrozenCat(cat) { return cat === 'army' || cat === 'ground' || cat === 'aviation'; }
+function cnFrozenBanner() {
+  return `<div class="cn-frz"><div class="cn-frz-ic">⛔</div>
+    <div><div class="cn-frz-hd">${CN_FROZEN_TITLE}</div>
+    <div class="cn-frz-tx">${CN_FROZEN_TEXT}</div></div></div>`;
+}
 // ── Масштаб нагрузки на шасси ────────────────────────────────
 // «Грузоподъёмность» (kv.cap) — единый бюджет шасси: сколько ещё можно навесить,
 // а что осталось свободным, то и увозит караван (_ship_cargo читает kv_cargo).
@@ -4877,7 +4894,43 @@ async function cnVehRender(cat) {
           <button class="btn btn-gh btn-fw" style="margin-top:10px" onclick="cnVehAddItem('module')">+ Добавить модуль</button>
         </div>
       </div>`;
-  const body = cui ? stageHtml : `<div class="cn-grid">
+  // ── ЗАМОРОЖЕННЫЙ АРСЕНАЛ: перечень выборов ──────────────────
+  // Ни сцены, ни палубы, ни схемы: одна колонка строк «что выбираем — чем».
+  // Слева порядковый номер и название узла, справа сам выбор. Это и есть весь
+  // экран — пока армия не переписана, конструктор работает как прикидка.
+  const frozen = cnFrozenCat(cat);
+  const leanRow = (n, label, hint, ctrl) => `<div class="cn-ln-row">
+      <div class="cn-ln-k"><span class="cn-ln-n">${n}</span><span class="cn-ln-l">${esc(label)}</span>${hint ? `<span class="cn-ln-h">${esc(hint)}</span>` : ''}</div>
+      <div class="cn-ln-v">${ctrl}</div>
+    </div>`;
+  let leanHtml = '';
+  if (frozen) {
+    const rows = [
+      ['01', def.classLabel, 'род войск и шасси', `<select id="cn-class" onchange="cnVehHandleClass()"></select>`],
+      def.hasType ? ['02', 'Специализация', '', `<select id="cn-type" onchange="cnVehCalc()"></select>`] : null,
+      def.hasReactor ? ['02', 'Энергоустановка', 'питает ход, щит и системы', `<select id="cn-reactor" onchange="cnVehCalc()"></select>`] : null,
+      ['03', 'Бронирование', 'прочность корпуса', `<select id="cn-armor" onchange="cnVehCalc()"></select>`],
+      ['04', 'Щитовой модуль', 'поле поверх брони', `<select id="cn-shield" onchange="cnVehCalc()"></select>`],
+      ['05', def.engineLabel, 'скорость на карте боя', `<select id="cn-engine" onchange="cnVehCalc()"></select>`],
+      def.db.radars ? ['06', 'Радар', 'обзор и помехозащита', `<select id="cn-radar" onchange="cnVehCalc()"></select>`] : null,
+      ['07', 'Карточка экипажа', 'боевой перк', `<div class="cn-cards cn-slot" id="cn-perk-cards"></div>`],
+    ].filter(Boolean);
+    leanHtml = `<div class="cn-lean">
+      <div class="cn-ln-name"><input id="cn-name" placeholder="Название модели…" value="${esc(edit ? edit.name : '')}"></div>
+      <div class="cn-ln-list">${rows.map(r => leanRow(r[0], r[1], r[2], r[3])).join('')}</div>
+      <div class="cn-ln-sec">Вооружение</div>
+      <div id="cn-weapons" class="cn-ln-items"></div>
+      <button class="btn btn-gh btn-fw cn-ln-add" onclick="cnVehAddItem('weapon')">+ орудие</button>
+      <div class="cn-ln-sec">Модули и системы</div>
+      <div id="cn-modules" class="cn-ln-items"></div>
+      <button class="btn btn-gh btn-fw cn-ln-add" onclick="cnVehAddItem('module')">+ модуль</button>
+      <div class="cn-ln-sec">Расчётные ТТХ</div>
+      <div id="cn-stats" class="cn-ln-stats"></div>
+      <div class="cn-ln-lock">🔒 Проект не сохраняется — регистрация закрыта до конца обновления «Убей или спаси».</div>
+      <button class="btn btn-gh btn-fw" onclick="cnCopyVehCard()">📋 Копировать спецификацию</button>
+    </div>`;
+  }
+  const body = frozen ? leanHtml : cui ? stageHtml : `<div class="cn-grid">
       ${configHtml}
       <div class="cn-side">
         <div class="cn-panel cn-sticky">
@@ -4888,15 +4941,17 @@ async function cnVehRender(cat) {
       </div>
     </div>`;
 
-  setPg(`<div class="cn-wrap cn-builder${cui ? ' cn-cyb' : ''}">
+  setPg(`<div class="cn-wrap cn-builder${cui ? ' cn-cyb' : ''}${frozen ? ' cn-wrap-lean' : ''}">
     <div class="cn-head">
-      <div class="cn-eyebrow">◈ ${esc(def.subtitle)}</div>
+      <div class="cn-eyebrow">◈ ${esc(frozen ? 'АРСЕНАЛ · ЗАМОРОЖЕН' : def.subtitle)}</div>
       <h1>${esc(def.title)}</h1>
       <div class="cn-back"><a onclick="go('constructors')">← к конструкторам</a></div>
     </div>
-    <div class="cn-wip">⚠ Конструктор в переработке: палуба, модули и баланс ещё меняются — сохранённые проекты могут пересчитаться.</div>
+    ${frozen ? cnFrozenBanner()
+      : '<div class="cn-wip">⚠ Конструктор в переработке: палуба, модули и баланс ещё меняются — сохранённые проекты могут пересчитаться.</div>'}
     ${body}
   </div>`);
+  if (frozen) toast(CN_FROZEN_TITLE + ': до конца обновления «Убей или спаси» проекты наземки и авиации не регистрируются', 'inf');
 
   if (edit && cnId('cn-faction')) cnId('cn-faction').value = edit.faction_id || '';
   CN.snap = null; CN.snapOver = false; CN._applying = false;
@@ -6104,6 +6159,8 @@ function cnCatRoute(cat) { return { ship: 'cat-ships', ground: 'cat-ground', avi
 
 async function cnPublish() {
   if (CN.busy) return;
+  // Заморозка «Убей или спаси»: наземка и авиация не регистрируются.
+  if (cnFrozenCat(CN.cat)) { toast(CN_FROZEN_TITLE + ' — проект наземки/авиации сохранить нельзя', 'err'); return; }
   await cnLoadMyFaction();
   if (!cnCanAccess()) { toast('Нет доступа к публикации', 'err'); return; }
   const name = (cnId('cn-name')?.value || '').trim();
@@ -6233,7 +6290,10 @@ function cnPaintCatalog() {
   const cat = CN.catCat, meta = CN_CAT_META[cat], units = CN.catUnits || [];
   // Дивизии: «+ Создать» скрыт — новые дивизии не проектируются (армии из юнитов),
   // существующие остаются в каталоге и годятся в армии.
-  const canBuild = cat === 'division' ? cnIsStaff() : cnCanAccess();
+  // Заморозка: в наземке и авиации новых проектов не заводят — «+ Создать» снят,
+  // каталог остаётся на просмотр уже зарегистрированного.
+  const frozenCat = cnFrozenCat(cat);
+  const canBuild = cat === 'division' ? cnIsStaff() : (!frozenCat && cnCanAccess());
   const facMap = new Map();
   units.forEach(u => { const key = u.faction_id || ''; if (!facMap.has(key)) facMap.set(key, { name: cnFacName(u), color: u.faction_color || '', n: 0 }); facMap.get(key).n++; });
   const chips = [`<button class="cn-chip-btn${CN.catFilter === '*' ? ' on' : ''}" onclick="cnCatFilter('*')">Все <i>${units.length}</i></button>`]
@@ -6246,6 +6306,7 @@ function cnPaintCatalog() {
       <div><div class="cn-eyebrow">◈ КАТАЛОГ</div><h1>${meta.ico} ${esc(meta.title)}</h1></div>
       ${canBuild ? `<button class="btn btn-gd" onclick="go('${meta.build}')">+ Создать</button>` : ''}
     </div>
+    ${frozenCat ? cnFrozenBanner() : ''}
     <div class="cn-chips">${chips}</div>
     <div class="cn-cat-grid">${cards}</div>
   </div>`);

@@ -7291,6 +7291,20 @@ const EC_MB = [
   { k: 'aviation', mod: 'air',   ic: 'plane',   nm: 'Авиация',          where: 'Аэрокосмический Завод' },
   { k: 'ship',     mod: 'fleet', ic: 'ship',    nm: 'Флот',             where: 'Корабельная Верфь · поштучно' },
 ];
+// ⛔ Заморозка наземки и авиации на время обновления «Убей или спаси».
+// Один выключатель на весь военпром: снимается вместе с гейтом конструктора
+// (constructors.js, cnFrozenCat) — открывать нужно ОБА, иначе игрок либо
+// строит по нечему, либо проектирует то, что не построить.
+const EC_ARMY_FROZEN = true;
+const EC_FROZEN_TX = 'До конца обновления «Убей или спаси» работы над наземкой не ведутся: движок наземного боя переписывается. Заказанное сейчас после обновления пришлось бы пересчитывать, поэтому производство пехоты, техники и авиации приостановлено, а регистрация новых проектов в конструкторе закрыта. Флот, ремонт и уже готовые войска работают как прежде.';
+function ecFrozenBox(nDesigns) {
+  return `<div class="ec-frz">
+    <div class="ec-frz-hd"><span class="ec-frz-ic">⛔</span>Производство приостановлено</div>
+    <div class="ec-frz-tx">${EC_FROZEN_TX}</div>
+    <div class="ec-frz-ft">Проектов в цехе: <b>${ecNum(nDesigns || 0)}</b> — они никуда не денутся и станут доступны к заказу после обновления.</div>
+  </div>`;
+}
+
 function ecMilTab(k) {
   EC.milTab = k;
   if (typeof ecPaintCabinet === 'function') ecPaintCabinet();
@@ -7316,6 +7330,11 @@ function ecTabMilBuild() {
   // и авиации (Аэрокосмический Завод). kind — ключ формы, не категория в БД.
   const unitForm = (list, kind) => {
     const isAvia = kind === 'aviation', isInf = kind === 'inf';
+    // ⛔ ЗАМОРОЗКА «Убей или спаси»: пехота, техника и авиация не строятся.
+    // Причина та же, что и у закрытой регистрации проектов в конструкторе:
+    // наземный движок переписывается, заказанное сейчас после обновления
+    // пришлось бы пересчитывать. Флот и ремонт работают как прежде.
+    if (EC_ARMY_FROZEN) return ecFrozenBox(list.length);
     if (isAvia && !caps.hasAirfield) return `<div class="ec-empty">Нужен Аэрокосмический Завод — постройте его во вкладке «Колонии».</div>`;
     if (isInf && !caps.hasTraining) return `<div class="ec-empty">Нужен ${caps.robot ? 'Военный Завод (робо-сборка пехоты)' : 'Центр Подготовки'} — постройте его во вкладке «Колонии».</div>`;
     if (!isAvia && !isInf && !caps.hasMil) return `<div class="ec-empty">Нужен Военный Завод — постройте его во вкладке «Колонии».</div>`;
@@ -7380,17 +7399,19 @@ function ecTabMilBuild() {
   };
   let mtab = EC.milTab;
   if (!EC_MB.some(b => b.k === mtab)) {
-    mtab = (EC_MB.find(b => readyOf[b.k] && listOf[b.k].length) || EC_MB.find(b => readyOf[b.k]) || EC_MB[0]).k;
+    // При заморозке наземки первым открывается единственный работающий цех — верфь.
+    mtab = EC_ARMY_FROZEN ? 'ship'
+      : (EC_MB.find(b => readyOf[b.k] && listOf[b.k].length) || EC_MB.find(b => readyOf[b.k]) || EC_MB[0]).k;
   }
   const curMb = EC_MB.find(b => b.k === mtab);
 
   const mbTabsHtml = `<div class="ec-fb-tabs" role="tablist">${EC_MB.map(b => `
-    <button class="ec-fb-tab ec-fb-tab--${b.mod}${b.k === mtab ? ' on' : ''}" role="tab"
+    <button class="ec-fb-tab ec-fb-tab--${b.mod}${b.k === mtab ? ' on' : ''}${EC_ARMY_FROZEN && b.k !== 'ship' ? ' frz' : ''}" role="tab"
       aria-selected="${b.k === mtab}" onclick="ecMilTab('${b.k}')"
-      title="${readyOf[b.k] ? `Проектов: ${ecNum(listOf[b.k].length)}` : 'Нет постройки — цех недоступен'}">
+      title="${EC_ARMY_FROZEN && b.k !== 'ship' ? 'Цех заморожен до конца обновления «Убей или спаси»' : readyOf[b.k] ? `Проектов: ${ecNum(listOf[b.k].length)}` : 'Нет постройки — цех недоступен'}">
       ${ecIco(b.ic, 'ec-fb-tab-ic')}
       <span class="ec-fb-tab-l">${esc(b.nm)}</span>
-      <span class="ec-fb-tab-n">${readyOf[b.k] ? ecNum(listOf[b.k].length) : '—'}</span>
+      <span class="ec-fb-tab-n">${EC_ARMY_FROZEN && b.k !== 'ship' ? '⛔' : readyOf[b.k] ? ecNum(listOf[b.k].length) : '—'}</span>
     </button>`).join('')}</div>`;
 
   const curShopHtml = curMb.k === 'ship'
@@ -7405,7 +7426,7 @@ function ecTabMilBuild() {
       <div class="ec-mb-shards-row"><span>Универсальные <b>${ecNum(uni)}</b></span>${shipShardBreak ? shipShardBreak.split(' · ').map(x => `<span>${x}</span>`).join('') : ''}<span>Авиация <b>${ecNum(sh.aviation || 0)}</b></span><span>Техника <b>${ecNum(sh.ground || 0)}</b></span><span>Пехота <b>${ecNum(sh.inf || 0)}</b></span></div>
     </div>` : '';
 
-  return `<div class="ec-cyb-forces ec-cyb-build">${ecIntro(ecIco('factory'), 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, заказ — здесь. Дивизии больше не строятся: постройте юниты и <b>сформируйте из них армию</b> — она встанет гарнизоном на колонии и перебрасывается в режиме карты «Звёздный марш».', [infLine, 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».', 'Гарнизон сверх порога (20 юнитов или население/10) давит на благополучие колонии.'])}${shardsHtml}
+  return `<div class="ec-cyb-forces ec-cyb-build">${ecIntro(ecIco('factory'), 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, заказ — здесь. Дивизии больше не строятся: постройте юниты и <b>сформируйте из них армию</b> — она встанет гарнизоном на колонии и перебрасывается в режиме карты «Звёздный марш».', [infLine, 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».', 'Гарнизон сверх порога (20 юнитов или население/10) давит на благополучие колонии.'])}${EC_ARMY_FROZEN ? ecFrozenBox(groundAll.length + aviaUnits.length) : ''}${shardsHtml}
     ${mbTabsHtml}
     <div class="ec-mb-shops">${curShopHtml}</div>
     ${ecRepairPanelHtml(caps)}
@@ -7430,6 +7451,8 @@ function ecUnitBillUpd(kind) {
 // в обход зданий/лимитов цеха (сервер: economy_produce_coupon).
 async function ecProduceUnit(kind, coupon) {
   if (EC.busy) return;
+  // Заморозка: ни за ГС, ни за осколок — наземка и авиация не строятся.
+  if (EC_ARMY_FROZEN) { toast('Производство наземки и авиации приостановлено до конца обновления «Убей или спаси»', 'err'); return; }
   const sel = ecId('ec-' + kind + '-sel'); if (!sel || !sel.value) { toast('Выберите проект', 'err'); return; }
   const qty = Math.max(1, parseInt(ecId('ec-' + kind + '-qty')?.value) || 1);
   const u = ecUnitPick(kind, sel.value); if (!u) { toast('Проект не найден', 'err'); return; }
