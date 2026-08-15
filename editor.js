@@ -1691,7 +1691,7 @@ async function renderApTab(){
         ${gRow('Столица', capital)}
         ${gRow('Раса', myApp.race)}
         ${myApp.status==='approved'
-          ? `<button class="btn btn-gh btn-fw" style="margin-top:10px" onclick="closeAp();heroVNGoto('g_work')">🛰 К делам державы</button>`
+          ? `<button class="btn btn-gh btn-fw" style="margin-top:10px" onclick="closeAp();cabHome()">🛰 К делам державы</button>`
           : `<button class="btn btn-gh btn-fw" style="margin-top:10px" onclick="closeAp();go('faction-new')">⬡ ${myApp.status==='rejected'?'Подать заново':'Продолжить анкету'}</button>`}
       </div>`;
     } else if (!isStaff) {

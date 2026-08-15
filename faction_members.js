@@ -153,7 +153,7 @@ function fmServiceBlock(hasOwnApp) {
       <div class="fm-perm-line">${perms.length ? perms.map(t => `<span class="fm-chip">${esc(t)}</span>`).join('') : '<span class="fm-chip fm-chip-off">прав пока нет</span>'}</div>
       <div class="fm-scope-line">Зона ответственности: ${esc(scope)}</div>
       <div class="fr-actions">
-        <button class="btn btn-gd btn-sm" onclick="heroVNGoto('g_work')">К делам державы</button>
+        <button class="btn btn-gd btn-sm" onclick="cabHome()">К делам державы</button>
         <button class="btn btn-gh btn-sm" onclick="fmLeave()">Выйти из состава</button>
       </div></div>`;
   }

@@ -69,6 +69,12 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 #gm-svg.gm-noborders .vor-layer,#gm-svg.gm-noborders .vor-border-layer{display:none}
 /* Гиперпути */
 .hyperlane{fill:none;stroke:hsl(206 92% 64%);stroke-width:var(--lane-w,3);stroke-linecap:round;stroke-linejoin:round}
+/* Ранг трассы (считается в gmBuildGeo: путь между столицами через неё проходит или
+   нет). Сеть одинаковой ниткой не отвечала «куда отсюда ходят» — вес даёт иерархию:
+   магистраль → трасса → местная ветка. Тот же порядок весов, что в canvas-рендере. */
+.hyperlane.hl-r2{stroke-width:calc(var(--lane-w,3) * 1.35);opacity:.95}
+.hyperlane.hl-r1{stroke-width:var(--lane-w,3);opacity:.72}
+.hyperlane.hl-r0{stroke-width:calc(var(--lane-w,3) * .62);opacity:.42}
 .hyperlane.gm-deletable{pointer-events:none}
 .hyperlane-hit{fill:none;stroke:transparent;stroke-width:calc(var(--lane-w,3) * 6);pointer-events:stroke;cursor:pointer}
 .hyperlane-hit:hover + .hyperlane{stroke:var(--err)}

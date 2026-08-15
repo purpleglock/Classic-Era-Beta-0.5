@@ -1365,19 +1365,83 @@ function gmBuildGeo() {
 
   // ── Гиперпути: слегка изогнутая кривая вместо прямой. Изгиб детерминированный
   //    (хэш по концам) — стабилен между перерисовками, не зависит от порядка. ──
-  const lanes = [];
+  //
+  // ИЕРАРХИЯ. Сеть, рисованная одинаковой ниткой, — спагетти: карта не отвечала на
+  // главный вопрос «куда отсюда ходят». Ранг трассы считаем по СМЫСЛУ — сколько
+  // кратчайших путей между столицами держав через неё проходит (BFS от каждой
+  // столицы по графу гиперпутей; источников единицы, счёт мгновенный):
+  //   2 МАГИСТРАЛЬ — несущая сети, 1 ТРАССА — ходят, 0 ВЕТКА — местная или тупик.
+  // ТОН — по владению концов: обе системы одной державы → её краска, подмешанная
+  // к «дорожной» синеве (внутренняя рокада читается как своя), иначе холодный
+  // нейтральный. Оба признака стабильны между перерисовками, как и изгиб.
+  const laneUse = {};                     // id трассы → сколько столичных путей через неё
+  const deg = {};                         // степень узла — запасной признак ранга
+  {
+    const adj = {};
+    GM.lanes.forEach(l => {
+      (adj[l.a_id] = adj[l.a_id] || []).push([l.b_id, l.id]);
+      (adj[l.b_id] = adj[l.b_id] || []).push([l.a_id, l.id]);
+      deg[l.a_id] = (deg[l.a_id] || 0) + 1; deg[l.b_id] = (deg[l.b_id] || 0) + 1;
+    });
+    const caps = Object.keys(GM.capitals || {}).filter(id => adj[id]);
+    caps.forEach(src => {
+      const prev = { [src]: null }, q = [src];
+      for (let h = 0; h < q.length; h++) {          // BFS-дерево кратчайших путей
+        const c = q[h];
+        (adj[c] || []).forEach(nb => { if (!(nb[0] in prev)) { prev[nb[0]] = [c, nb[1]]; q.push(nb[0]); } });
+      }
+      caps.forEach(dst => {                         // и путь по нему до каждой другой столицы
+        if (dst === src || !(dst in prev)) return;
+        let n = dst, guard = 0;
+        while (prev[n] && guard++ < 4000) { laneUse[prev[n][1]] = (laneUse[prev[n][1]] || 0) + 1; n = prev[n][0]; }
+      });
+    });
+  }
+  let useMax = 0;
+  for (const k in laneUse) if (laneUse[k] > useMax) useMax = laneUse[k];
+  // Порог магистрали — ДОЛЯ от самой ходовой трассы, а не абсолют: держав на карте
+  // может быть и три, и двадцать, а с абсолютным порогом при трёх столицах в
+  // магистрали не попадал никто и сеть проваливалась в один ранг.
+  const TRUNK = Math.max(2, useMax * 0.45);
+  const LANE_BASE = [120, 200, 255];                // «дорожная» синева, к ней подмешиваем краску державы
+  const lanes = [], laneGates = [];
   GM.lanes.forEach(l => {
     const a = GM.systems.find(s => s.id === l.a_id), b = GM.systems.find(s => s.id === l.b_id);
     if (!a || !b) return;
+    // Столиц может не быть вовсе (пустая карта, редактор, до регистрации держав) —
+    // тогда ранг не по чему считать, и вся сеть провалилась бы в «ветки». Запасной
+    // признак: узловая трасса — та, что соединяет два перекрёстка.
+    const use = laneUse[l.id] || 0;
+    const rank = useMax > 0
+      ? (use >= TRUNK ? 2 : use > 0 ? 1 : 0)
+      : (Math.min(deg[l.a_id] || 0, deg[l.b_id] || 0) >= 3 ? 2 : Math.min(deg[l.a_id] || 0, deg[l.b_id] || 0) >= 2 ? 1 : 0);
+    const fa = gmFaction(a.faction), fb = gmFaction(b.faction);
+    let tint = null;
+    if (fa && fb && fa.id === fb.id && fa.id !== 'rift') {
+      const c = gmRgb(fa.color);
+      tint = `rgb(${c.map((v, i) => Math.round(LANE_BASE[i] * 0.6 + v * 0.4)).join(',')})`;
+    }
     const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     const nx = -dy / len, ny = dx / len;
     const h = gmEdgeHash(Math.min(a.x, b.x) + Math.max(a.x, b.x) * 0.31, Math.min(a.y, b.y) + Math.max(a.y, b.y) * 0.47);
     const bend = (h - 0.5) * 2 * Math.min(len * 0.11, 55);
-    lanes.push({ id: l.id, a_id: l.a_id, b_id: l.b_id, ax: a.x, ay: a.y, cx: +(mx + nx * bend).toFixed(1), cy: +(my + ny * bend).toFixed(1), bx: b.x, by: b.y });
+    const qcx = +(mx + nx * bend).toFixed(1), qcy = +(my + ny * bend).toFixed(1);
+    lanes.push({ id: l.id, a_id: l.a_id, b_id: l.b_id, rank, tint, ax: a.x, ay: a.y, cx: qcx, cy: qcy, bx: b.x, by: b.y });
+    // ПОГРАНПЕРЕХОД. Трасса из одной державы в другую — это не просто линия, это
+    // единственная дверь между ними: по ней придёт и караван, и флот. Ставим на
+    // середине кривой воротца (две риски поперёк). Раньше такая трасса ничем не
+    // отличалась от внутренней, и по карте нельзя было прочесть, где стыки держав
+    // проходимы, — а это главный вопрос и торговли, и войны.
+    if (fa && fb && fa.id !== fb.id && fa.id !== 'rift' && fb.id !== 'rift') {
+      const gx = 0.25 * a.x + 0.5 * qcx + 0.25 * b.x;   // точка кривой при t=0.5
+      const gy = 0.25 * a.y + 0.5 * qcy + 0.25 * b.y;
+      const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;  // касательная при t=0.5 ∥ (B−A)
+      laneGates.push({ x: gx, y: gy, tx: (b.x - a.x) / tl, ty: (b.y - a.y) / tl });
+    }
   });
 
-  return { fills, secFills, edges, lanes, secEdges, secLabels, fog };
+  return { fills, secFills, edges, lanes, laneGates, secEdges, secLabels, fog };
 }
 
 function gmDrawSvg() {
@@ -1414,8 +1478,9 @@ function gmDrawSvg() {
 
   const laneHtml = geo.lanes.map(L => {
     const d = `M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}`;
-    const cls = 'hyperlane' + (GM.edit && GM.mode === 'unlink' ? ' gm-deletable' : '');
-    const visible = `<path class="${cls}" data-lane="${esc(L.id)}" data-a="${esc(L.a_id)}" data-b="${esc(L.b_id)}" d="${d}" fill="none"></path>`;
+    // ранг трассы (см. gmBuildGeo) — классом, вес и яркость задаёт CSS
+    const cls = 'hyperlane hl-r' + (L.rank || 0) + (GM.edit && GM.mode === 'unlink' ? ' gm-deletable' : '');
+    const visible = `<path class="${cls}" data-lane="${esc(L.id)}" data-a="${esc(L.a_id)}" data-b="${esc(L.b_id)}" d="${d}" fill="none"${L.tint ? ` style="stroke:${L.tint}"` : ''}></path>`;
     if (GM.edit && GM.mode === 'unlink') {
       const hit = `<path class="hyperlane-hit" d="${d}" fill="none" onclick="gmDeleteLane('${L.id}')"></path>`;
       return hit + visible;
@@ -1979,7 +2044,7 @@ function gmOpenPanel(sys) {
     <h2 class="gm-panel-title">${esc(sys.name)}</h2>
     ${facBlock}
     ${(typeof ecCanAccess === 'function' && ecCanAccess() && typeof EC !== 'undefined' && EC.app && EC.app.faction_id === sys.faction)
-      ? `<button class="btn btn-gh btn-sm" style="margin:6px 0 2px" onclick="gmClosePanel();heroVNGoto('g_work')">🛰 К делам державы</button>` : ''}
+      ? `<button class="btn btn-gh btn-sm" style="margin:6px 0 2px" onclick="gmClosePanel();cabHome()">🛰 К делам державы</button>` : ''}
     <p class="gm-panel-desc">${esc(sys.description || '')}</p>
     ${colsBlock}
     ${defBlock}
@@ -6451,7 +6516,17 @@ function gmmBuildWorld() {
   });
   let lanesD = '';
   GMM.laneGeo = new Map();   // "a|b"/"b|a" → кривая гиперпути (для трафика караванов)
+  // трассы разложены по (ранг × тон): ранг задаёт вес мазка, тон — краску. Разложение
+  // хранится и для лёгкой пересборки при перетаскивании звезды (см. gmmRefreshLanes).
+  const laneBuckets = new Map();
+  GMM.laneMeta = new Map();
   geo.lanes.forEach(L => {
+    const seg = `M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}`;
+    const key = L.rank + '|' + (L.tint || '');
+    let bk = laneBuckets.get(key);
+    if (!bk) laneBuckets.set(key, bk = { rank: L.rank || 0, tint: L.tint || null, d: '' });
+    bk.d += seg;
+    GMM.laneMeta.set(L.id, { rank: L.rank || 0, tint: L.tint || null });
     lanesD += `M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}`;
     if (L.a_id && L.b_id) {
       GMM.laneGeo.set(L.a_id + '|' + L.b_id, { ax: L.ax, ay: L.ay, cx: L.cx, cy: L.cy, bx: L.bx, by: L.by });
@@ -6490,6 +6565,10 @@ function gmmBuildWorld() {
     neutCells: neutCells.map(c => ({ p2d: new Path2D(c.d), x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, cx: c.cx, cy: c.cy, ang: c.ang })),
     rift: riftD ? new Path2D(riftD) : null,
     lanes: lanesD ? new Path2D(lanesD) : null,
+    // ветки раньше магистралей: несущие трассы должны ложиться ПОВЕРХ местных
+    laneRanks: [...laneBuckets.values()].sort((a, b) => a.rank - b.rank)
+      .map(b => ({ rank: b.rank, tint: b.tint, p2d: new Path2D(b.d) })),
+    laneGates: geo.laneGates || [],   // воротца рисуются в экранных единицах — списком, не путём
     secEdges: [...secD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     // ограждение: НЕПРЕРЫВНЫЕ контуры рубежа + маска-площадь того же владельца
     secBrush: [...secBrushD].map(([secId, b]) => {
@@ -6520,6 +6599,7 @@ function gmmRefreshLanes() {
   if (!GMM.paths) return;
   const byId = new Map(GM.systems.map(s => [s.id, s]));
   let lanesD = '';
+  const buckets = new Map();
   GMM.laneGeo = new Map();
   GM.lanes.forEach(l => {
     const a = byId.get(l.a_id), b = byId.get(l.b_id);
@@ -6531,10 +6611,20 @@ function gmmRefreshLanes() {
     const bend = (h - 0.5) * 2 * Math.min(len * 0.11, 55);
     const cx = +(mx + nx * bend).toFixed(1), cy = +(my + ny * bend).toFixed(1);
     lanesD += `M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`;
+    // ранг/тон берём из последней полной сборки: тяжёлый пересчёт (BFS от столиц,
+    // владение концов) на каждый кадр перетаскивания не нужен — от сдвига звезды
+    // топология сети не меняется, меняется только геометрия кривых
+    const meta = (GMM.laneMeta && GMM.laneMeta.get(l.id)) || { rank: 0, tint: null };
+    const key = meta.rank + '|' + (meta.tint || '');
+    let bk = buckets.get(key);
+    if (!bk) buckets.set(key, bk = { rank: meta.rank, tint: meta.tint, d: '' });
+    bk.d += `M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`;
     GMM.laneGeo.set(l.a_id + '|' + l.b_id, { ax: a.x, ay: a.y, cx, cy, bx: b.x, by: b.y });
     GMM.laneGeo.set(l.b_id + '|' + l.a_id, { ax: b.x, ay: b.y, cx, cy, bx: a.x, by: a.y });
   });
   GMM.paths.lanes = lanesD ? new Path2D(lanesD) : null;
+  GMM.paths.laneRanks = [...buckets.values()].sort((a, b) => a.rank - b.rank)
+    .map(b => ({ rank: b.rank, tint: b.tint, p2d: new Path2D(b.d) }));
 }
 
 // Караваны торговых маршрутов: для каждого активного trade_route считаем путь по
@@ -7674,8 +7764,10 @@ function gmmPaintVector(ctx, camS, live) {
     if (P.rift) { ctx.strokeStyle = '#b14ef0'; ctx.stroke(P.rift); }
     ctx.globalAlpha = 1;
     if (P.neutral) { ctx.globalAlpha = facB; ctx.lineWidth = 1.2 / camS; ctx.strokeStyle = 'rgba(150,170,200,.18)'; ctx.stroke(P.neutral); ctx.globalAlpha = 1; }
-    // сплошное цветное ядро по контуру
-    ctx.globalAlpha = facB; ctx.lineWidth = 2.0 / camS;
+    // Кромка: ОДНА чистая волосяная линия. Была 2 px — на фоне нового поля влияния
+    // (gmmPaintFacFence) толстая линия читалась как обводка в редакторе; вес рубежу
+    // даёт поле, кромке остаётся быть точной.
+    ctx.globalAlpha = facB; ctx.lineWidth = 1.5 / camS;
     P.edges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
     ctx.globalAlpha = 1;
     // ГОСУДАРСТВЕННЫЙ РУБЕЖ поверх ядра — контрольная полоса на тихой границе,
@@ -7689,7 +7781,74 @@ function gmmPaintVector(ctx, camS, live) {
       ctx.stroke(P.rift); ctx.setLineDash([]);
     }
   }
-  if (P.lanes) {
+  // ── ГИПЕРПУТИ = ДОРОЖНАЯ СЕТЬ ──
+  // Было: вся сеть одной ниткой в 1.8 px одного цвета. На пересечениях трассы
+  // сливались в синий колтун, на обзоре — в сплошную сетку поверх карты, и по ней
+  // нельзя было прочесть ни куда ходят, ни чья это рокада. Взят картографический
+  // приём дорожной сети:
+  //   • КОЖУХ — тёмная подложка чуть шире ядра, ЕДИНЫМ проходом под всей сетью:
+  //     на пересечении верхняя трасса получает свой тёмный кант и видно, какая
+  //     над какой. Без него линии одного цвета просто слипаются в пятно;
+  //   • ВЕС ПО РАНГУ — магистраль толще и ярче ветки (ранг считается в gmBuildGeo);
+  //   • ОТБОР ПО ЗУМУ — на обзоре ветки почти гаснут, остаётся СКЕЛЕТ сети;
+  //     вблизи проявляются все. Спагетти брались именно из обзора, где рисовались
+  //     все сотни трасс сразу и с одинаковым весом.
+  if (P.laneRanks && P.laneRanks.length) {
+    const z = gmmZoomT(camS);                            // 0 — обзор, 1 — вблизи
+    const LW = [0.9, 1.5, 2.4];                          // ширина ядра по рангу, px
+    const LA = [0.2 + 0.62 * z, 0.55 + 0.33 * z, 0.9];   // ветки проявляются вблизи
+    const GW = [0, 5, 9], GA = [0, 0.05, 0.09];          // ореол — только у несущих
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    P.laneRanks.forEach(b => {                           // 1) ореол несущих трасс
+      if (!GW[b.rank]) return;
+      ctx.globalAlpha = GA[b.rank] * LA[b.rank];
+      ctx.lineWidth = GW[b.rank] / camS;
+      ctx.strokeStyle = b.tint || 'hsl(206 92% 64%)';
+      ctx.stroke(b.p2d);
+    });
+    ctx.strokeStyle = 'rgba(5,8,14,0.8)';
+    P.laneRanks.forEach(b => {                           // 2) кожух под всей сетью
+      ctx.globalAlpha = LA[b.rank] * 0.8;
+      ctx.lineWidth = (LW[b.rank] + 1.7) / camS;
+      ctx.stroke(b.p2d);
+    });
+    P.laneRanks.forEach(b => {                           // 3) ядро
+      ctx.globalAlpha = LA[b.rank];
+      ctx.lineWidth = LW[b.rank] / camS;
+      ctx.strokeStyle = b.tint || 'hsl(206 92% 64%)';
+      ctx.stroke(b.p2d);
+    });
+    // 4) ЖИЛА магистрали: волосяная светлая нить по центру несущей. Один и тот же
+    //    синий во всю карту читался плоско — жила даёт трассе объём (широкое тело +
+    //    горячий центр) и отделяет магистраль от трассы не только толщиной.
+    ctx.strokeStyle = '#eaf4ff';
+    P.laneRanks.forEach(b => {
+      if (b.rank < 2) return;
+      ctx.globalAlpha = 0.5 * LA[b.rank];
+      ctx.lineWidth = 0.7 / camS;
+      ctx.stroke(b.p2d);
+    });
+    // 5) ВОРОТЦА погранпереходов: две риски поперёк трассы там, где она уходит из
+    //    одной державы в другую. На обзоре скрыты (там важен скелет сети), проявляются
+    //    вместе с ветками. Размер экранный — иначе вблизи это брёвна.
+    const gA = Math.max(0, z * 1.2 - 0.15);
+    if (gA > 0.02 && P.laneGates && P.laneGates.length) {
+      const u = 1 / camS, h = 3.4 * u, off = 2.2 * u;
+      ctx.globalAlpha = Math.min(0.85, gA); ctx.lineWidth = 1.1 * u;
+      ctx.strokeStyle = '#cfe6ff';
+      ctx.beginPath();
+      P.laneGates.forEach(g => {
+        const nx = -g.ty, ny = g.tx;
+        for (const s of [-off, off]) {
+          const cx = g.x + g.tx * s, cy = g.y + g.ty * s;
+          ctx.moveTo(cx - nx * h, cy - ny * h);
+          ctx.lineTo(cx + nx * h, cy + ny * h);
+        }
+      });
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (P.lanes) {
     ctx.globalAlpha = .85; ctx.lineCap = 'round';
     ctx.strokeStyle = 'hsl(206 92% 64%)'; ctx.lineWidth = 1.8 / camS;
     ctx.stroke(P.lanes); ctx.globalAlpha = 1;
@@ -7699,7 +7858,11 @@ function gmmPaintVector(ctx, camS, live) {
   // границы секторов: едва заметная тонировка приграничной зоны + волосяное ядро,
   // а сам рубеж несёт СИЛОВОЙ ПЕРИМЕТР (gmmPaintSecFence).
   if (secShow && P.secEdges && P.secEdges.length && secA > 0.01) {
-    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    // СТЫК — ТОЛЬКО КРУГЛЫЙ. Был miter (по умолчанию с пределом 10): на остром угле
+    // контура он выстреливает усом длиной до десяти толщин — у волосяной линии это
+    // незаметно, а у 16-пиксельной тонировки каждый угол сектора отращивал длинный
+    // шип наружу. Ровно те «неаккуратные линии в углах» и были им.
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.globalAlpha = .07 * secA; ctx.lineWidth = 16 / camS;
     P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
     // Поперечные картографические засечки УБРАНЫ: короткий дэш на широком штрихе —
@@ -7818,14 +7981,16 @@ function gmmChainAt(ch, s, q) {
   q.k = ch.kink ? Math.min(ch.kink[lo], ch.kink[hi]) : 1;
   return q;
 }
-// ПАРАЛЛЕЛЬ К КОНТУРУ на отступ off вглубь (off=0 — сам контур). Идём по РЕАЛЬНЫМ
+// ПАРАЛЛЕЛЬ К КОНТУРУ на отступ off вглубь (off=0 — сам контур) как Path2D: один путь
+// можно обвести несколькими мазками разной ширины — из этого собрано свечение рубежа.
+// Идём по РЕАЛЬНЫМ
 // вершинам, а не по равномерной выборке длины дуги: выборка срезала углы хордой, и
 // «параллель» расходилась с рубежом ровно там, где это заметнее всего. Вершина
 // уходит по биссектрисе (ch.vn/ch.vm), а складка на вогнутом углу — где смещённый
 // сегмент разворачивается против исходного — не рисуется вовсе: линия там просто
 // прерывается, и вместо петли-клубка остаётся чистый разрыв.
-function gmmRunOffset(ctx, chains, off, skip) {
-  ctx.beginPath();
+function gmmChainPath(chains, off, skip) {
+  const path = new Path2D();
   chains.forEach(ch => {
     if (skip && skip(ch)) return;
     const pts = ch.pts, n = pts.length;
@@ -7833,15 +7998,16 @@ function gmmRunOffset(ctx, chains, off, skip) {
     for (let k = 0; k < n; k++) {
       const p = pts[k], v = ch.vn[k], m = off ? ch.vm[k] : 1;
       const x = p[0] + v[0] * off * m, y = p[1] + v[1] * off * m;
-      if (first) { ctx.moveTo(x, y); first = false; px = x; py = y; continue; }
+      if (first) { path.moveTo(x, y); first = false; px = x; py = y; continue; }
       const ax = p[0] - pts[k - 1][0], ay = p[1] - pts[k - 1][1];
-      if ((x - px) * ax + (y - py) * ay <= 0) ctx.moveTo(x, y);   // складка → перо вверх
-      else ctx.lineTo(x, y);
+      if ((x - px) * ax + (y - py) * ay <= 0) path.moveTo(x, y);   // складка → перо вверх
+      else path.lineTo(x, y);
       px = x; py = y;
     }
   });
-  ctx.stroke();
+  return path;
 }
+function gmmRunOffset(ctx, chains, off, skip) { ctx.stroke(gmmChainPath(chains, off, skip)); }
 // ── РУБЕЖ СЕКТОРА = СИЛОВОЙ ПЕРИМЕТР ─────────────────────────────────────────
 // Сектор — не заливка, а огороженная зона. Техно-ограждение чистой геометрией, без
 // свечений, теней и аддитивных режимов (правила UI):
@@ -7890,8 +8056,9 @@ function gmmPaintSecFence(ctx, camS, secA) {
     ctx.clip(b.area);                   // ← слой-маска: всё ограждение живёт внутри сектора
     ctx.strokeStyle = b.color; ctx.fillStyle = b.color;
     // ── полоса отчуждения: два широких мазка по контуру, наружу их срезает маска ──
-    ctx.globalAlpha = 0.05 * secA; ctx.lineWidth = 34 * u; gmmRunOffset(ctx, b.chains, 0, skip);
-    ctx.globalAlpha = 0.07 * secA; ctx.lineWidth = 13 * u; gmmRunOffset(ctx, b.chains, 0, skip);
+    const line = gmmChainPath(b.chains, 0, skip);   // путь один, мазка два
+    ctx.globalAlpha = 0.05 * secA; ctx.lineWidth = 34 * u; ctx.stroke(line);
+    ctx.globalAlpha = 0.07 * secA; ctx.lineWidth = 13 * u; ctx.stroke(line);
     // ── луч: параллель вплотную, разбитая квантованным кодом (длинный-короткий) ──
     ctx.globalAlpha = 0.55 * secA; ctx.lineWidth = 0.8 * u;
     ctx.setLineDash([9 * du, 4 * du, 2.5 * du, 4 * du]);
@@ -7955,150 +8122,62 @@ function gmmPaintSecFence(ctx, camS, secA) {
   ctx.restore();
 }
 
-// ── ГРАНИЦА ФРАКЦИИ = ГОСУДАРСТВЕННЫЙ РУБЕЖ ──────────────────────────────────
-// Тот же приём, что у секторов (сшитые контуры + слой-маска + иерархия), но СЛОВАРЬ
-// другой — иначе два слоя карты слились бы в один шум. И главное: рубеж НЕСЁТ СМЫСЛ,
-// по нему с одного взгляда видно, воюет держава на этом участке или нет.
+// ── ГРАНИЦА ДЕРЖАВЫ = КРАЙ ОБЛАСТИ ВЛИЯНИЯ ───────────────────────────────────
+// Так границу показывают в стратегиях: держава — это ОБЛАСТЬ, у которой цвет
+// сгущается к рубежу, а не контур с навешанной оснасткой. Прежний словарь (насечки
+// раппортом, пограничные столбы с квадратами, волосяная параллель пунктиром, редуты
+// фронта) был ЧЕРТЁЖОМ: на обзоре вся эта мелкая графика сминалась в бахрому вдоль
+// линии, спорила с ограждением секторов и не сообщала ничего, кроме «тут край».
+// Убрано всё. Осталась одна идея, зато читаемая с любого зума:
 //
-//   ТИХИЙ РУБЕЖ ('fac') — МЕЖЕВАЯ ПОЛОСА:
-//     • насечки вглубь территории повторяющимся КОДОМ короткая-короткая-длинная —
-//       не ровный гребешок, а читаемый раппорт;
-//     • ПОГРАНИЧНЫЕ СТОЛБЫ через равный шаг: вынос вглубь с залитым КВАДРАТОМ на
-//       конце (квадрат, а не ромб — ромб занят узлами секторов, повтор фигуры
-//       смешал бы два слоя карты);
-//     • волосяная параллель глубже, разбитая своим кодом дэша.
+//   • ПОЛЕ ВЛИЯНИЯ — 4 мазка ПО САМОМУ контуру, убывающей ширины и растущей
+//     плотности, под clip'ом территории. Наружу не выходит ничего, внутри выходит
+//     мягкая полоса, гаснущая вглубь владений. Мазок по своему же контуру не
+//     способен ни отстать от угла, ни пересечь себя — форма чистая по построению
+//     (почему так, а не параллели вглубь — см. шапку gmmPaintSecFence).
+//   • ФРОНТ — тот же язык, но ГОРЯЧЕЕ: полоса вдвое глубже и плотнее, своя яркая
+//     кромка и вынос свечения НАРУЖУ, за рубеж. Между двумя воюющими державами
+//     шов светится с обеих сторон (нормаль внутрь + встречное смещение считаются
+//     в gmBuildGeo) — воюющий участок видно на обзоре, а не при разглядывании.
 //
-//   ЛИНИЯ ФРОНТА ('front') — УКРЕПЛЁННЫЙ РУБЕЖ. Треугольные зубцы отсюда убраны:
-//     форма пустая, на обзоре сминается в бахрому и ничего не сообщает. Остались два
-//     слоя, и оба ПРИВЯЗАНЫ К ЛИНИИ — ничего не висит в отрыве от неё:
-//     • РЕДУТЫ — трапеции с ПЛОСКОЙ вершиной (силуэт укрепления, а не бахрома),
-//       через один крупные и мелкие: иерархия вместо метронома;
-//     • несущая полоса под ними толще тихой — но именно ПОЛОСА, а не брус: фронт
-//       должен читаться весом линии, а не размером деталей.
-//     Сдвиг фазы у встречных сторон (нормаль внутрь считается в gmBuildGeo) —
-//     редуты двух армий входят В ШАХМАТНОМ ПОРЯДКЕ, а не остриё в остриё.
-//
-// Без свечений, теней и аддитивных режимов. Всё в экранных единицах.
-const GMM_FAC_HATCH = 7;     // шаг насечек межевой полосы, px
-const GMM_FAC_POST = 34;     // шаг пограничных столбов, px
-const GMM_FAC_REDOUBT = 12;  // шаг редутов фронта, px
+// Всё в ЭКРАННЫХ единицах (делим на camS): глубина полосы не должна плыть с зумом.
+// Ступени свечения: [ширина мазка px, альфа]. Ширина СТРОКОЙ по контуру, а наружная
+// половина срезается маской — видимая глубина вдвое меньше числа.
+const GMM_FAC_GLOW = [[30, 0.045], [17, 0.06], [9, 0.085], [4, 0.13]];
+const GMM_FRONT_GLOW = [[46, 0.06], [27, 0.085], [15, 0.12], [6, 0.2]];
 function gmmPaintFacFence(ctx, camS, alpha) {
   const P = GMM.paths;
   if (!P || !P.facFence || !P.facFence.length || alpha <= 0.02) return;
   const u = 1 / camS;
-  const stepS = Math.max(6 * u, 4);
-  const du = Math.max(u, 1);
-  const q = { x: 0, y: 0, nx: 0, ny: 0 };
   // Границы фракций, в отличие от секторов, видны на ЛЮБОМ зуме — без отсева по окну
   // запекания вблизи считалась бы вся галактика на каждое перепекание.
   const W = GMM.bakeBox, mg = 30 * u;
   const skip = ch => W && (ch.x1 < W.wx0 - mg || ch.x0 > W.wx1 + mg
     || ch.y1 < W.wy0 - mg || ch.y0 > W.wy1 + mg);
-  // линия по контуру со смещением off вглубь
-  const runLine = (chains, off) => {
-    ctx.beginPath();
-    chains.forEach(ch => {
-      if (skip(ch)) return;
-      let first = true;
-      for (let s = 0; s <= ch.len; s += stepS) {
-        gmmChainAt(ch, Math.min(s, ch.len), q);
-        const x = q.x + q.nx * off, y = q.y + q.ny * off;
-        if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
-      }
-    });
-    ctx.stroke();
-  };
-  // насечки вглубь: от d0 до d1, шаг step; pick(i) — рисовать ли эту насечку
-  const runTicks = (chains, step, d0, d1, pick) => {
-    ctx.beginPath();
-    chains.forEach(ch => {
-      if (skip(ch)) return;
-      let i = 0;
-      for (let s = 0; s < ch.len; s += step, i++) {
-        if (pick && !pick(i)) continue;
-        gmmChainAt(ch, s, q);
-        ctx.moveTo(q.x + q.nx * d0, q.y + q.ny * d0);
-        ctx.lineTo(q.x + q.nx * d1, q.y + q.ny * d1);
-      }
-    });
-    ctx.stroke();
-  };
   ctx.save();
-  ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';   // на контуре карты стык только круглый
+  const flares = [];   // вынос свечения фронта наружу — вторым проходом, БЕЗ клипа
   P.facFence.forEach(g => {
+    // путь строим ОДИН раз на держава×тип рубежа, дальше только меняем ширину мазка
+    const facP = g.fac.length ? gmmChainPath(g.fac, 0, skip) : null;
+    const frontP = g.front.length ? gmmChainPath(g.front, 0, skip) : null;
     ctx.save();
-    ctx.clip(g.area);                    // ← слой-маска: всё уходит внутрь своей территории
-    ctx.strokeStyle = g.color; ctx.fillStyle = g.color;
-    // ══ ТИХИЙ РУБЕЖ: межевая полоса ══
-    if (g.fac.length) {
-      const hp = GMM_FAC_HATCH * u;
-      // код раппорта: короткая, короткая, длинная
-      ctx.globalAlpha = 0.5 * alpha; ctx.lineWidth = 0.9 * u;
-      runTicks(g.fac, hp, 0, 2.6 * u, i => i % 3 !== 2);
-      ctx.globalAlpha = 0.72 * alpha; ctx.lineWidth = 1 * u;
-      runTicks(g.fac, hp, 0, 5.4 * u, i => i % 3 === 2);
-      // пограничные столбы: вынос вглубь + залитый квадрат на конце
-      const pp = GMM_FAC_POST * u, pd = 8.5 * u, sq = 1.5 * u;
-      ctx.globalAlpha = 0.85 * alpha; ctx.lineWidth = 1.1 * u;
-      runTicks(g.fac, pp, 0, pd, null);
-      ctx.globalAlpha = 0.95 * alpha;
-      ctx.beginPath();
-      g.fac.forEach(ch => {
-        if (skip(ch)) return;
-        for (let s = 0; s < ch.len; s += pp) {
-          gmmChainAt(ch, s, q);
-          const ux = q.ny, uy = -q.nx;
-          const cx = q.x + q.nx * (pd + sq), cy = q.y + q.ny * (pd + sq);
-          ctx.moveTo(cx + ux * sq + q.nx * sq, cy + uy * sq + q.ny * sq);
-          ctx.lineTo(cx - ux * sq + q.nx * sq, cy - uy * sq + q.ny * sq);
-          ctx.lineTo(cx - ux * sq - q.nx * sq, cy - uy * sq - q.ny * sq);
-          ctx.lineTo(cx + ux * sq - q.nx * sq, cy + uy * sq - q.ny * sq);
-          ctx.closePath();
-        }
-      });
-      ctx.fill();
-      // волосяная параллель глубже — свой код дэша, не как у секторов
-      ctx.globalAlpha = 0.4 * alpha; ctx.lineWidth = 0.75 * u;
-      ctx.setLineDash([16 * du, 6 * du]);
-      runLine(g.fac, 12 * u);
-      ctx.setLineDash([]);
-    }
-    // ══ ЛИНИЯ ФРОНТА: несущая полоса + редуты ══
-    // Штриховка «зоны поражения» УБРАНА. Она начиналась в отрыве от линии, поэтому
-    // читалась не как продолжение рубежа, а как чёрточки, рассыпанные по территории:
-    // висящий в пустоте штрих ни к чему не крепится и выглядит мусором. Вес фронту
-    // даёт сама полоса и силуэт редутов — этого достаточно, лишний слой только шумел.
-    if (g.front.length) {
-      // несущая полоса — заметно толще мирной границы, но без прежней грузности
-      ctx.globalAlpha = 0.95 * alpha; ctx.lineWidth = 1.9 * u;
-      runLine(g.front, 0);
-      // редуты: трапеции с ПЛОСКОЙ вершиной, через один крупные/мелкие
-      const rp = GMM_FAC_REDOUBT * u;
-      ctx.globalAlpha = alpha;
-      ctx.beginPath();
-      g.front.forEach(ch => {
-        if (skip(ch)) return;
-        // фаза от координат цепочки: встречные стороны фронта смещены на полшага
-        const ph = gmEdgeHash(ch.x0 * 0.31, ch.y0 * 0.47) > 0.5 ? 0.5 : 0;
-        let i = 0;
-        for (let s = rp * ph; s < ch.len; s += rp, i++) {
-          gmmChainAt(ch, s, q);
-          const big = i % 2 === 0;
-          const hb = (big ? 2.9 : 2.0) * u;          // полуоснование
-          const ht = hb * 0.42;                      // полуширина плоской вершины
-          const hh = (big ? 4.1 : 2.5) * u;          // высота вглубь
-          const ux = q.ny, uy = -q.nx;
-          ctx.moveTo(q.x - ux * hb, q.y - uy * hb);
-          ctx.lineTo(q.x + q.nx * hh - ux * ht, q.y + q.ny * hh - uy * ht);
-          ctx.lineTo(q.x + q.nx * hh + ux * ht, q.y + q.ny * hh + uy * ht);
-          ctx.lineTo(q.x + ux * hb, q.y + uy * hb);
-          ctx.closePath();
-        }
-      });
-      ctx.fill();
+    ctx.clip(g.area);                    // ← слой-маска: свечение уходит внутрь своей территории
+    ctx.strokeStyle = g.color;
+    if (facP) GMM_FAC_GLOW.forEach(w => { ctx.globalAlpha = w[1] * alpha; ctx.lineWidth = w[0] * u; ctx.stroke(facP); });
+    if (frontP) {
+      GMM_FRONT_GLOW.forEach(w => { ctx.globalAlpha = w[1] * alpha; ctx.lineWidth = w[0] * u; ctx.stroke(frontP); });
+      // кромка фронта — своя, заметно плотнее общей (её рисует gmmPaintVector по всем
+      // рубежам одинаково): вес линии и есть главный признак войны на этом участке
+      ctx.globalAlpha = 0.9 * alpha; ctx.lineWidth = 2.2 * u; ctx.stroke(frontP);
+      flares.push({ p: frontP, color: g.color });
     }
     ctx.restore();
   });
+  // шов войны: мягкий вынос за рубеж. Рисуется поверх чужой территории — поэтому
+  // слабый и последним, чтобы обе стороны шва светились одинаково.
+  ctx.globalAlpha = 0.07 * alpha; ctx.lineWidth = 13 * u;
+  flares.forEach(f => { ctx.strokeStyle = f.color; ctx.stroke(f.p); });
   ctx.globalAlpha = 1;
   ctx.restore();
 }

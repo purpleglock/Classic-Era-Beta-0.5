@@ -280,6 +280,25 @@ function cabBack() {
 // Переход в ведомство ОТКУДА УГОДНО (ссылки внутри тел разделов: «продайте на
 // Рынке», «постройте во вкладке Колонии»). Заменяет прежние polGoto/estGoto/
 // heroVNGoto, которые сперва увозили игрока на главную.
+// «К делам державы» — переход в ПРИЁМНУЮ (кабинет без открытого ведомства)
+// откуда угодно: из карты, из состава державы, из админки. Раньше кнопки звали
+// heroVNGoto('g_work') — ключ группы снятого меню новеллы, которого в CAB_DEPT
+// нет, поэтому игрока просто выбрасывало на главную.
+function cabHome() {
+  if (typeof curSlug !== 'undefined' && curSlug !== 'economy') {
+    if (typeof go === 'function') go('economy');
+    let tries = 0;
+    const tick = () => {
+      if (document.getElementById('cab-stage')) { cabBack(); return; }
+      if (++tries > 60) return;
+      setTimeout(tick, 80);
+    };
+    setTimeout(tick, 80);
+    return;
+  }
+  cabBack();
+}
+
 function cabGoto(key) {
   if (!CAB_DEPT[key]) return;
   if (typeof curSlug !== 'undefined' && curSlug !== 'economy') {
