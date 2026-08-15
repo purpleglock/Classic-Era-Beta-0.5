@@ -350,6 +350,8 @@ function estRefresh(key) {
   const el = document.getElementById(s.el);
   if (!el || !el.classList.contains('show')) return;
   const secs = estSecs(key), tab = estTab(key), def = secs[tab];
+  // Раздел на экране — его «новое» прочитано (дела так не гаснут, notify.js).
+  try { if (typeof ntSeenTab === 'function') ntSeenTab(key, tab); } catch (e) {}
   if (!def) { el.innerHTML = polMsg(s.title, `estReturn.bind(null,'${key}')`, 'Разделы этого ведомства закрыты на реконструкцию.'); return; }
   const prev = el.querySelector('.pol-body');
   const keep = prev ? prev.scrollTop : 0;
@@ -360,7 +362,7 @@ function estRefresh(key) {
   finally { POL.chrome = false; }
   el.innerHTML = polHead(s.title, `estReturn.bind(null,'${key}')`) +
     `<div class="hp-vn-col-body pol-shell">
-       ${polRail(secs, tab, 'estSetCur')}
+       ${polRail(secs, tab, 'estSetCur', key)}
        <div class="pol-stage pol-body">
          ${polPrologue(key + ':' + tab, def)}
          <div class="pol-content">${body}</div>

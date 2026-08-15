@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>uni geo probe</title>
+<link rel="stylesheet" href="css/14_map.css">
+<body style="background:#07090f;color:#cfe;font:13px/1.5 monospace">
+<pre id="out">…</pre>
+<svg id="gm-svg" width="900" height="600" viewBox="3000 2000 1400 900" style="background:#04060c"></svg>
+<script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6/dist/d3-delaunay.min.js"></script>
+<script>window.d3 = { Delaunay: d3.Delaunay };</script>
+<script src="galaxy_map.js"></script>
+<script>
+// Мини-сцена: ведущая держава A (5 систем) + партнёр по унии B (4 системы,
+// faction='A', union_origin='B') + сосед C. Проверяем: появились ли рёбра kind:'uni'
+// ровно на стыке A|B, и подмешана ли краска ведущего в заливку партнёра.
+GM.factions = [
+  { id: 'A', name: 'Ведущая', color: 'rgba(200,40,120,0.5)' },
+  { id: 'B', name: 'Партнёр', color: 'rgba(90,140,190,0.5)' },
+  { id: 'C', name: 'Сосед',   color: 'rgba(60,190,150,0.5)' },
+];
+const S = [];
+let n = 0;
+const put = (x, y, fac, uo) => S.push({ id: 's' + (++n), name: 'S' + n, x, y, faction: fac, union_origin: uo || null, planets: 1 });
+for (let i = 0; i < 5; i++) put(3400 + i * 160, 2400 + (i % 2) * 150, 'A');
+for (let i = 0; i < 4; i++) put(3400 + i * 160, 2900 + (i % 2) * 150, 'A', 'B');
+for (let i = 0; i < 4; i++) put(4400 + i * 160, 2600 + (i % 2) * 150, 'C');
+GM.systems = S; GM.lanes = []; GM.capitals = {}; GM.sectors = [];
+const geo = gmBuildGeo();
+const kinds = {};
+geo.edges.forEach(e => kinds[e.kind] = (kinds[e.kind] || 0) + 1);
+const uniFills = geo.fills.filter(f => f.isUni);
+const plainFills = geo.fills.filter(f => f.fac && !f.isUni);
+out.textContent = JSON.stringify({
+  edgeKinds: kinds,
+  uniEdgeColors: [...new Set(geo.edges.filter(e => e.kind === 'uni').map(e => e.color))],
+  uniFillCount: uniFills.length,
+  uniFillColor: uniFills[0] && uniFills[0].uniCol,
+  partnerRawColor: gmFaction('B').color,
+  leaderFillColor: plainFills[0] && (plainFills[0].uniCol || plainFills[0].flagFac.color),
+}, null, 2);
+gmDrawSvg();
+</script>

@@ -263,6 +263,10 @@ function cabOpen(key) {
   if (!cabDepts()[key]) return;
   cabCloseAll(key);
   CAB.dept = key;
+  // Ведомственные каналы без своей вкладки (экран без рельсы: разведка,
+  // колонии, наука) гасит сам вход. Каналы конкретных разделов гасит их
+  // отрисовка — estRefresh/polRefresh/dipRefresh, см. ntSeenTab.
+  try { if (typeof ntSeenTab === 'function') ntSeenTab(key); } catch (e) {}
   cabPaint();
   // Прыжок вверх: вкладку переключили — читать её начинают с шапки, а не
   // с той высоты, до которой доскроллили предыдущую.
@@ -299,8 +303,22 @@ function cabHome() {
   cabBack();
 }
 
-function cabGoto(key) {
+// Заранее выставить РАЗДЕЛ ведомства, в который идём. Нужно переходам по делу
+// (строка панели оповещений): «Зовут в союз» обязано открыть вкладку «Союзы», а
+// не приземлить игрока на «Границы» и оставить искать. Ставим состояние ДО
+// открытия — экран рисуется сразу нужным разделом, без второй перерисовки.
+function cabPreTab(key, tab) {
+  if (!tab) return;
+  try {
+    if (key === 'ipol' && typeof POL === 'object') POL.tab = tab;
+    else if (key === 'dipl' && typeof POL === 'object') POL.dtab = tab;
+    else if (typeof EST === 'object' && EST.tab) EST.tab[key] = tab;
+  } catch (e) {}
+}
+
+function cabGoto(key, tab) {
   if (!CAB_DEPT[key]) return;
+  cabPreTab(key, tab);
   if (typeof curSlug !== 'undefined' && curSlug !== 'economy') {
     // Переход НАСТОЯЩИЙ (в истории появляется #economy), а дальше ждём, пока
     // страница нарисуется и появятся контейнеры экранов.
@@ -384,6 +402,11 @@ function _cabAch(feed) {
 
 function cabDeskHtml() {
   cabNewsBoot();
+  // Стол — это и есть сводка с упоминаниями. Раз он на экране, читать их
+  // где-то ещё уже не нужно: гасим оба канала. Метка ставится один раз (ntMark
+  // молча выходит, когда счётчик уже ноль), поэтому фоновые перерисовки
+  // приёмной сервер не дёргают.
+  try { if (typeof ntSeenDesk === 'function') ntSeenDesk(); } catch (e) {}
   const feed = _cabFeed();
   const mine = _cabMentions(feed).slice(0, 5);
   const ach = _cabAch(feed).slice(0, 5);
@@ -457,8 +480,21 @@ function cabPaint() {
 
   const depts = cabDepts();
   const glyph = k => (typeof polGlyph === 'function' ? polGlyph(k) : '');
+  // ⚠️ БЕЙДЖ БОЛЬШЕ НЕ ОДИН. Раньше число висело ровно на «Двору» и считалось
+  // здесь же из FM.me.inbox — единственное ведомство на весь кабинет, которое
+  // умело сказать «тебя ждут». Теперь число берётся из общего счёта (notify.js,
+  // notif_counts): каждая дверь показывает, сколько дел ждёт ЗА НЕЙ. `data-nt`
+  // нужен, чтобы фоновый опрос обновлял цифру на месте, не перерисовывая
+  // кабинет под руками игрока (ntRepaint).
   const inbox = (typeof FM === 'object' && FM.me && FM.me.is_owner && !EC.actAs) ? (+FM.me.inbox || 0) : 0;
-  const badge = k => (k === 'ipol' && inbox) ? `<span class="cab-door-n">${inbox}</span>` : '';
+  const deptN = k => {
+    const n = (typeof ntDept === 'function') ? ntDept(k) : 0;
+    return (k === 'ipol' && !n) ? inbox : n;   // до первого счёта «Двор» знает своё сам
+  };
+  const badge = k => {
+    const n = deptN(k);
+    return `<span class="cab-door-n nt-badge${n ? '' : ' nt-off'}" data-nt="${k}">${n ? (typeof ntNum === 'function' ? ntNum(n) : n) : ''}</span>`;
+  };
 
   // Рельса ведомств — то самое «листать кабинет»: из казны в военпром одним
   // кликом, без возврата в приёмную. Порядок — как в приёмной (по укладу).
@@ -484,7 +520,10 @@ function cabPaint() {
         <button class="cab-door" type="button" onclick="cabOpen('${k}')">
           <span class="cab-door-ic">${glyph(d.ic)}</span>
           <span class="cab-door-tx"><b>${esc(d.nm)}</b><i>${esc(d.sub)}</i></span>
-          ${badge(k) || '<span class="cab-door-arr">↗</span>'}
+          <!-- Число и стрелка — соседи, а не «или/или»: узел бейджа стоит в
+               разметке ВСЕГДА (иначе фоновому опросу нечего было бы заполнять),
+               а стрелку прячет CSS, когда у соседа есть цифра. -->
+          ${badge(k)}<span class="cab-door-arr">↗</span>
         </button>`).join('')}</div>
     </section>`;
   }).join('');
@@ -499,6 +538,9 @@ function cabPaint() {
         <div class="ec-cover-row">
           <h1 class="ec-cover-title">${esc(EC.app.name || 'Моя держава')}</h1>
           <div class="ec-cover-btns">
+            <button class="btn btn-gh btn-sm cab-bell" onclick="ntToggle()" title="Оповещения: что ждёт вашего решения">
+              ${typeof ntBellIco === 'function' ? ntBellIco() : ''}<span class="nt-badge nt-badge-bell${(typeof ntTotal === 'function' && ntTotal()) ? '' : ' nt-off'}" data-nt="*">${(typeof ntTotal === 'function' && ntTotal()) ? ntNum(ntTotal()) : ''}</span>
+            </button>
             <button class="btn btn-gh btn-sm" onclick="go('home')" title="Вернуться к сцене на главной">↩ На главную</button>
             <button class="btn btn-gh btn-sm" onclick="go('guide')" title="Полные правила и механики игры">❓ Как играть</button>
           </div>

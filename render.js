@@ -1743,6 +1743,10 @@ function buildNav(filt='') {
     // его до-рисовывает hsNavBadge() после загрузки кабинета/страницы.
     const hsN = (typeof EC!=='undefined' && Array.isArray(EC.battles)) ? EC.battles.length : 0;
     h+=`<a class="n-home${curSlug==='hotspots'?' on':''}" id="ntl-hot" href="#hotspots" onclick="return navGo(event,'hotspots')"><span class="n-home-icon">${navIco('swords')}</span>${L('Горячие точки','Hotspots')}${hsN?`<span class="hs-badge">${hsN}</span>`:''}</a>`;
+    // ☍ Оповещения — колокол. Стоит В БОРТЕ, а не в кабинете: дела копятся,
+    // пока игрок сидит на карте, в конструкторе или в вики, и узнавать о них
+    // только после захода в кабинет — то же молчание, от которого уходили.
+    if (typeof ntNavHtml==='function') h+=ntNavHtml();
   }
   h+=`<a class="n-home${curSlug==='map'?' on':''}" id="ntl-map" href="#map" onclick="return navGo(event,'map')"><span class="n-home-icon">${navIco('galaxy')}</span>${L('Карта галактики','Galaxy map')}</a>`;
   h+=`<a class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" href="#factions" onclick="return navGo(event,'factions')"><span class="n-home-icon">${navIco('banner')}</span>${L('Фракции','Factions')}</a>`;
@@ -4007,6 +4011,12 @@ function _heroColonyBuild(en) {
       const d = dOf(e.pts);
       if (e.kind === 'neutral') { bLine += `<path d="${d}" fill="none" stroke="rgba(155,175,205,.2)" stroke-width="${nf(LW * 0.7)}" stroke-linecap="round"></path>`; return; }
       if (e.kind === 'rift') { bLine += `<path d="${d}" fill="none" stroke="#c060ff" stroke-width="${nf(LW)}" stroke-dasharray="${nf(R * 0.007)},${nf(R * 0.006)}" opacity=".55" stroke-linecap="round"></path>`; return; }
+      // обрез земли партнёра по унии: волосяная линия без гало и без пунктира
+      // (держава одна — контур у неё общий, а это лишь очертания владения)
+      if (e.kind === 'uni') {
+        bLine += `<path d="${d}" fill="none" stroke="${e.color}" stroke-width="${nf(LW * 0.6)}" opacity=".5" stroke-linecap="round"></path>`;
+        return;
+      }
       const col = e.color || myColor;
       const mineE = !!mySolid && col === mySolid;
       bGlow += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${nf(mineE ? GW : GW * 0.62)}" opacity="${mineE ? '.5' : '.24'}" stroke-linejoin="round" stroke-linecap="round"></path>`;

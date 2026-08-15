@@ -66,6 +66,15 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 .gm-glow-layer .vor-edge{stroke-width:calc(var(--cell-w,2) * 3.6)}
 /* линия фронта чуть ярче обычной границы — спорный рубеж заметнее */
 .vor-front{opacity:.95}
+/* УНИЯ. Держава одна — внешний контур у неё общий, поэтому земля партнёра несёт
+   не свою границу, а ПОЛОСЫ ВЕДУЩЕГО поверх собственной краски (приём подчинённого
+   владения; pattern gm-uni-pat) + волосяной обрез в своей краске на стыке.
+   Ни пунктира (он занят секторами), ни подмеса красок (смесь двух опознавательных
+   цветов не читается ни как один, ни как другой). */
+.vor-uni{stroke-width:calc(var(--cell-w,2) * 0.7);opacity:.55}
+/* полосы — ПРИЗНАК, а не узор: на пределе различимости, чтобы не спорить ни с
+   краской партнёра под ними, ни с гербом-подложкой, ни с сетью гиперпутей */
+.gm-uni-hatch{pointer-events:none;opacity:.15}
 #gm-svg.gm-noborders .vor-layer,#gm-svg.gm-noborders .vor-border-layer{display:none}
 /* Гиперпути */
 .hyperlane{fill:none;stroke:hsl(206 92% 64%);stroke-width:var(--lane-w,3);stroke-linecap:round;stroke-linejoin:round}

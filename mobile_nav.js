@@ -243,10 +243,24 @@ function mnavDeptBody() {
   const depts = (typeof cabDepts === 'function') ? cabDepts() : {};
   const groups = (typeof CAB_GRP !== 'undefined') ? CAB_GRP : [];
   const cur = mnavDept();
+  // Хвост строки = сколько дел ждёт за этим ведомством (общий счёт, notify.js).
+  // FM.me.inbox остаётся запасным для «Двора»: лист открывают и до первого
+  // ответа notif_counts, и в этот миг единственное известное число — его.
   let inbox = 0;
   try { inbox = (typeof FM === 'object' && FM.me && FM.me.is_owner && !EC.actAs) ? (+FM.me.inbox || 0) : 0; } catch (e) {}
+  const deptN = k => {
+    let n = 0;
+    try { n = (typeof ntDept === 'function') ? ntDept(k) : 0; } catch (e) {}
+    if (k === 'ipol' && !n) n = inbox;
+    return n ? (typeof ntNum === 'function' ? ntNum(n) : String(n)) : '';
+  };
 
+  // Оповещения первой строкой листа: на телефоне борта с колоколом нет вовсе,
+  // и без этой строки счётчик до игрока не доехал бы никак.
+  let ntAll = 0;
+  try { ntAll = (typeof ntTotal === 'function') ? ntTotal() : 0; } catch (e) {}
   let html = `<div class="mn-grp">
+    ${mnavRow('nt:open', (typeof ntBellIco === 'function' ? ntBellIco() : ''), 'Оповещения', 'что ждёт вашего решения', ntAll ? ntNum(ntAll) : '', false)}
     ${mnavRow('go:home', mnavGl('hall'), 'Приёмная', 'сводка сектора и все двери', '', !cur)}
   </div>`;
 
@@ -255,7 +269,7 @@ function mnavDeptBody() {
     if (!items.length) return;
     html += `<div class="mn-grp"><h3 class="mn-grp-hd">${esc(label)}</h3>` +
       items.map(([k, d]) => mnavRow('dept:' + k, mnavDeptGl(d.ic), d.nm, d.sub,
-        (k === 'ipol' && inbox) ? String(inbox) : '', k === cur)).join('') + '</div>';
+        deptN(k), k === cur)).join('') + '</div>';
   });
 
   // Выход из работы — внизу листа, а не только на обложке кабинета: из
@@ -346,6 +360,7 @@ function mnavClick(e) {
     return;
   }
   if (a === 'site:home') { mnavClose(); if (typeof go === 'function') go('home'); return; }
+  if (a === 'nt:open') { mnavClose(); if (typeof ntOpen === 'function') ntOpen(); return; }
   if (a === 'dept') { mnavOpen('dept'); return; }
   if (a === 'sect') { mnavOpen('sect'); return; }
 

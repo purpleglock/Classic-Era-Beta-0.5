@@ -1,0 +1,125 @@
+/* ═══════════════════════════════════════════════════════════════
+   ОПОВЕЩЕНИЯ (notify.js)
+
+   ⚠️ ОДИН ВИД БЕЙДЖА НА ВЕСЬ САЙТ. До этого числа рисовались порознь и разной
+   породы: круглая синяя таблетка у дверей кабинета (.cab-door-n) и гранёная
+   розовая нашивка у «Горячих точек» (.hs-badge). Оба остаются на своих местах,
+   но всё НОВОЕ считает `.nt-badge` — гранёный скос той же формы, что нашивка
+   боёв, потому что это язык интерфейса игры, а не круглый значок мессенджера.
+
+   ЦВЕТ РАЗДЕЛЯЕТ ПОРОДЫ: дело, которое ЖДЁТ РЕШЕНИЯ, — тревожное (акцент), а
+   непрочитанное — приглушённое. Иначе шесть новостей кричали бы так же, как
+   пропущенный ход в бою.
+
+   ЭМОДЗИ НЕТ (см. no-emoji-outline-svg-icons): колокол — контурный SVG.
+   ═══════════════════════════════════════════════════════════════ */
+
+.nt-badge{
+  flex:0 0 auto;margin-left:auto;min-width:18px;padding:1px 6px;
+  text-align:center;font-size:11px;font-weight:700;line-height:16px;
+  font-family:var(--font-mono,monospace);
+  background:rgba(255,60,130,.16);color:#ff5c8a;
+  clip-path:polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px);
+}
+/* Ноль — это НЕ «0», это отсутствие. Узел остаётся в разметке (фоновому опросу
+   надо куда-то писать цифру, см. ntRepaint), но исчезает с глаз. */
+.nt-badge.nt-off{display:none}
+
+/* Стрелка на двери кабинета уступает место цифре. Правило соседства, а не
+   ветка в шаблоне: класс `.nt-off` снимает фоновый опрос — и стрелка
+   возвращается сама, без перерисовки двери. */
+.cab-door-n.nt-badge:not(.nt-off) + .cab-door-arr{display:none}
+
+/* ── Рельса разделов (polRail): бейдж на самой вкладке ────────
+   Главное место всей системы: цифра стоит НА РАЗДЕЛЕ, где лежит дело, — а не
+   на ведомстве, после которого игрок обходит семь вкладок вручную. */
+.pol-rail-b{position:relative}
+.pol-rail-b .pol-rail-nt{margin-left:auto;align-self:center}
+/* Свёрнутая рельса телефона показывает один раздел — цифра на ней считает
+   ОСТАЛЬНЫЕ, иначе на телефоне бейджи не увидит никто. Стоит перед «3 / 7». */
+.pol-rail-cur .pol-rail-nt{margin-left:auto;margin-right:6px}
+.pol-rail-cur .pol-rail-nt + .pol-rail-n{margin-left:0}
+
+/* ── Колокол ────────────────────────────────────────────────── */
+.nt-nav{position:relative}
+.nt-badge-nav{margin-left:auto}
+.cab-bell{display:inline-flex;align-items:center;gap:6px;padding-inline:8px}
+.cab-bell .nav-i{width:16px;height:16px}
+.nt-badge-bell{margin-left:0}
+/* Борт ужат до колонки глифов — подписи нет, и бейдж садится на сам значок.
+   ⚠️ ТОЛЬКО НА МОНИТОРЕ: на телефоне борт открывается ящиком во всю ширину и
+   подпись у пункта есть, так что цифра в углу значка там была бы прилеплена
+   к иконке посреди пустой строки. */
+@media (min-width:769px){
+  #app.cab-mode #sb .nt-nav .nt-badge{
+    position:absolute;top:4px;right:4px;margin:0;min-width:14px;padding:0 3px;
+    font-size:9px;line-height:13px;
+  }
+}
+
+/* ── Панель ─────────────────────────────────────────────────── */
+.nt-wrap{
+  position:fixed;inset:0;z-index:9000;
+  background:rgba(6,8,12,.55);backdrop-filter:blur(2px);
+  display:flex;align-items:flex-start;justify-content:flex-end;
+  padding:64px 18px 18px;
+}
+.nt-panel{
+  width:min(380px,100%);max-height:min(70vh,620px);overflow:auto;
+  background:var(--b1,#0e1116);border:1px solid var(--bd,rgba(255,255,255,.12));
+  box-shadow:0 18px 48px rgba(0,0,0,.55);
+}
+.nt-panel-hd{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:11px 14px;border-bottom:1px solid var(--bd,rgba(255,255,255,.12));
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3,#8a94a6);
+  font-family:var(--font-mono,monospace);
+  position:sticky;top:0;background:var(--b1,#0e1116);
+}
+.nt-x{background:none;border:0;color:var(--t4,#6b7484);cursor:pointer;font-size:13px;padding:2px 4px}
+.nt-x:hover{color:var(--t1,#e6ebf2)}
+
+.nt-row{
+  width:100%;display:flex;align-items:center;gap:11px;
+  padding:11px 14px;background:none;border:0;cursor:pointer;text-align:left;
+  border-bottom:1px solid rgba(255,255,255,.05);color:inherit;
+}
+.nt-row:hover{background:rgba(255,255,255,.04)}
+.nt-row-ic{flex:0 0 auto;width:22px;height:22px;color:var(--t3,#8a94a6);display:flex}
+.nt-row-ic svg{width:22px;height:22px}
+.nt-row-tx{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nt-row-tx b{font-size:13px;font-weight:600;color:var(--t1,#e6ebf2)}
+.nt-row-tx i{font-size:11px;font-style:normal;color:var(--t4,#6b7484)}
+/* Чтение — приглушённое; дело, ждущее решения, — тревожное. */
+.nt-row-n{
+  flex:0 0 auto;min-width:20px;padding:1px 7px;text-align:center;
+  font-family:var(--font-mono,monospace);font-size:11px;font-weight:700;line-height:17px;
+  background:rgba(255,255,255,.07);color:var(--t2,#b9c2d0);
+  clip-path:polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px);
+}
+.nt-row-n-todo{background:rgba(255,60,130,.16);color:#ff5c8a}
+
+.nt-empty{padding:22px 16px;text-align:center;font-size:12px;color:var(--t4,#6b7484)}
+
+/* ── Телефон ────────────────────────────────────────────────────
+   Панель приезжает СНИЗУ листом, а не висит окном в углу: до правого верхнего
+   угла большого экрана большим пальцем не дотянуться, и лист — это тот же жест,
+   которым на телефоне уже открывается нижняя панель кабинета (#mnav-sheet). */
+@media (max-width:768px){
+  .nt-wrap{align-items:flex-end;justify-content:center;padding:0}
+  .nt-panel{
+    width:100%;max-height:78vh;
+    /* ⚠️ ДОМАШНЯЯ ПОЛОСА iPhone. Лист прижат к нижней кромке, и без этого отступа
+       последняя строка списка оказывалась ПОД индикатором — по ней нельзя было
+       попасть, а выглядело это как обрезанный список. */
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  /* Строку делаем выше пальца, а не мыши: 55px это ~7 мм, впритык к минимуму. */
+  .nt-row{padding:14px 16px}
+  .nt-panel-hd{padding:13px 16px}
+}
+/* ⚠️ КОЛОКОЛ В ШАПКЕ КАБИНЕТА ЛИШНИЙ НА ТЕЛЕФОНЕ. Там оповещения — ПЕРВАЯ строка
+   листа нижней панели (mnavDeptBody), до которой рукой ближе, чем до шапки за
+   двумя экранами прокрутки. Две двери в одно и то же на узком экране — это не
+   удобство, а лишняя кнопка в ряду, который и так переносится на две строки. */
+html.mnav-on .cab-bell{display:none}

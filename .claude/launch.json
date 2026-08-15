@@ -100,6 +100,16 @@
         "8172"
       ],
       "port": 8172
+    },
+    {
+      "name": "notify",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8181"
+      ],
+      "port": 8181
     }
   ]
 }

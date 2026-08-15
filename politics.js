@@ -302,15 +302,32 @@ function polChapName(t) {
 // сворачивается в ОДНУ строку с текущим разделом и счётчиком «1 / 7» — по
 // тапу она раскрывается сеткой, где видны все разделы разом. Разметку даём
 // одну на оба случая, разводит их CSS (29_vn_mobile.css).
-function polRail(map, cur, fn) {
+// ⚠️ БЕЙДЖ ЖИВЁТ ЗДЕСЬ, А НЕ В КАЖДОМ ЭКРАНЕ. Рельсу рисуют ВСЕ разделы работы —
+// внутренняя политика, внешняя и все шесть ведомств хозяйства (estRefresh).
+// Значит и «сколько тут ждёт» показывается в одном месте, одинаково: иначе
+// девять экранов завели бы девять форм счётчика, как было с полосами вкладок.
+// `dept` — ключ ведомства (CAB_DEPT), нужен, чтобы спросить у notify.js счёт
+// именно этой вкладки (канал `ведомство.вкладка`). Не передали — рельса просто
+// без цифр, как была.
+function polRail(map, cur, fn, dept) {
   const ent = Object.entries(map);
   const i = Math.max(0, ent.findIndex(([k]) => k === cur));
   const d0 = (ent[i] || ent[0] || [null, { nm: '', scene: '' }])[1];
+  const nOf = k => { try { return (dept && typeof ntTab === 'function') ? ntTab(dept, k) : 0; } catch (e) { return 0; } };
+  // Свёрнутая рельса телефона показывает ТОЛЬКО текущий раздел — а дело может
+  // ждать в любом другом. Поэтому на закрытой строке висит счёт по ОСТАЛЬНЫМ
+  // разделам: иначе на телефоне бейджи не увидит никто.
+  const rest = ent.reduce((s, [k]) => s + (k === cur ? 0 : nOf(k)), 0);
+  const badge = (k, cls) => {
+    const n = nOf(k);
+    return `<span class="nt-badge pol-rail-nt ${cls || ''}${n ? '' : ' nt-off'}" data-nt="${dept ? dept + '.' + k : ''}">${n ? (typeof ntNum === 'function' ? ntNum(n) : n) : ''}</span>`;
+  };
   return `<div class="pol-railw">
     <button class="pol-rail-cur" type="button" aria-expanded="false"
             onclick="event.stopPropagation();polRailToggle(this)">
       <span class="pol-rail-ic">${polGlyph(d0.scene)}</span>
       <span class="pol-rail-tx"><b>${esc(d0.nm)}</b></span>
+      <span class="nt-badge pol-rail-nt${rest ? '' : ' nt-off'}" data-nt="${dept ? '~' + dept + ':' + cur : ''}">${rest ? (typeof ntNum === 'function' ? ntNum(rest) : rest) : ''}</span>
       <span class="pol-rail-n">${i + 1} / ${ent.length}</span>
       <span class="pol-rail-chev" aria-hidden="true">▾</span>
     </button>
@@ -318,6 +335,7 @@ function polRail(map, cur, fn) {
     `<button class="pol-rail-b${k === cur ? ' on' : ''}" type="button" onclick="event.stopPropagation();${fn}('${k}')">
        <span class="pol-rail-ic">${polGlyph(d.scene)}</span>
        <span class="pol-rail-tx"><b>${esc(d.nm)}</b></span>
+       ${dept ? badge(k) : ''}
      </button>`).join('')}</nav>
   </div>`;
 }
@@ -445,6 +463,7 @@ function polRefresh() {
   const el = document.getElementById('hp-vn-pol');
   if (!el || !el.classList.contains('show')) return;
   const def = POL_SEC[POL.tab] || POL_SEC.court;
+  try { if (typeof ntSeenTab === 'function') ntSeenTab('ipol', POL.tab); } catch (e) {}
   const prev = el.querySelector('.pol-body');
   const keep = prev ? prev.scrollTop : 0;
   let body;
@@ -454,7 +473,7 @@ function polRefresh() {
   finally { POL.chrome = false; }
   el.innerHTML = polHead('Внутренняя политика', 'polReturn') +
     `<div class="hp-vn-col-body pol-shell">
-       ${polRail(POL_SEC, POL.tab, 'polSet')}
+       ${polRail(POL_SEC, POL.tab, 'polSet', 'ipol')}
        <div class="pol-stage pol-body">
          ${polPrologue(POL.tab, def)}
          <div class="pol-content">${body}</div>
@@ -713,6 +732,7 @@ function dipRefresh() {
   const el = document.getElementById('hp-vn-dip');
   if (!el || !el.classList.contains('show')) return;
   const def = POL_DSEC[POL.dtab] || POL_DSEC.relations;
+  try { if (typeof ntSeenTab === 'function') ntSeenTab('dipl', POL.dtab); } catch (e) {}
   const prev = el.querySelector('.pol-body');
   const keep = prev ? prev.scrollTop : 0;
   let body;
@@ -722,7 +742,7 @@ function dipRefresh() {
   finally { POL.chrome = false; }
   el.innerHTML = polHead('Внешняя политика', 'dipReturn') +
     `<div class="hp-vn-col-body pol-shell">
-       ${polRail(POL_DSEC, POL.dtab, 'dipSet')}
+       ${polRail(POL_DSEC, POL.dtab, 'dipSet', 'dipl')}
        <div class="pol-stage pol-body">
          ${polPrologue(POL.dtab, def)}
          <div class="pol-content">${body}</div>

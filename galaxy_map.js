@@ -1266,8 +1266,22 @@ function gmBuildGeo() {
     // Уния: заливка/границы идут по ведущему (fac=единая держава), но ГЕРАЛЬДИКУ
     // накладываем по ИСХОДНОМУ владельцу — территория партнёра держит свой флаг.
     const flagFac = sys.union_origin ? (gmFaction(sys.union_origin) || fac) : fac;
+    // ПАРТНЁР ПО УНИИ — не «чужая держава внутри чужого контура». Его земля
+    // заливалась собственной краской и без единой линии на стыке: на карте это
+    // читалось как случайное пятно, залитое внутрь границы ведущего.
+    // Картографический приём подчинённого владения (полосы сюзерена поверх
+    // собственной краски вассала): цвет партнёра остаётся ЧИСТЫМ — это его земля,
+    // — а принадлежность общей державе несут ПОЛОСЫ ведущего поверх неё
+    // (uniLead → штриховка, см. gmmPaintUniHatch / pattern в SVG). Подмешивать
+    // краски друг в друга нельзя: смесь двух опознавательных цветов не читается
+    // ни как один, ни как другой — выходит грязь.
+    const isUni = !!(fac && flagFac && flagFac.id !== fac.id);
     const pts = gmPerturbPoly(poly);
-    fills.push({ sys, fac, flagFac, isRift: !!(fac && fac.id === 'rift'), pts });
+    fills.push({
+      sys, fac, flagFac, isUni, pts,
+      isRift: !!(fac && fac.id === 'rift'),
+      uniLead: isUni ? fac.color : null,
+    });
     const sid = secOfSys[sys.id];
     if (sid) { const sec = sectorsR.find(x => x.id === sid); if (sec) secFills.push({ secId: sid, color: sec.color || 'rgba(120,200,255,0.5)', pts }); }
   });
@@ -1288,7 +1302,8 @@ function gmBuildGeo() {
       const k = ekey(poly[i], poly[i + 1]);
       let e = edgeMap.get(k);
       if (!e) { e = { a: poly[i], b: poly[i + 1], sides: [] }; edgeMap.set(k, e); }
-      e.sides.push({ fid, secId, oid: sys.id, ph: !!sys.phantom, sx: sys.x, sy: sys.y });
+      // uo — ИСХОДНЫЙ владелец (при унии партнёр): по нему проходит внутренний рубеж
+      e.sides.push({ fid, uo: sys.union_origin || fid, secId, oid: sys.id, ph: !!sys.phantom, sx: sys.x, sy: sys.y });
     }
   });
   const edges = [];   // {kind:'front'|'fac'|'rift'|'neutral', color?, pts}
@@ -1298,7 +1313,22 @@ function gmBuildGeo() {
     if (e.sides.every(s => s.ph)) return;                                 // ребро в глубине пустоты — скрыто туманом
     const facSides = e.sides.filter(s => s.fid && gmFaction(s.fid));
     const distinct = [...new Set(facSides.map(s => s.fid))];
-    if (facSides.length === 2 && distinct.length === 1) return; // внутреннее ребро одной фракции
+    if (facSides.length === 2 && distinct.length === 1) {
+      // Внутреннее ребро одной державы — но если по разные стороны РАЗНЫЕ исходные
+      // владельцы (уния/объединение), это не пустой шов, а ВНУТРЕННИЙ РУБЕЖ: земля
+      // партнёра сохраняет очертания. Государственной линией его рисовать нельзя
+      // (держава одна), пунктиром — тоже: пунктир на карте уже занят секторами.
+      // Волосяная сплошная линия в краске партнёра: обрез его земли, не рубеж.
+      const uo = [...new Set(facSides.map(s => s.uo))];
+      if (uo.length < 2) return;
+      const part = facSides.find(s => s.uo !== s.fid) || facSides[0];
+      const pf = gmFaction(part.uo);
+      if (!pf || pf.id === 'rift') return;
+      // краска — ОСВЕТЛЁННАЯ партнёрская (gmReadable): линия лежит поверх собственной
+      // же заливки, и плотный вариант того же тона на ней попросту не читается
+      edges.push({ kind: 'uni', fid: part.fid, uo: part.uo, color: gmReadable(pf.color), pts: gmPerturbEdge(e.a, e.b) });
+      return;
+    }
     const pts = gmPerturbEdge(e.a, e.b);
     if (distinct.length >= 2) {
       // ── ЛИНИЯ ФРОНТА: две границы, каждая смещена к своей стороне ──
@@ -1463,14 +1493,31 @@ function gmDrawSvg() {
     return `<path class="${cls}" d="${d}" fill="${fill}" stroke="none"></path>`;
   }).join('');
 
+  // ── ПОЛОСЫ ВЕДУЩЕГО над землёй партнёра по унии ──
+  //    Землю партнёра красит его собственный цвет, а то, что она под общей короной,
+  //    несут диагональные полосы в краске ведущего (см. gmBuildGeo). Шаг и вес полос
+  //    постоянны на экране — выставляются в gmUpdateStrokes.
+  const uniByLead = new Map();
+  geo.fills.forEach(f => {
+    if (!f.isUni || f.isRift || GM.showEcon) return;
+    uniByLead.set(f.uniLead, (uniByLead.get(f.uniLead) || '') + dOf(f.pts, true));
+  });
+  const uniLeads = [...uniByLead.keys()];
+  const uniDefs = uniLeads.map((c, i) =>
+    `<pattern id="gm-uni-p${i}" class="gm-uni-pat" patternUnits="userSpaceOnUse" patternTransform="rotate(45)" width="9" height="9">`
+    + `<line class="gm-uni-str" x1="0" y1="0" x2="0" y2="13" stroke="${gmReadable(c)}" stroke-width="0.9"></line></pattern>`).join('');
+  const uniHatchHtml = uniLeads.map((c, i) =>
+    `<path class="gm-uni-hatch" d="${uniByLead.get(c)}" fill="url(#gm-uni-p${i})" stroke="none"></path>`).join('');
+
   // подложка территории сектора (поверх заливок фракций, под границами)
   const secFillHtml = (geo.secFills || []).map(f =>
     `<path class="gm-sec-fill" d="${dOf(f.pts, true)}" fill="${f.color}" stroke="none"></path>`).join('');
 
-  const facBorderHtml = [], neutralBorderHtml = [];
+  const facBorderHtml = [], neutralBorderHtml = [], uniBorderHtml = [];
   geo.edges.forEach(e => {
     const d = dOf(e.pts);
-    if (e.kind === 'front') facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed vor-front" d="${d}" fill="none" stroke="${e.color}"></path>`);
+    if (e.kind === 'uni') uniBorderHtml.push(`<path class="vor-cell vor-edge vor-uni" d="${d}" fill="none" stroke="${e.color}"></path>`);
+    else if (e.kind === 'front') facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed vor-front" d="${d}" fill="none" stroke="${e.color}"></path>`);
     else if (e.kind === 'rift') facBorderHtml.push(`<path class="vor-cell vor-edge vor-rift-edge" d="${d}" fill="none"></path>`);
     else if (e.kind === 'fac') facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed" d="${d}" fill="none" stroke="${e.color}"></path>`);
     else neutralBorderHtml.push(`<path class="vor-cell vor-edge vor-neutral" d="${d}" fill="none" stroke="${e.color}"></path>`);
@@ -1533,10 +1580,12 @@ function gmDrawSvg() {
   // Редактор: glow-дубли границ и гало/ореол секторов не собираем вовсе —
   // это чистая декорация, а DOM у неё размером с сами границы.
   svg.innerHTML =
-    `<g class="vor-layer">${fillHtml}</g>`
+    `<defs>${uniDefs}</defs>`
+    + `<g class="vor-layer">${fillHtml}</g>`
+    + `<g class="vor-layer">${uniHatchHtml}</g>`
     + `<g class="sec-fill-layer">${secFillHtml}</g>`
     + (GM.editSession ? '' : `<g class="vor-border-layer gm-glow-layer">${fb}</g>`)
-    + `<g class="vor-border-layer">${neutralBorderHtml.join('')}${fb}</g>`
+    + `<g class="vor-border-layer">${neutralBorderHtml.join('')}${uniBorderHtml.join('')}${fb}</g>`
     + `<g class="lane-layer">${laneHtml}</g>`
     + `<g class="sec-layer">${GM.editSession ? '' : secGlow + secLineB}${secLine}${secLabelHtml}${secHit}</g>`;
   svg.classList.toggle('gm-noborders', !GM.showBorders);
@@ -1559,6 +1608,14 @@ function gmUpdateStrokes() {
   // картографические засечки: редкий короткий дэш в мировых юнитах
   const d = k => (k / s).toFixed(2);
   svg.style.setProperty('--sec-dash', `${d(1.2)} ${d(26)}`);
+  // ПОЛОСЫ УНИИ: шаг и вес постоянны на экране. Пробел паттерна задаётся атрибутами
+  // (CSS-переменные в width/height <pattern> не работают), поэтому правим их здесь.
+  const step = 13 / s, sw = 0.9 / s;
+  svg.querySelectorAll('.gm-uni-pat').forEach(p => {
+    p.setAttribute('width', step.toFixed(2)); p.setAttribute('height', step.toFixed(2));
+    const ln = p.firstElementChild;
+    if (ln) { ln.setAttribute('y2', step.toFixed(2)); ln.setAttribute('stroke-width', sw.toFixed(2)); }
+  });
   // LOD подписей: вдали (мелкий зум) прячем имена рядовых систем — остаются
   // только гиганты, столицы и разломы. Вблизи показываем все.
   const wrap = document.getElementById('gm-wrap');
@@ -6434,6 +6491,7 @@ function gmmBuildWorld() {
   // домен системы на глубоком зуме светился ПО ФОРМЕ РЕГИОНА, а не кругом.
   const sysCellD = new Map();
   const facMaskD = new Map();   // fid → площадь территории (слой-маска ограждения)
+  const uniLeadD = new Map();   // краска ведущего → земля его партнёров по унии (полосы)
   geo.fills.forEach(f => {
     const isNeutral = !f.isRift && !f.fac;
     // краска ячейки — по ГЕРАЛЬДИКЕ (исходный владелец при унии), см. gmBuildGeo
@@ -6468,6 +6526,16 @@ function gmmBuildWorld() {
         if (dd > e.reach) e.reach = dd;
       }
     }
+    // земля партнёров по унии — по краске ВЕДУЩЕГО: её полосы лягут поверх (gmmPaintUniHatch)
+    if (f.isUni && f.uniLead) {
+      let g = uniLeadD.get(f.uniLead);
+      if (!g) uniLeadD.set(f.uniLead, g = { d: '', x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 });
+      g.d += d;
+      for (const p of f.pts) {
+        if (p[0] < g.x0) g.x0 = p[0]; if (p[0] > g.x1) g.x1 = p[0];
+        if (p[1] < g.y0) g.y0 = p[1]; if (p[1] > g.y1) g.y1 = p[1];
+      }
+    }
     // Маска площади по ФАКТИЧЕСКОМУ владельцу. facD ниже ключуется ГЕРАЛЬДИКОЙ
     // (при унии это партнёр), а ограждению нужен тот, чьи границы мы обводим.
     if (!f.isRift && f.fac && f.fac.id) facMaskD.set(f.fac.id, (facMaskD.get(f.fac.id) || '') + d);
@@ -6498,10 +6566,12 @@ function gmmBuildWorld() {
   // (offset по нормали e.nrm внутрь территории). Печётся отдельным Path2D (stroke) —
   // тонкая яркая линия-спутник вдоль рубежа, без заливных зубцов/шипов.
   const edgeD = new Map(); let neutralD = '', riftD = '';
+  const uniD = new Map();   // внутренние рубежи унии по цвету партнёра (пунктир, см. gmBuildGeo)
   geo.edges.forEach(e => {
     const d = dOf(e.pts);
     if (e.kind === 'neutral') neutralD += d;
     else if (e.kind === 'rift') riftD += d;
+    else if (e.kind === 'uni') uniD.set(e.color, (uniD.get(e.color) || '') + d);
     else edgeD.set(e.color, (edgeD.get(e.color) || '') + d);
   });
   // ── ОГРАЖДЕНИЕ ФРАКЦИЙ: сырые отрезки с нормалью внутрь, РАЗДЕЛЬНО по типу рубежа.
@@ -6560,6 +6630,12 @@ function gmmBuildWorld() {
     fogPath: fogD ? new Path2D(fogD) : null,
     secFills: [...secFillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     edges: [...edgeD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
+    uniEdges: [...uniD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
+    uniHatch: [...uniLeadD].map(([color, g]) => ({
+      color: gmReadable(color), p2d: new Path2D(g.d),
+      cx: (g.x0 + g.x1) / 2, cy: (g.y0 + g.y1) / 2,
+      ext: Math.hypot(g.x1 - g.x0, g.y1 - g.y0) / 2 + 6,
+    })),
     neutral: neutralD ? new Path2D(neutralD) : null,
     neutTerr: hasNeut ? new Path2D(neutTerrD) : null,
     neutCells: neutCells.map(c => ({ p2d: new Path2D(c.d), x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, cx: c.cx, cy: c.cy, ang: c.ang })),
@@ -7720,6 +7796,9 @@ function gmmPaintVector(ctx, camS, live) {
       P.fills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
     }
     ctx.globalAlpha = 1;
+    // полосы ведущего над землёй партнёров по унии — сразу поверх заливок, под всем
+    // остальным (только в битмап: клип + линии дороги для живого кадра)
+    if (!live && !GM.showEcon && fillA > 0.02) gmmPaintUniHatch(ctx, camS);
   }
   // Ничейные территории «тонут во тьме» через ЕДИНЫЙ туман войны (gmmPaintFog,
   // расступается вокруг звёзд), а сверху штрихуются посекторно (gmmPaintNeutralHatch,
@@ -7770,6 +7849,13 @@ function gmmPaintVector(ctx, camS, live) {
     ctx.globalAlpha = facB; ctx.lineWidth = 1.5 / camS;
     P.edges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
     ctx.globalAlpha = 1;
+    // ОБРЕЗ ЗЕМЛИ ПАРТНЁРА по унии: не рубеж (держава одна) — волосяная сплошная
+    // линия в его краске, чтобы очертания владения читались под полосами ведущего.
+    if (P.uniEdges && P.uniEdges.length) {
+      ctx.globalAlpha = 0.55 * facB; ctx.lineWidth = 1 / camS;
+      P.uniEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
+      ctx.globalAlpha = 1;
+    }
     // ГОСУДАРСТВЕННЫЙ РУБЕЖ поверх ядра — контрольная полоса на тихой границе,
     // зубцы на линии фронта. Заменил прежнюю «линию-спутник»: та была параллелью с
     // отступом в МИРОВЫХ единицах (3.2), поэтому на обзоре слипалась с ядром, а
@@ -8487,6 +8573,35 @@ function gmmPaintFog(ctx) {
 // штрихов (не пунктир — сплошные линии). Рисуется ПОВЕРХ тумана войны (аддитивно →
 // «светятся» на тьме), клип строго по ячейке, каждый N-й штрих ярче — киберпанк-фактура.
 // Гаснет на глубоком зуме (там регион раскрыт под звезду). wx*/wy* — окно кадра (куллинг).
+// ПОЛОСЫ ВЕДУЩЕГО над землёй партнёра по унии — картографический приём подчинённого
+// владения: краска партнёра под ними остаётся чистой (это его земля), а полосы говорят,
+// под чьей короной она лежит. Угол один на всю карту (45°): полосы — знак принадлежности,
+// а не фактура региона, поэтому крутить их поячеечно, как штриховку пустоты, нельзя.
+// Только в битмап (клип + сотни линий не нужны в живом кадре каждый кадр).
+function gmmPaintUniHatch(ctx, camS) {
+  const P = GMM.paths;
+  if (!P || !P.uniHatch || !P.uniHatch.length) return;
+  if (!GM.showBorders || GM.showEcon) return;
+  const fade = 1 - 0.9 * gmmDeepA();
+  if (fade < 0.05) return;
+  const u = 1 / camS, step = 13 * u;
+  ctx.save();
+  ctx.lineCap = 'butt';
+  ctx.globalAlpha = 0.15 * fade;   // признак, а не узор: на пределе различимости
+  ctx.lineWidth = 0.9 * u;
+  for (const h of P.uniHatch) {
+    ctx.save();
+    ctx.clip(h.p2d);
+    ctx.translate(h.cx, h.cy); ctx.rotate(Math.PI / 4);
+    ctx.strokeStyle = h.color;
+    ctx.beginPath();
+    for (let x = -h.ext; x <= h.ext; x += step) { ctx.moveTo(x, -h.ext); ctx.lineTo(x, h.ext); }
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function gmmPaintNeutralHatch(ctx, camS, wx0, wy0, wx1, wy1) {
   const P = GMM.paths;
   if (!P || !P.neutCells || !P.neutCells.length) return;
