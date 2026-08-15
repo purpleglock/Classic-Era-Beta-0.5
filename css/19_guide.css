@@ -734,6 +734,8 @@
 .n-group-hdr:hover { color: hsl(220 16% 68%); background: rgba(255,255,255,.025); }
 .n-group-hdr.on { color: var(--gdl); background: var(--gdb); border-left-color: var(--gd); }
 .n-group-hdr .n-home-icon { font-size: 9px; opacity: .7; flex-shrink: 0; }
+/* Заголовок группы стоит в один ряд с обычными пунктами — и калибр значка тот же. */
+.n-group-hdr .nav-i { width: 15px; height: 15px; }
 .n-group-hdr.on .n-home-icon { color: var(--gd); opacity: 1; }
 .n-group-t { flex: 1; }
 .n-group-arr { font-size: 8px; opacity: .55; transition: transform var(--duration-normal) var(--ease-out); }
@@ -753,6 +755,8 @@
 .n-sub:hover { color: hsl(220 16% 64%); background: rgba(255,255,255,.02); }
 .n-sub.on { color: var(--gdl); background: var(--gdb); border-left-color: var(--gd); }
 .n-sub .n-home-icon { font-size: 9px; opacity: .7; flex-shrink: 0; }
+/* Вложенный пункт мельче родителя — и значок у него на ступень тише. */
+.n-sub .nav-i { width: 13px; height: 13px; }
 .n-sub.on .n-home-icon { color: var(--gd); opacity: 1; }
 
 /* ══════════════════════════════════════════════════════════════

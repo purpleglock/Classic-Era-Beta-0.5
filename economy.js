@@ -6768,6 +6768,8 @@ const EC_ICO = {
   station: '<circle cx="12" cy="12" r="3.6"/><path d="M2.5 12h5.9M15.6 12h5.9"/><path d="M4.6 9v6M19.4 9v6"/>',
   medal:   '<circle cx="12" cy="15" r="5.6"/><path d="M12 12.6l1 2 2.1.3-1.5 1.4.4 2.1-2-1-2 1 .4-2.1-1.5-1.4 2.1-.3z"/><path d="M8.2 3.2l2 6M15.8 3.2l-2 6"/>',
   flag:    '<path d="M5.5 21.5V3"/><path d="M5.5 3.8h11l-2.2 3.4 2.2 3.4h-11z"/>',
+  ban:     '<circle cx="12" cy="12" r="9.2"/><path d="M5.5 5.5L18.5 18.5"/>',
+  lock:    '<rect x="5" y="10.4" width="14" height="10.2" rx="1.4"/><path d="M8.4 10.4V7.8a3.6 3.6 0 017.2 0v2.6"/>',
   map:     '<path d="M3 6.2l6-2.7 6 2.7 6-2.7v14.3l-6 2.7-6-2.7-6 2.7z"/><path d="M9 3.5v14.3M15 6.2v14.3"/>',
 };
 // Общая обёртка: ключи хозяйства (EC_ICO16, сетка 16) и рода войск (EC_ICO, сетка 24)
@@ -7299,7 +7301,7 @@ const EC_ARMY_FROZEN = true;
 const EC_FROZEN_TX = 'До конца обновления «Убей или спаси» работы над наземкой не ведутся: движок наземного боя переписывается. Заказанное сейчас после обновления пришлось бы пересчитывать, поэтому производство пехоты, техники и авиации приостановлено, а регистрация новых проектов в конструкторе закрыта. Флот, ремонт и уже готовые войска работают как прежде.';
 function ecFrozenBox(nDesigns) {
   return `<div class="ec-frz">
-    <div class="ec-frz-hd"><span class="ec-frz-ic">⛔</span>Производство приостановлено</div>
+    <div class="ec-frz-hd"><span class="ec-frz-ic">${ecIco('ban')}</span>Производство приостановлено</div>
     <div class="ec-frz-tx">${EC_FROZEN_TX}</div>
     <div class="ec-frz-ft">Проектов в цехе: <b>${ecNum(nDesigns || 0)}</b> — они никуда не денутся и станут доступны к заказу после обновления.</div>
   </div>`;
@@ -7411,7 +7413,7 @@ function ecTabMilBuild() {
       title="${EC_ARMY_FROZEN && b.k !== 'ship' ? 'Цех заморожен до конца обновления «Убей или спаси»' : readyOf[b.k] ? `Проектов: ${ecNum(listOf[b.k].length)}` : 'Нет постройки — цех недоступен'}">
       ${ecIco(b.ic, 'ec-fb-tab-ic')}
       <span class="ec-fb-tab-l">${esc(b.nm)}</span>
-      <span class="ec-fb-tab-n">${EC_ARMY_FROZEN && b.k !== 'ship' ? '⛔' : readyOf[b.k] ? ecNum(listOf[b.k].length) : '—'}</span>
+      <span class="ec-fb-tab-n">${EC_ARMY_FROZEN && b.k !== 'ship' ? ecIco('lock', 'ec-fb-tab-lock') : readyOf[b.k] ? ecNum(listOf[b.k].length) : '—'}</span>
     </button>`).join('')}</div>`;
 
   const curShopHtml = curMb.k === 'ship'

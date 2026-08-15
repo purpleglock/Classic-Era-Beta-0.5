@@ -203,20 +203,7 @@
   .ed-canvas-inner { padding:12px 12px 60px; }
   .ed-block-form { padding:14px 12px; }
 
-  /* Contrib modal */
-  .mo-contrib-panel { flex-direction:column;max-height:90vh;width:calc(100vw - 24px);max-width:100%;overflow:hidden; }
-  .cmp-left { width:100%;min-width:0;flex-direction:row;padding:12px 14px;gap:12px;align-items:center;border-right:none;border-bottom: var(--deco-frame-w, 1px) solid var(--w2);flex-shrink:0; }
-  .cmp-av-frame { width:56px;height:56px;flex-shrink:0; }
-  .mo-contrib-panel .contrib-mo-av { width:48px;height:48px;font-size:15px; }
-  .cmp-id { text-align:left;flex:1 1 0;min-width:0;overflow:hidden; }
-  .mo-contrib-panel .contrib-mo-name { font-size:12px;letter-spacing: calc(.5px * var(--deco-ls-mult, 1));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block; }
-  .mo-contrib-panel .contrib-mo-email { font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block; }
-  .cmp-label { margin-bottom:4px;font-size:7px; }
-  .cmp-stat-block,.cmp-edit-btn,.cmp-scanbeam { display:none; }
-  .cmp-right { flex:1 1 auto;overflow-y:auto;min-height:0; }
-  .cmp-right-hdr { padding:12px 16px; }
-  .cmp-pages-list { padding:8px 12px;gap:2px; }
-  .cmp-close { top:8px;right:8px;width:28px;height:28px;font-size:13px; }
+  /* Contrib modal — мобильные правила досье собраны в хвосте 32_levels.css */
 
   /* Contrib cards */
   .contrib-grid { grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px; }

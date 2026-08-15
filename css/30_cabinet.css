@@ -177,9 +177,13 @@ html:has(#cab-stage) #pg{padding:0!important}
 .cab-door-tx b{font-size:13.5px;font-weight:600;line-height:1.25}
 .cab-door-tx i{
   font-style:normal;font-size:11px;color:var(--t4);line-height:1.35;
-  /* Подпись в одну строку: двери должны стоять ровной сеткой, а не
-     прыгать по высоте из-за разной длины пояснения. */
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  /* Подпись до ДВУХ строк: в одну строку «залежи, рабочие, концессии»
+     обрубалось на «концес…» — многоточие вместо смысла. Ровную сетку
+     держит сама grid-строка (двери тянутся по высоте соседей), поэтому
+     перенос ничего не ломает. */
+  overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+  overflow-wrap:anywhere;
 }
 
 .cab-door-arr{flex:0 0 auto;color:var(--t4);font-size:12px;opacity:.5}
@@ -890,6 +894,9 @@ html:has(#cab-stage) #cw{overflow:auto}
        шеврона, которые стоят по центру борта. Возвращаем на общую ось. */
     margin-left:calc(-1 * var(--deco-accent-w,2px))!important;
   }
+  /* Контурный значок (nav-i) в колонке — того же калибра, что картинка раздела:
+     размером шрифта его не поднять, у SVG свои width/height. */
+  #app.cab-mode #sb .n-home-icon .nav-i{width:17px!important;height:17px!important}
   #app.cab-mode #sb .nl-ico img{
     width:17px!important;height:17px!important;
     filter:none!important;opacity:.7!important;

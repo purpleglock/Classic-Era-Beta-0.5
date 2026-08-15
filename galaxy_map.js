@@ -7769,12 +7769,44 @@ function gmmChainSecEdges(strokes) {
       if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
     }
     const len = cum[cum.length - 1];
+    if (len <= 8 || pts.length < 2) continue;
+    // ── ИСТИННЫЕ НОРМАЛИ КОНТУРА ──
+    // Опорная nrm[] снята с ПРЯМОГО ребра Вороного, а рисуем мы его искривлённую
+    // warp'ом копию: одна нормаль на всё ребро — это перпендикуляр к ХОРДЕ, а не к
+    // линии. По ней параллели шли наискось (и пересекали сам рубеж на изгибах), а
+    // риски втыкались в него косо. Считаем нормаль ЛОКАЛЬНО — перпендикуляр к
+    // сегменту, — а опорную оставляем только как ЗНАК: какая сторона «внутрь».
+    const seg = new Array(pts.length - 1);
+    for (let k = 0; k < seg.length; k++) {
+      const dx = pts[k + 1][0] - pts[k][0], dy = pts[k + 1][1] - pts[k][1];
+      const L = Math.hypot(dx, dy) || 1;
+      let nx = -dy / L, ny = dx / L;
+      const r = nrm[k] || nrm[0];
+      if (r && (nx * r[0] + ny * r[1]) < 0) { nx = -nx; ny = -ny; }
+      seg[k] = [nx, ny];
+    }
+    // На ВЕРШИНЕ нормаль одна — биссектриса соседних сегментов, длиной 1/cos(θ/2)
+    // (миterный коэффициент с пределом). Смещение по ней держит параллель именно
+    // параллелью: на изломе она обходит угол, а не рвётся уступом в 2·отступа.
+    // kink — косинус излома: 1 на прямой, ↓ на угле (по нему отсеиваем узлы).
+    const vn = new Array(pts.length), vm = new Array(pts.length), kink = new Array(pts.length);
+    for (let k = 0; k < pts.length; k++) {
+      const a = seg[k - 1] || seg[0], b = seg[k] || seg[seg.length - 1];
+      kink[k] = a[0] * b[0] + a[1] * b[1];
+      let mx = a[0] + b[0], my = a[1] + b[1];
+      const L = Math.hypot(mx, my);
+      if (L < 1e-4) { vn[k] = [b[0], b[1]]; vm[k] = 1; continue; }   // разворот на 180°
+      mx /= L; my /= L;
+      vn[k] = [mx, my];
+      vm[k] = 1 / Math.max(0.45, mx * b[0] + my * b[1]);             // предел миterа ≈2.2
+    }
     // габарит цепочки — для отсева по окну запекания (см. gmmPaintSecFence)
-    if (len > 8) chains.push({ pts, nrm, cum, len, x0, y0, x1, y1 });
+    chains.push({ pts, nrm: seg, vn, vm, kink, cum, len, x0, y0, x1, y1 });
   }
   return chains;
 }
-// Точка контура на длине дуги s + нормаль внутрь (в q, чтобы не плодить объекты)
+// Точка контура на длине дуги s + нормаль внутрь (в q, чтобы не плодить объекты).
+// q.k — излом в этом месте: узлы и риски у самого угла по нему пропускаются.
 function gmmChainAt(ch, s, q) {
   const cum = ch.cum;
   let lo = 0, hi = cum.length - 1;
@@ -7783,138 +7815,140 @@ function gmmChainAt(ch, s, q) {
   const a = ch.pts[lo], b = ch.pts[hi], n = ch.nrm[lo] || ch.nrm[ch.nrm.length - 1];
   q.x = a[0] + (b[0] - a[0]) * t; q.y = a[1] + (b[1] - a[1]) * t;
   q.nx = n[0]; q.ny = n[1];
+  q.k = ch.kink ? Math.min(ch.kink[lo], ch.kink[hi]) : 1;
   return q;
 }
+// ПАРАЛЛЕЛЬ К КОНТУРУ на отступ off вглубь (off=0 — сам контур). Идём по РЕАЛЬНЫМ
+// вершинам, а не по равномерной выборке длины дуги: выборка срезала углы хордой, и
+// «параллель» расходилась с рубежом ровно там, где это заметнее всего. Вершина
+// уходит по биссектрисе (ch.vn/ch.vm), а складка на вогнутом углу — где смещённый
+// сегмент разворачивается против исходного — не рисуется вовсе: линия там просто
+// прерывается, и вместо петли-клубка остаётся чистый разрыв.
+function gmmRunOffset(ctx, chains, off, skip) {
+  ctx.beginPath();
+  chains.forEach(ch => {
+    if (skip && skip(ch)) return;
+    const pts = ch.pts, n = pts.length;
+    let px = 0, py = 0, first = true;
+    for (let k = 0; k < n; k++) {
+      const p = pts[k], v = ch.vn[k], m = off ? ch.vm[k] : 1;
+      const x = p[0] + v[0] * off * m, y = p[1] + v[1] * off * m;
+      if (first) { ctx.moveTo(x, y); first = false; px = x; py = y; continue; }
+      const ax = p[0] - pts[k - 1][0], ay = p[1] - pts[k - 1][1];
+      if ((x - px) * ax + (y - py) * ay <= 0) ctx.moveTo(x, y);   // складка → перо вверх
+      else ctx.lineTo(x, y);
+      px = x; py = y;
+    }
+  });
+  ctx.stroke();
+}
 // ── РУБЕЖ СЕКТОРА = СИЛОВОЙ ПЕРИМЕТР ─────────────────────────────────────────
-// Сектор — не заливка, а огороженная зона. Мотив тот же, что у колючки (потому и
-// читался), но язык футуристический: вместо витого троса с шипами — техно-ограждение
-// из четырёх частей, всё чистой геометрией, без свечений, теней и аддитивных
-// режимов (правила UI):
-//   • РЕЛЬС — ровная волосяная линия по контуру (несущая рубежа);
-//   • ЛУЧ — вторая линия параллельно, РАЗБИТАЯ квантованным дэшем: не пунктир «на
-//     глаз», а повторяющийся код из длинного и короткого сегмента — дата-лента;
+// Сектор — не заливка, а огороженная зона. Техно-ограждение чистой геометрией, без
+// свечений, теней и аддитивных режимов (правила UI):
+//   • ПОЛОСА ОТЧУЖДЕНИЯ — широкий мазок ПО САМОМУ контуру, срезанный слой-маской
+//     сектора: наружная половина отсекается, видна только уходящая вглубь тень.
+//     Это тот же путь, что и рубеж, поэтому на любом изломе полоса ложится ровно —
+//     ей нечем разойтись с углом;
+//   • ЛУЧ — единственная параллель, вплотную к рубежу, разбитая квантованным кодом
+//     (длинный-короткий сегмент) — дата-лента, а не пунктир «на глаз»;
 //   • ЭМИТТЕРЫ — узлы через равный шаг, ДВУХ РАНГОВ. Рядовой — короткая поперечная
-//     риска. Каждый четвёртый — опорный: стойка через оба рельса плюс залитый ромб
-//     на луче. Равные узлы в ряд читались метрономом; ранги дают ритм и масштаб,
-//     а ромб становится РЕДКИМ — то есть настоящим акцентом, а не фоном.
-//   • РЯДЫ ВГЛУБЬ — 2 прогона, смещённых внутрь сектора: не поле пятен, а уходящие
-//     линии сдерживания. Тоньше, тусклее, узлы реже, ромбов нет.
+//     риска. Каждый четвёртый — опорный: стойка через луч плюс залитый ромб на нём.
+//     Равные узлы в ряд читались метрономом; ранги дают ритм, а ромб — редкий акцент.
+//
+// ЧЕГО ЗДЕСЬ БОЛЬШЕ НЕТ. Двух рядов «линий сдерживания» вглубь (14 и 28 px). Ряд
+// вглубь — это ПАРАЛЛЕЛЬ, а параллель к ломаной, у которой излом на каждой вершине
+// Вороного, на углу даёт либо уступ, либо петлю-складку, и тем крупнее, чем глубже
+// отступ. Ряды и превращали каждый угол сектора в клубок пересечений. Полоса даёт
+// ту же глубину рубежа, но по построению не способна ни пересечь себя, ни отстать
+// от угла. Оставшийся ЛУЧ идёт вплотную (5 px) и строится по вершинам с биссектрисой
+// (gmmRunOffset), а не по равномерной выборке с нормалью хорды.
 //
 // Всё в ЭКРАННЫХ единицах (делим на camS): толщина и размер узлов не должны меняться
-// с зумом — иначе на обзоре каша, а вблизи брёвна. Смещённые внутрь ряды режутся
-// слой-маской сектора: в вогнутых углах смещённый контур неминуемо вылезает наружу.
-const GMM_FENCE_ROWS = [   // {отступ, альфа, толщина, зазор луча, шаг узлов, каждый N-й опорный}
-  { off: 0, a: 0.92, w: 1.15, rail: 3.2, node: 26, major: 4 },
-  { off: 14, a: 0.4, w: 0.85, rail: 0, node: 62, major: 0 },
-  { off: 28, a: 0.17, w: 0.7, rail: 0, node: 0, major: 0 },
-];
+// с зумом — иначе на обзоре каша, а вблизи брёвна.
+const GMM_SEC_BEAM = 5;     // отступ луча от рубежа, px
+const GMM_SEC_NODE = 26;    // шаг эмиттеров, px
+const GMM_SEC_MAJOR = 4;    // каждый N-й эмиттер — опорный
+const GMM_SEC_KINK = 0.9;   // косинус излома, за которым узел не ставим (≈25°)
 function gmmPaintSecFence(ctx, camS, secA) {
   const P = GMM.paths;
   if (!P || !P.secBrush || !P.secBrush.length) return;
   const u = 1 / camS;                   // экранный пиксель в мировых единицах
-  // Шаг сэмплирования рельса с нижним пределом в МИРОВЫХ единицах. Рельс — ровная
-  // линия (не синусоида, как была скрутка), поэтому шаг можно взять вдвое крупнее:
-  // на форме это не сказывается, а точек вдвое меньше.
-  const stepS = Math.max(6 * u, 4);
-  const du = Math.max(u, 1);            // единица дэша (тот же нижний предел)
-  const q = { x: 0, y: 0, nx: 0, ny: 0 };
+  const du = Math.max(u, 1);            // единица дэша (с нижним пределом в мире)
+  const q = { x: 0, y: 0, nx: 0, ny: 0, k: 1 };
   // Отсев по окну запекания. Цепочки хранятся на всю галактику; в редакторе секторов
   // secA форсируется ≥0.85 на ЛЮБОМ зуме, и без отсева вблизи набегали бы сотни тысяч
-  // сегментов на каждое перепекание. Запас — под самый глубокий ряд.
-  const W = GMM.bakeBox, mg = (GMM_FENCE_ROWS[GMM_FENCE_ROWS.length - 1].off + 14) * u;
+  // сегментов на каждое перепекание. Запас — под полуширину полосы отчуждения.
+  const W = GMM.bakeBox, mg = 22 * u;
   const skip = ch => W && (ch.x1 < W.wx0 - mg || ch.x0 > W.wx1 + mg
     || ch.y1 < W.wy0 - mg || ch.y0 > W.wy1 + mg);
-  // общий проход по контуру: линия, смещённая на off по нормали
-  const runLine = (b, off) => {
-    ctx.beginPath();
-    b.chains.forEach(ch => {
-      if (skip(ch)) return;
-      let first = true;
-      for (let s = 0; s <= ch.len; s += stepS) {
-        gmmChainAt(ch, Math.min(s, ch.len), q);
-        const x = q.x + q.nx * off, y = q.y + q.ny * off;
-        if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
-      }
-    });
-    ctx.stroke();
-  };
+  const rg = GMM_SEC_BEAM * u, np = GMM_SEC_NODE * u, dia = 2.2 * u;
+  const isMajor = i => i % GMM_SEC_MAJOR === 0;
   ctx.save();
   ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
   P.secBrush.forEach(b => {
     ctx.save();
-    ctx.clip(b.area);                   // ← слой-маска: ряды вглубь режутся по форме сектора
+    ctx.clip(b.area);                   // ← слой-маска: всё ограждение живёт внутри сектора
     ctx.strokeStyle = b.color; ctx.fillStyle = b.color;
-    GMM_FENCE_ROWS.forEach(row => {
-      const ro = row.off * u, rg = row.rail * u;
-      // ── несущий рельс ──
-      ctx.globalAlpha = row.a * secA;
-      ctx.lineWidth = row.w * u;
-      runLine(b, ro);
-      // ── луч: параллель, разбитая квантованным кодом (длинный-короткий) ──
-      if (rg > 0) {
-        ctx.globalAlpha = row.a * 0.7 * secA;
-        ctx.lineWidth = row.w * 0.75 * u;
-        ctx.setLineDash([9 * du, 4 * du, 2.5 * du, 4 * du]);
-        runLine(b, ro + rg);
-        ctx.setLineDash([]);
+    // ── полоса отчуждения: два широких мазка по контуру, наружу их срезает маска ──
+    ctx.globalAlpha = 0.05 * secA; ctx.lineWidth = 34 * u; gmmRunOffset(ctx, b.chains, 0, skip);
+    ctx.globalAlpha = 0.07 * secA; ctx.lineWidth = 13 * u; gmmRunOffset(ctx, b.chains, 0, skip);
+    // ── луч: параллель вплотную, разбитая квантованным кодом (длинный-короткий) ──
+    ctx.globalAlpha = 0.55 * secA; ctx.lineWidth = 0.8 * u;
+    ctx.setLineDash([9 * du, 4 * du, 2.5 * du, 4 * du]);
+    gmmRunOffset(ctx, b.chains, rg, skip);
+    ctx.setLineDash([]);
+    // ── рядовые узлы: короткая риска поперёк рубежа ──
+    ctx.lineWidth = 0.9 * u;
+    ctx.globalAlpha = 0.5 * secA;
+    ctx.beginPath();
+    b.chains.forEach(ch => {
+      if (skip(ch)) return;
+      let i = 0;
+      for (let s = np * 0.5; s < ch.len; s += np, i++) {
+        if (isMajor(i)) continue;
+        gmmChainAt(ch, s, q);
+        if (q.k < GMM_SEC_KINK) continue;   // на самом углу риска встаёт наискось
+        ctx.moveTo(q.x - q.nx * 1.5 * u, q.y - q.ny * 1.5 * u);
+        ctx.lineTo(q.x + q.nx * 1.5 * u, q.y + q.ny * 1.5 * u);
       }
-      if (!row.node) return;
-      const np = row.node * u, dia = 2.2 * u;
-      const isMajor = i => row.major && i % row.major === 0;
-      // ── рядовые узлы: короткая риска поперёк рельса ──
-      ctx.lineWidth = row.w * 0.8 * u;
-      ctx.globalAlpha = row.a * 0.55 * secA;
-      ctx.beginPath();
-      b.chains.forEach(ch => {
-        if (skip(ch)) return;
-        let i = 0;
-        for (let s = np * 0.5; s < ch.len; s += np, i++) {
-          if (isMajor(i)) continue;
-          gmmChainAt(ch, s, q);
-          const cx = q.x + q.nx * ro, cy = q.y + q.ny * ro;
-          ctx.moveTo(cx - q.nx * 1.5 * u, cy - q.ny * 1.5 * u);
-          ctx.lineTo(cx + q.nx * 1.5 * u, cy + q.ny * 1.5 * u);
-        }
-      });
-      ctx.stroke();
-      if (!row.major) return;
-      // ── опорные узлы: стойка через оба рельса ──
-      const strut = 3 * u;
-      ctx.lineWidth = row.w * u;
-      ctx.globalAlpha = Math.min(1, row.a * 1.15) * secA;
-      ctx.beginPath();
-      b.chains.forEach(ch => {
-        if (skip(ch)) return;
-        let i = 0;
-        for (let s = np * 0.5; s < ch.len; s += np, i++) {
-          if (!isMajor(i)) continue;
-          gmmChainAt(ch, s, q);
-          const cx = q.x + q.nx * ro, cy = q.y + q.ny * ro;
-          ctx.moveTo(cx - q.nx * strut, cy - q.ny * strut);
-          ctx.lineTo(cx + q.nx * (rg + strut), cy + q.ny * (rg + strut));
-        }
-      });
-      ctx.stroke();
-      if (rg <= 0) return;
-      // ромб на луче — единственная ЗАЛИВКА во всём ограждении, и теперь она РЕДКАЯ
-      ctx.beginPath();
-      b.chains.forEach(ch => {
-        if (skip(ch)) return;
-        let i = 0;
-        for (let s = np * 0.5; s < ch.len; s += np, i++) {
-          if (!isMajor(i)) continue;
-          gmmChainAt(ch, s, q);
-          const ux = q.ny, uy = -q.nx;
-          const cx = q.x + q.nx * (ro + rg), cy = q.y + q.ny * (ro + rg);
-          ctx.moveTo(cx + ux * dia, cy + uy * dia);
-          ctx.lineTo(cx + q.nx * dia, cy + q.ny * dia);
-          ctx.lineTo(cx - ux * dia, cy - uy * dia);
-          ctx.lineTo(cx - q.nx * dia, cy - q.ny * dia);
-          ctx.closePath();
-        }
-      });
-      ctx.fill();
     });
+    ctx.stroke();
+    // ── опорные узлы: стойка через луч ──
+    const strut = 3 * u;
+    ctx.lineWidth = 1.1 * u;
+    ctx.globalAlpha = 0.95 * secA;
+    ctx.beginPath();
+    b.chains.forEach(ch => {
+      if (skip(ch)) return;
+      let i = 0;
+      for (let s = np * 0.5; s < ch.len; s += np, i++) {
+        if (!isMajor(i)) continue;
+        gmmChainAt(ch, s, q);
+        if (q.k < GMM_SEC_KINK) continue;
+        ctx.moveTo(q.x - q.nx * strut, q.y - q.ny * strut);
+        ctx.lineTo(q.x + q.nx * (rg + strut), q.y + q.ny * (rg + strut));
+      }
+    });
+    ctx.stroke();
+    // ромб на луче — единственная ЗАЛИВКА во всём ограждении, и она РЕДКАЯ
+    ctx.beginPath();
+    b.chains.forEach(ch => {
+      if (skip(ch)) return;
+      let i = 0;
+      for (let s = np * 0.5; s < ch.len; s += np, i++) {
+        if (!isMajor(i)) continue;
+        gmmChainAt(ch, s, q);
+        if (q.k < GMM_SEC_KINK) continue;
+        const ux = q.ny, uy = -q.nx;
+        const cx = q.x + q.nx * rg, cy = q.y + q.ny * rg;
+        ctx.moveTo(cx + ux * dia, cy + uy * dia);
+        ctx.lineTo(cx + q.nx * dia, cy + q.ny * dia);
+        ctx.lineTo(cx - ux * dia, cy - uy * dia);
+        ctx.lineTo(cx - q.nx * dia, cy - q.ny * dia);
+        ctx.closePath();
+      }
+    });
+    ctx.fill();
     ctx.restore();
   });
   ctx.globalAlpha = 1;

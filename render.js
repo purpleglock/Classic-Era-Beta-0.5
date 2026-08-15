@@ -1686,21 +1686,51 @@ function renderMd(txt) {
   eu(); ebq(); return out;
 }
 
+// ── ЗНАЧКИ БОКОВОГО МЕНЮ ────────────────────────────────────
+// ⚠️ ЭМОДЗИ ЗДЕСЬ ЗАПРЕЩЕНЫ (15.08.2026): «📖 🛰 🛠» цветные и живут своей
+// палитрой — в колонке, где всё держится на currentColor (приглушённый →
+// светлее на наведении → золотой на активном), они торчали чужеродными
+// наклейками, а часть глифов («🜨», «⛬») на Windows 10 не входит в системный
+// шрифт и рисовалась пустым квадратом-тофу. Значки — контурный SVG 24×24 той
+// же породы, что в конструкторах (CN_ICO, constructors.js): fill:none,
+// stroke:currentColor, толщина 1.4.
+const NAV_ICO = {
+  home:     '<path d="M3.4 10.6 12 3.4l8.6 7.2"/><path d="M5.4 9.2v11.4h13.2V9.2"/><path d="M9.6 20.6v-6.2h4.8v6.2"/>',
+  guide:    '<path d="M12 6.4C10.2 4.9 7.7 4.2 4.2 4.4v13.2c3.5-.2 6 .5 7.8 2 1.8-1.5 4.3-2.2 7.8-2V4.4c-3.5-.2-6 .5-7.8 2Z"/><path d="M12 6.4v13.2"/>',
+  scales:   '<path d="M12 4.4v15.2"/><path d="M8 19.6h8"/><path d="M4.4 8h15.2"/><path d="M2.2 13.4h4.4L4.4 8Z"/><path d="M17.4 13.4h4.4L19.6 8Z"/>',
+  doc:      '<path d="M6.2 3.4h7.4l4.2 4.2v13H6.2Z"/><path d="M13.4 3.4v4.4h4.4"/><path d="M9 12.6h6"/><path d="M9 16.2h6"/>',
+  charter:  '<path d="M5.4 3.4h13.2v10.8H5.4Z"/><path d="M8.8 7h6.4"/><path d="M8.8 10.4h3.8"/><path d="M9.2 14.2v6.4l2.8-1.8 2.8 1.8v-6.4"/>',
+  shield:   '<path d="M12 3 19.4 6v6c0 4.4-3.2 7.6-7.4 8.6C7.8 19.6 4.6 16.4 4.6 12V6Z"/><path d="M12 8.6v6"/><path d="M9.2 11.6h5.6"/>',
+  speech:   '<path d="M20.4 14.4a2.4 2.4 0 0 1-2.4 2.4H8.4L4 20.6V6.6a2.4 2.4 0 0 1 2.4-2.4h11.6a2.4 2.4 0 0 1 2.4 2.4Z"/><path d="M12 7.8v4"/><path d="M12 14.6h.01"/>',
+  pen:      '<path d="M16.4 3.6a2.4 2.4 0 0 1 3.4 3.4L9.2 17.6l-4.4 1.2 1.2-4.4Z"/><path d="M4 21.4h16"/>',
+  dish:     '<path d="M3.8 10.2a7.4 7.4 0 0 0 10 10Z"/><path d="m9 15 3.2-3.2"/><path d="M17.2 13a6.2 6.2 0 0 0-6.2-6.2"/><path d="M21.2 13A10.2 10.2 0 0 0 11 2.8"/>',
+  swords:   '<path d="M14.6 17.4 3.4 6.2V3.4h2.8l11.2 11.2"/><path d="m12.8 19.2 6.4-6.4"/><path d="m16.2 16.2 4 4"/><path d="M9.4 17.4 20.6 6.2V3.4h-2.8L6.6 14.6"/><path d="m11.2 19.2-6.4-6.4"/><path d="m7.8 16.2-4 4"/>',
+  galaxy:   '<circle cx="12" cy="12" r="1.7"/><path d="M13.6 12.6c1.6 1.6 1.2 4.4-1 5.8-2.8 1.8-7 .6-9-2.6"/><path d="M10.4 11.4c-1.6-1.6-1.2-4.4 1-5.8 2.8-1.8 7-.6 9 2.6"/>',
+  banner:   '<path d="M5.6 20.8V3.6"/><path d="M5.6 4.6h13.6l-2.6 4.4 2.6 4.4H5.6"/>',
+  pin:      '<path d="M12 21.4s7-6.1 7-11.1a7 7 0 1 0-14 0c0 5 7 11.1 7 11.1Z"/><circle cx="12" cy="10.2" r="2.6"/>',
+  compass:  '<circle cx="12" cy="4.8" r="1.9"/><path d="M10.8 6.4 4.6 20.4"/><path d="M13.2 6.4 19.4 20.4"/><path d="M8.4 14.6h7.2"/>',
+  sliders:  '<path d="M5.4 20.6V14"/><path d="M5.4 10.2V3.4"/><path d="M12 20.6v-8.8"/><path d="M12 8V3.4"/><path d="M18.6 20.6v-4.2"/><path d="M18.6 12.6V3.4"/><path d="M2.8 14h5.2"/><path d="M9.4 8h5.2"/><path d="M16 16.4h5.2"/>',
+};
+function navIco(k) {
+  return `<svg class="nav-i" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${NAV_ICO[k] || NAV_ICO.doc}</svg>`;
+}
+
 function buildNav(filt='') {
   const q=(filt||'').toLowerCase().trim();
   const L=(ru,en)=>lang==='ru'?ru:en;
-  let h=`<a class="n-home${curSlug==='home'?' on':''}" id="ntl-h" href="#home" onclick="return navGo(event,'home')"><span class="n-home-icon">⌂</span>${T('home')}</a>`;
+  let h=`<a class="n-home${curSlug==='home'?' on':''}" id="ntl-h" href="#home" onclick="return navGo(event,'home')"><span class="n-home-icon">${navIco('home')}</span>${T('home')}</a>`;
   // Гайдбук — сразу под главной (важно для новичков)
-  h+=`<a class="n-home${curSlug==='guide'?' on':''}" id="ntl-guide" href="#guide" onclick="return navGo(event,'guide')"><span class="n-home-icon">📖</span>${L('Игровой гайдбук','Game guidebook')}</a>`;
+  h+=`<a class="n-home${curSlug==='guide'?' on':''}" id="ntl-guide" href="#guide" onclick="return navGo(event,'guide')"><span class="n-home-icon">${navIco('guide')}</span>${L('Игровой гайдбук','Game guidebook')}</a>`;
   // ── Группа «Правила проекта» (раскрывающаяся): отдельные страницы правил ──
-  const ruleItems=[['rules-general','◈',L('Общие правила','General rules')],['rules-charter','⚖',L('Устав проекта','Charter')],['rules-rp','⚔',L('Регламент RP и боёв','RP & combat')],['rules-conduct','⚠',L('Дисциплина и общение','Conduct')],['rules-naming','✎',L('Регистрация и нейминг','Registration')]];
+  const ruleItems=[['rules-general','doc',L('Общие правила','General rules')],['rules-charter','charter',L('Устав проекта','Charter')],['rules-rp','shield',L('Регламент RP и боёв','RP & combat')],['rules-conduct','speech',L('Дисциплина и общение','Conduct')],['rules-naming','pen',L('Регистрация и нейминг','Registration')]];
   const rulesActive=(curSlug||'').startsWith('rules-');
   h+=`<div class="n-group${rulesActive?' op':''}" id="nav-rules">
     <div class="n-group-hdr${rulesActive?' on':''}" id="ntl-rules" onclick="document.getElementById('nav-rules').classList.toggle('op')">
-      <span class="n-home-icon">⚖</span><span class="n-group-t">${L('Правила проекта','Project rules')}</span><span class="n-group-arr">▸</span>
+      <span class="n-home-icon">${navIco('scales')}</span><span class="n-group-t">${L('Правила проекта','Project rules')}</span><span class="n-group-arr">▸</span>
     </div>
     <div class="n-group-body">
-      ${ruleItems.map(([sl,ic,nm])=>`<a class="n-sub${curSlug===sl?' on':''}" id="ntl-${sl}" href="#${sl}" onclick="return navGo(event,'${sl}')"><span class="n-home-icon">${ic}</span>${nm}</a>`).join('')}
+      ${ruleItems.map(([sl,ic,nm])=>`<a class="n-sub${curSlug===sl?' on':''}" id="ntl-${sl}" href="#${sl}" onclick="return navGo(event,'${sl}')"><span class="n-home-icon">${navIco(ic)}</span>${nm}</a>`).join('')}
     </div>
   </div>`;
   // Кабинет игрока — высоко: игрокам с одобренной анкетой и стаффу
@@ -1708,28 +1738,28 @@ function buildNav(filt='') {
   if (typeof ecCanAccess==='function' && ecCanAccess()) {
     // Кабинета больше нет — есть держава, и живёт она в разговоре на главной.
     // Пункт ведёт ровно туда, куда раньше вели его двери: меню → «Займёмся делами».
-    h+=`<a class="n-home" id="ntl-eco" href="#economy" onclick="event.preventDefault();go('economy');return false"><span class="n-home-icon">🛰</span>${L('Кабинет игрока','My cabinet')}</a>`;
+    h+=`<a class="n-home" id="ntl-eco" href="#economy" onclick="event.preventDefault();go('economy');return false"><span class="n-home-icon">${navIco('dish')}</span>${L('Кабинет игрока','My cabinet')}</a>`;
     // ☄ Горячие точки — вход в активные бои (доска боя). Бейдж = число боёв,
     // его до-рисовывает hsNavBadge() после загрузки кабинета/страницы.
     const hsN = (typeof EC!=='undefined' && Array.isArray(EC.battles)) ? EC.battles.length : 0;
-    h+=`<a class="n-home${curSlug==='hotspots'?' on':''}" id="ntl-hot" href="#hotspots" onclick="return navGo(event,'hotspots')"><span class="n-home-icon">☄</span>${L('Горячие точки','Hotspots')}${hsN?`<span class="hs-badge">${hsN}</span>`:''}</a>`;
+    h+=`<a class="n-home${curSlug==='hotspots'?' on':''}" id="ntl-hot" href="#hotspots" onclick="return navGo(event,'hotspots')"><span class="n-home-icon">${navIco('swords')}</span>${L('Горячие точки','Hotspots')}${hsN?`<span class="hs-badge">${hsN}</span>`:''}</a>`;
   }
-  h+=`<a class="n-home${curSlug==='map'?' on':''}" id="ntl-map" href="#map" onclick="return navGo(event,'map')"><span class="n-home-icon">🜨</span>${L('Карта галактики','Galaxy map')}</a>`;
-  h+=`<a class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" href="#factions" onclick="return navGo(event,'factions')"><span class="n-home-icon">⬡</span>${L('Фракции','Factions')}</a>`;
+  h+=`<a class="n-home${curSlug==='map'?' on':''}" id="ntl-map" href="#map" onclick="return navGo(event,'map')"><span class="n-home-icon">${navIco('galaxy')}</span>${L('Карта галактики','Galaxy map')}</a>`;
+  h+=`<a class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" href="#factions" onclick="return navGo(event,'factions')"><span class="n-home-icon">${navIco('banner')}</span>${L('Фракции','Factions')}</a>`;
   // Игровые локации — игрокам с одобренной анкетой и стаффу
   if (typeof canSeeLocations==='function' && canSeeLocations()) {
-    h+=`<a class="n-home${curSlug==='locations'?' on':''}" id="ntl-loc" href="#locations" onclick="return navGo(event,'locations')"><span class="n-home-icon">⛬</span>${L('Игровые локации','Game locations')}</a>`;
+    h+=`<a class="n-home${curSlug==='locations'?' on':''}" id="ntl-loc" href="#locations" onclick="return navGo(event,'locations')"><span class="n-home-icon">${navIco('pin')}</span>${L('Игровые локации','Game locations')}</a>`;
   }
   // Конструкторы — игрокам с одобренной анкетой и стаффу
   if (typeof cnNavEnsure==='function') cnNavEnsure();
   if (typeof cnCanAccess==='function' && cnCanAccess()) {
     const cnOn = (curSlug==='constructors'||(curSlug||'').startsWith('build-'))?' on':'';
-    h+=`<a class="n-home${cnOn}" id="ntl-con" href="#constructors" onclick="return navGo(event,'constructors')"><span class="n-home-icon">⚒</span>${L('Конструкторы','Constructors')}</a>`;
+    h+=`<a class="n-home${cnOn}" id="ntl-con" href="#constructors" onclick="return navGo(event,'constructors')"><span class="n-home-icon">${navIco('compass')}</span>${L('Конструкторы','Constructors')}</a>`;
   }
   // Группа «Войска» (каталоги юнитов cat-*) убрана: проекты доступны в кабинете игрока.
   // Администрирование — только суперадмины и эдиторы
   if (typeof adCanAccess==='function' && adCanAccess()) {
-    h+=`<a class="n-home${curSlug==='admin'?' on':''}" id="ntl-adm" href="#admin" onclick="return navGo(event,'admin')"><span class="n-home-icon">🛠</span>${L('Управление','Admin')}</a>`;
+    h+=`<a class="n-home${curSlug==='admin'?' on':''}" id="ntl-adm" href="#admin" onclick="return navGo(event,'admin')"><span class="n-home-icon">${navIco('sliders')}</span>${L('Управление','Admin')}</a>`;
   }
   h+=`<div class="nav-divider"></div>`;
 

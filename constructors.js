@@ -76,14 +76,44 @@ function cnGate() {
 // ════════════════════════════════════════════════════════════
 // ХАБ КОНСТРУКТОРОВ (#constructors)
 // ════════════════════════════════════════════════════════════
+// ── ИКОНКИ ХАБА ─────────────────────────────────────────────
+// ⚠️ ЭМОДЗИ ЗДЕСЬ БЫЛИ ЗАПРЕЩЕНЫ (15.08.2026): «🪖» на Windows 10 не входит в
+// системный шрифт и рисовался пустым квадратом-тофу — в хабе стояла дырка на
+// месте главного конструктора. Плюс эмодзи цветные и живут своей палитрой,
+// а интерфейс держится на currentColor. Все значки — контурный SVG 24×24.
+const CN_ICO = {
+  ship: '<path d="M12 2.5c2.7 2.6 4.1 5.8 4.1 9.4v4.4l1.9 3.2H6l1.9-3.2v-4.4c0-3.6 1.4-6.8 4.1-9.4Z"/><circle cx="12" cy="10.4" r="1.9"/><path d="M9.2 19.5v2.1M14.8 19.5v2.1"/>',
+  army: '<path d="M12 2.6 20.2 5.7v6.1c0 4.9-3.4 8.4-8.2 9.6-4.8-1.2-8.2-4.7-8.2-9.6V5.7Z"/><path d="M12 8.2v7.4"/><path d="M8.4 11.9h7.2"/>',
+  alloy: '<path d="M9.6 3h4.8"/><path d="M10.6 3v6.2L5.4 18a2 2 0 0 0 1.7 3h9.8a2 2 0 0 0 1.7-3l-5.2-8.8V3"/><path d="M8 15.4h8"/>',
+  reactor: '<circle cx="12" cy="12" r="2.1"/><ellipse cx="12" cy="12" rx="9.4" ry="3.9"/><ellipse cx="12" cy="12" rx="9.4" ry="3.9" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9.4" ry="3.9" transform="rotate(120 12 12)"/>',
+  turret: '<path d="M2.6 20.6h9.8"/><path d="M5 20.6v-3.4h5.2v3.4"/><path d="M9.6 17.2 19 7.8"/><path d="M16.8 5.6 21.4 10.2"/>',
+  ground: '<path d="M3 16.4h18v4.2H3z"/><path d="M6.2 16.4v-4.2h7.6v4.2"/><path d="M10 12.2V8.6h9.4"/>',
+  air: '<path d="M12 2.6 13.7 10l7.3 3.1v2.2L13.7 14v4.6l2.4 1.6v1.6L12 20.6l-4.1 1.2v-1.6l2.4-1.6V14l-7.3 1.3v-2.2L10.3 10Z"/>',
+  division: '<rect x="3.2" y="3.2" width="7.1" height="7.1"/><rect x="13.7" y="3.2" width="7.1" height="7.1"/><rect x="3.2" y="13.7" width="7.1" height="7.1"/><rect x="13.7" y="13.7" width="7.1" height="7.1"/>',
+  ban: '<circle cx="12" cy="12" r="9.2"/><path d="M5.5 5.5 18.5 18.5"/>',
+  lock: '<rect x="4.6" y="10.4" width="14.8" height="10.2"/><path d="M8 10.4V7.6a4 4 0 0 1 8 0v2.8"/><path d="M12 14.4v2.6"/>',
+  arrow: '<path d="M4 12h15"/><path d="M13.4 6.4 19 12l-5.6 5.6"/>',
+};
+function cnIco(k, cls) {
+  return `<svg class="cn-i${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${CN_ICO[k] || CN_ICO.division}</svg>`;
+}
+
 const CN_HUB = [
-  { slug: 'build-ship', ico: '🚀', name: 'Корабельная верфь', desc: 'Космические корабли: от корветов до дредноутов. Реактор, броня, щиты, ангары, вооружение.', cat: 'ship' },
-  { slug: 'build-army', ico: '🪖', name: 'Планетарный арсенал', desc: 'Единый конструктор армии: пехота, БТР, танки, артиллерия, дроны, авиация. Ходовая, броня, орудия — по правилам Кваквантора.', cat: 'army' },
-  { slug: 'build-alloy', ico: '⚗', name: 'Материаловедение', desc: 'Своя броня из настоящих ресурсов. Пропорции решают: реакции и пороги рождают HP, стойкости и трейты. Сплавы идут в слот брони всех конструкторов.', cat: 'alloy' },
-  { slug: 'build-reactor', ico: '⚛', name: 'Реакторная верфь', desc: 'Своя энергоустановка: школа (РИТЭГ, ЯЭУ, ТЯР, МГД, АМУ, КВГ), топливо со склада державы, теплоноситель, КПД преобразования и удержание зоны. Готовые реакторы идут в слот реактора того класса, под который спроектированы.', cat: 'reactor' },
-  { slug: 'build-turret', ico: '⚙', name: 'Оружейная верфь', desc: 'Своё орудие: класс установки, технология, калибр и стволы. Масса и энергия решают, кто его потянет. Готовые орудия идут в слот вооружения всех конструкторов.', cat: 'turret' },
+  { slug: 'build-ship', ico: 'ship', name: 'Корабельная верфь', desc: 'Космические корабли: от корветов до дредноутов. Реактор, броня, щиты, ангары, вооружение.', cat: 'ship' },
+  { slug: 'build-army', ico: 'army', name: 'Планетарный арсенал', desc: 'Единый конструктор армии: пехота, БТР, танки, артиллерия, дроны, авиация. Ходовая, броня, орудия — по правилам Кваквантора.', cat: 'army' },
+  { slug: 'build-alloy', ico: 'alloy', name: 'Материаловедение', desc: 'Своя броня из настоящих ресурсов. Пропорции решают: реакции и пороги рождают HP, стойкости и трейты. Сплавы идут в слот брони всех конструкторов.', cat: 'alloy' },
+  { slug: 'build-reactor', ico: 'reactor', name: 'Реакторная верфь', desc: 'Своя энергоустановка: школа, топливо со склада державы, теплоноситель, КПД преобразования и удержание зоны. Реакторы идут в слот того класса, под который спроектированы.', cat: 'reactor' },
+  { slug: 'build-turret', ico: 'turret', name: 'Оружейная верфь', desc: 'Своё орудие: класс установки, технология, калибр и стволы. Масса и энергия решают, кто его потянет. Орудия идут в слот вооружения всех конструкторов.', cat: 'turret' },
   // Конструктор дивизий убран из хаба: армии теперь формируются из готовых юнитов
   // («Звёздный марш»). Билдер доступен только для правки уже созданных дивизий (cnEdit).
+];
+// Каталоги под сеткой — те же значки, что и у конструкторов.
+const CN_HUB_CATS = [
+  { slug: 'cat-ships', ico: 'ship', name: 'Флот' },
+  { slug: 'cat-ground', ico: 'ground', name: 'Наземная техника' },
+  { slug: 'cat-aviation', ico: 'air', name: 'Авиация' },
+  { slug: 'cat-divisions', ico: 'division', name: 'Дивизии' },
 ];
 
 async function cnRenderHub() {
@@ -94,27 +124,33 @@ async function cnRenderHub() {
   const facLine = fac
     ? `<div class="cn-hub-faction">От имени фракции: <b style="color:${esc(frReadable(fac.faction_color))}">${esc(fac.faction_name || '—')}</b></div>`
     : cnIsStaff() ? `<div class="cn-hub-faction">Режим администрации — фракция выбирается при публикации.</div>` : '';
-  const cards = CN_HUB.map(h => `<div class="cn-hub-card${cnFrozenCat(h.cat) ? ' cn-hub-frozen' : ''}" onclick="${h.url ? `location.href='${h.url}'` : `go('${h.slug}')`}">
-      <div class="cn-hub-ico">${h.ico}</div>
-      <div class="cn-hub-main">
-        <div class="cn-hub-name">${esc(h.name)}${cnFrozenCat(h.cat) ? '<span class="cn-hub-tag">заморожен · регистрация закрыта</span>' : ''}</div>
-        <div class="cn-hub-desc">${esc(h.desc)}</div>
-      </div>
-      <div class="cn-hub-arr">→</div>
-    </div>`).join('');
-  setPg(`<div class="cn-wrap">
-    <div class="cn-head">
+  // Карточка-цех: номер, значок, имя, описание и подвал-действие. Рамка ровная
+  // (без срезанных углов), «кибер» держится на моноширинных метках, уголковых
+  // засечках и одном акценте на наведении.
+  const cards = CN_HUB.map((h, i) => {
+    const frz = cnFrozenCat(h.cat);
+    return `<button type="button" class="cn-hub-card${frz ? ' is-frozen' : ''}" onclick="${h.url ? `location.href='${h.url}'` : `go('${h.slug}')`}">
+      <span class="cn-hub-idx">${String(i + 1).padStart(2, '0')}</span>
+      <span class="cn-hub-ico">${cnIco(h.ico)}</span>
+      <span class="cn-hub-main">
+        <span class="cn-hub-name">${esc(h.name)}</span>
+        ${frz ? '<span class="cn-hub-tag">Регистрация закрыта</span>' : ''}
+        <span class="cn-hub-desc">${esc(h.desc)}</span>
+      </span>
+      <span class="cn-hub-go">${frz ? cnIco('lock', 'cn-i-sm') + '<span>Только просмотр</span>' : '<span>Открыть</span>' + cnIco('arrow', 'cn-i-sm')}</span>
+    </button>`;
+  }).join('');
+  const cats = CN_HUB_CATS.map(c => `<button type="button" class="cn-hub-cat" onclick="go('${c.slug}')">${cnIco(c.ico, 'cn-i-sm')}<span>${esc(c.name)}</span></button>`).join('');
+  setPg(`<div class="cn-wrap cn-hub">
+    <div class="cn-head cn-hub-head">
       <div class="cn-eyebrow">◈ ПРОИЗВОДСТВО</div>
       <h1>Конструкторы</h1>
       ${facLine}
     </div>
     <div class="cn-hub-grid">${cards}</div>
     <div class="cn-hub-cats">
-      <span>Каталоги:</span>
-      <a onclick="go('cat-ships')">Флот</a>
-      <a onclick="go('cat-ground')">Наземная техника</a>
-      <a onclick="go('cat-aviation')">Авиация</a>
-      <a onclick="go('cat-divisions')">Дивизии</a>
+      <div class="cn-hub-cats-l">Каталоги</div>
+      <div class="cn-hub-cats-row">${cats}</div>
     </div>
   </div>`);
 }
@@ -327,7 +363,7 @@ const CN_FROZEN_TITLE = 'Регистрация проектов закрыта'
 const CN_FROZEN_TEXT = 'До конца обновления «Убей или спаси» работы над наземкой и авиацией не ведутся. Новые проекты после переработки могут стать неактуальными, поэтому регистрация закрыта, а производство наземных юнитов и авиации приостановлено. Конструктор открыт для прикидки: считайте ТТХ и сравнивайте компоновки — сохранить проект нельзя.';
 function cnFrozenCat(cat) { return cat === 'army' || cat === 'ground' || cat === 'aviation'; }
 function cnFrozenBanner() {
-  return `<div class="cn-frz"><div class="cn-frz-ic">⛔</div>
+  return `<div class="cn-frz"><div class="cn-frz-ic">${cnIco('ban')}</div>
     <div><div class="cn-frz-hd">${CN_FROZEN_TITLE}</div>
     <div class="cn-frz-tx">${CN_FROZEN_TEXT}</div></div></div>`;
 }
@@ -4811,7 +4847,7 @@ async function cnVehRender(cat) {
   const cui = def.cardUI;
   const publishBtns = `${facBlock}
           <button class="btn btn-gd btn-fw" style="margin-top:12px" onclick="cnPublish()">${edit ? '💾 Сохранить изменения' : '✓ Опубликовать'}</button>
-          <button class="btn btn-gh btn-fw" style="margin-top:8px" onclick="cnCopyVehCard()">📋 Копировать спецификацию</button>`;
+          <button class="btn btn-gh btn-fw" style="margin-top:8px" onclick="cnCopyVehCard()">Копировать спецификацию</button>`;
   // Игровой outfit-экран: системы — компактные чипы в шапке полотна, ниже крупный корабль, под ним ТТХ
   const slotSel = (id, h) => `<select id="cn-${id}" class="cn-sel-hidden" onchange="${h}"></select><div class="cn-cards cn-slot" id="cn-${id}-cards"></div>`;
   const stageHtml = `
@@ -4926,8 +4962,8 @@ async function cnVehRender(cat) {
       <button class="btn btn-gh btn-fw cn-ln-add" onclick="cnVehAddItem('module')">+ модуль</button>
       <div class="cn-ln-sec">Расчётные ТТХ</div>
       <div id="cn-stats" class="cn-ln-stats"></div>
-      <div class="cn-ln-lock">🔒 Проект не сохраняется — регистрация закрыта до конца обновления «Убей или спаси».</div>
-      <button class="btn btn-gh btn-fw" onclick="cnCopyVehCard()">📋 Копировать спецификацию</button>
+      <div class="cn-ln-lock">${cnIco('lock', 'cn-i-sm')} Проект не сохраняется — регистрация закрыта до конца обновления «Убей или спаси».</div>
+      <button class="btn btn-gh btn-fw" onclick="cnCopyVehCard()">Копировать спецификацию</button>
     </div>`;
   }
   const body = frozen ? leanHtml : cui ? stageHtml : `<div class="cn-grid">

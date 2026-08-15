@@ -198,7 +198,7 @@ const CAB_DEPT = {
               open: () => heroVNResearchOpen(), close: () => heroVNResearchClose() },
   intel:    { nm: 'Разведуправление', sh: 'Разведка', sub: 'агентура, операции, досье, контрразведка', ic: 'sat', grp: 'might',
               open: () => heroVNIntelOpen(), close: () => heroVNIntelClose() },
-  doom:     { nm: 'Штаб артиллерии', sh: 'Артиллерия', sub: 'протокол последнего довода', ic: 'war', grp: 'might',
+  doom:     { nm: 'Штаб артиллерии', sh: 'Артиллерия', sub: 'протокол последнего довода', ic: 'doom', grp: 'might',
               // Длань скрыта, пока не исследована «Сама неотвратимость» (зеркало меню новеллы).
               need: () => { try { return (typeof ecDoomUnlocked === 'function' && EC.eco && ecDoomUnlocked())
                                     || localStorage.getItem('wk_doom_unlocked') === '1'; } catch (e) { return false; } },

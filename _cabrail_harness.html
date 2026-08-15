@@ -56,25 +56,36 @@
   </div><div class="cap">обычный борт (для сравнения)</div></div>
 </div>
 
-<script>
+<script type="module">
+// Значки берём из ЖИВОГО render.js: вытаскиваем оттуда таблицу NAV_ICO и navIco()
+// текстом, чтобы стенд не разошёлся с сайтом (грузить render.js целиком нельзя —
+// он тянет за собой supabase и весь остальной каркас).
+var src = await (await fetch('render.js?_=' + Date.now())).text();
+var blk = src.match(/const NAV_ICO = \{[\s\S]*?\n\};[\s\S]*?\n\}/);
+(0, eval)(blk[0]);
+
 // Разметка ровно как её строит buildNav (render.js): пункты сайта, группа
 // «Правила проекта», разделы вики с картинками-иконками и «РАЗНОЕ» в хвосте.
 var NAV = `
-<a class="n-home" href="#"><span class="n-home-icon">⌂</span>Главная</a>
-<a class="n-home" href="#"><span class="n-home-icon">📖</span>Игровой гайдбук</a>
-<div class="n-group" id="nav-rules">
-  <div class="n-group-hdr"><span class="n-home-icon">⚖</span><span class="n-group-t">Правила проекта</span><span class="n-group-arr">▸</span></div>
+<a class="n-home" href="#"><span class="n-home-icon">${navIco('home')}</span>Главная</a>
+<a class="n-home" href="#"><span class="n-home-icon">${navIco('guide')}</span>Игровой гайдбук</a>
+<div class="n-group op" id="nav-rules">
+  <div class="n-group-hdr"><span class="n-home-icon">${navIco('scales')}</span><span class="n-group-t">Правила проекта</span><span class="n-group-arr">▸</span></div>
   <div class="n-group-body">
-    <a class="n-sub" href="#"><span class="n-home-icon">◈</span>Общие правила</a>
+    <a class="n-sub" href="#"><span class="n-home-icon">${navIco('doc')}</span>Общие правила</a>
+    <a class="n-sub" href="#"><span class="n-home-icon">${navIco('charter')}</span>Устав проекта</a>
+    <a class="n-sub" href="#"><span class="n-home-icon">${navIco('shield')}</span>Регламент RP и боёв</a>
+    <a class="n-sub" href="#"><span class="n-home-icon">${navIco('speech')}</span>Дисциплина и общение</a>
+    <a class="n-sub" href="#"><span class="n-home-icon">${navIco('pen')}</span>Регистрация и нейминг</a>
   </div>
 </div>
-<a class="n-home on" href="#"><span class="n-home-icon">🛰</span>Кабинет игрока</a>
-<a class="n-home" href="#"><span class="n-home-icon">☄</span>Горячие точки<span class="hs-badge">2</span></a>
-<a class="n-home" href="#"><span class="n-home-icon">🜨</span>Карта галактики</a>
-<a class="n-home" href="#"><span class="n-home-icon">⬡</span>Фракции</a>
-<a class="n-home" href="#"><span class="n-home-icon">⛬</span>Игровые локации</a>
-<a class="n-home" href="#"><span class="n-home-icon">⚒</span>Конструкторы</a>
-<a class="n-home" href="#"><span class="n-home-icon">🛠</span>Управление</a>
+<a class="n-home" href="#"><span class="n-home-icon">${navIco('dish')}</span>Кабинет игрока</a>
+<a class="n-home" href="#"><span class="n-home-icon">${navIco('swords')}</span>Горячие точки<span class="hs-badge">2</span></a>
+<a class="n-home" href="#"><span class="n-home-icon">${navIco('galaxy')}</span>Карта галактики</a>
+<a class="n-home" href="#"><span class="n-home-icon">${navIco('banner')}</span>Фракции</a>
+<a class="n-home" href="#"><span class="n-home-icon">${navIco('pin')}</span>Игровые локации</a>
+<a class="n-home" href="#"><span class="n-home-icon">${navIco('compass')}</span>Конструкторы</a>
+<a class="n-home on" href="#"><span class="n-home-icon">${navIco('sliders')}</span>Управление</a>
 <div class="nav-divider"></div>
 <div class="ns"><div class="nl-hdr"><span class="nl-ico" style="font-size:9px;color:var(--t4)">◈</span><span class="nl-name">Вселенная</span><span class="nl-cnt">14</span><span class="nl-arr">▶</span></div><div class="nl-body"><a class="np" href="#">Страница</a></div></div>
 <div class="ns"><div class="nl-hdr"><span class="nl-ico" style="font-size:9px;color:var(--t4)">◈</span><span class="nl-name">Расы</span><span class="nl-cnt">9</span><span class="nl-arr">▶</span></div><div class="nl-body"><a class="np" href="#">Страница</a></div></div>

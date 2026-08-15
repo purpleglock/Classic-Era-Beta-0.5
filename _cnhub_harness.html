@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Хаб конструкторов — стенд</title>
+<link rel="stylesheet" href="css/index.css?v=dev">
+<style>body{margin:0;background:var(--b1,#0a0d10);color:var(--t1,#dfe7ef)}</style>
+</head>
+<body>
+<div id="pg"></div>
+<script>
+// Стенд: только разметка хаба. Всё внешнее — заглушки.
+window.user = { id: 'u1' };
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function go(r) { console.log('go:', r); }
+function setPg(h) { document.getElementById('pg').innerHTML = h; }
+function toast(m, t) { console.log('toast:', t, m); }
+function frReadable(c) { return c || '#7fd7ff'; }
+function dbGet() { return Promise.resolve([]); }
+</script>
+<script src="constructors.js?v=dev"></script>
+<script>
+cnLoadMyFaction = async () => {};
+cnCanAccess = () => true;
+cnIsStaff = () => false;
+cnMyFactionMeta = () => ({ faction_id: 'f1', faction_name: 'Микустан', faction_color: '#4ad6c8' });
+cnRenderHub();
+</script>
+</body>
+</html>

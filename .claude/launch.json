@@ -82,6 +82,16 @@
       "port": 8161
     },
     {
+      "name": "pick-glyph",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8177"
+      ],
+      "port": 8177
+    },
+    {
       "name": "promo",
       "runtimeExecutable": "python",
       "runtimeArgs": [

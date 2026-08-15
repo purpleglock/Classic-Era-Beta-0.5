@@ -152,6 +152,86 @@
 #contrib-mo-lvl:not(:empty){
   padding:18px 24px 6px;flex-shrink:0;overflow-y:auto;max-height:52%;
 }
+/* «Был в сети» переехал в правую колонку (editor.js чистит этот узел), но
+   пустой div остаётся flex-элементом и съедает целый gap колонки. */
+#contrib-mo-seen:empty{display:none}
+
+/* ══════════════════════════════════════════════════════════
+   ДОСЬЕ УЧАСТНИКА НА ТЕЛЕФОНЕ — единственное место
+   Раньше тот же @media лежал в 05_panels.css, 06_system.css и
+   10_patch.css — три набора с !important и разными цифрами. Итог был не
+   «адаптив», а лотерея порядка @import, и в ней проигрывало главное:
+   · ИМЯ И ТИТУЛ схлопывались в ноль. В полосе рядом с аватаром сидит
+     #contrib-mo-role-wrap с width:100% — как flex-элемент он забирал
+     базой всю строку, а .cmp-id с flex-basis:0 сжаться уже не мог и
+     получал ровно 0px под overflow:hidden. На телефоне досье открывалось
+     без имени владельца.
+   · СПИСОК СТРАНИЦ жил в окошке ~60px. Правая колонка прокручивалась
+     сама, а .cmp-pages-list внутри неё оставался flex:1 + свой скролл:
+     блок уровня (568px) съедал высоту, списку доставался остаток.
+   Здесь колонка прокручивается ЦЕЛИКОМ и ровно одна: уровень, оси,
+   цифры и страницы идут одной лентой, без скролла внутри скролла.
+   ══════════════════════════════════════════════════════════ */
+@media(max-width:768px){
+  /* Поля оверлея съедают ширину, которой на телефоне и так нет */
+  #mo-contrib{padding:12px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+
+  /* Планшет в портрете попадает в тот же @media — потолок ширины держим,
+     иначе досье растекается во весь экран и перестаёт читаться панелью. */
+  .mo-contrib-panel{
+    flex-direction:column;width:100%;max-width:640px;
+    max-height:100%;overflow:hidden;
+  }
+
+  /* ── Полоса опознания: аватар + имя + титул, больше ничего ── */
+  .cmp-left{
+    width:100%;min-width:0;flex:0 0 auto;
+    flex-direction:row;flex-wrap:wrap;align-items:center;
+    gap:12px;
+    /* справа держим место под ✕, иначе имя уезжает под кнопку */
+    padding:12px 52px 12px 14px;
+    border-right:none;border-bottom: var(--deco-frame-w, 1px) solid var(--w2);
+  }
+  .cmp-left::after{display:none}          /* сетка-текстура: лишний слой краски */
+  .cmp-av-zone{flex:0 0 auto}
+  .cmp-av-frame{width:56px;height:56px}
+  .mo-contrib-panel .contrib-mo-av{width:48px;height:48px;font-size:15px}
+  .cmp-scanbeam{display:none}
+
+  .cmp-id{flex:1 1 auto;width:auto;min-width:0;text-align:left;overflow:hidden}
+  .cmp-label{font-size:7px;letter-spacing: calc(1.4px * var(--deco-ls-mult, 1));margin-bottom:4px}
+  .mo-contrib-panel .contrib-mo-name{
+    font-size:13px;letter-spacing: calc(1px * var(--deco-ls-mult, 1));line-height:1.25;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .mo-contrib-panel .contrib-mo-email{
+    font-size:9px;margin-top:3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal;
+  }
+
+  /* Счётчик страниц и «СТАТИСТИКА» повторяют цифры из ml-facts справа —
+     на узкой полосе это лишний шум, а role-wrap ещё и давил имя. */
+  .cmp-stat-block{display:none}
+  #contrib-mo-role-wrap{display:none}
+
+  /* Правку профиля НЕ прячем (JS сам ставит display у своего досье) —
+     просто уводим на свою строку под именем. */
+  .cmp-edit-btn{flex:1 0 100%;width:100%;padding:10px;font-size:9px}
+
+  /* ── Правая колонка = единственный скроллер ── */
+  .cmp-right{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  #contrib-mo-lvl:not(:empty){max-height:none;overflow:visible;flex-shrink:0;padding:14px 14px 4px}
+  .cmp-right-hdr{
+    position:sticky;top:0;z-index:2;background:var(--b2);
+    padding:11px 14px;
+  }
+  .cmp-pages-list{flex:0 0 auto;overflow:visible;padding:8px 12px 14px;gap:4px}
+  /* Палец не «наводится»: сдвиг на :hover залипал после тапа */
+  .contrib-pg-row{padding:11px 12px;gap:8px;min-height:44px}
+  .contrib-pg-row:hover{padding-left:12px}
+
+  .cmp-close{top:8px;right:8px;width:34px;height:34px;font-size:15px}
+}
 
 /* Телефон: досье в одну колонку, цифры покрупнее */
 /* ══════════════════════════════════════════════════════════
@@ -193,9 +273,22 @@
   .ml-fact-k{font-size:8px;letter-spacing:.8px}
   .ml-fact-v{font-size:14px}
   .ml-seen{font-size:9px;text-align:left;margin:-6px 0 10px}
-  /* На телефоне прокручивается вся правая колонка — своя прокрутка и потолок
-     у блока уровня здесь только мешали бы (скролл внутри скролла). */
-  #contrib-mo-lvl:not(:empty){max-height:none;overflow:visible;padding:14px 14px 4px}
+}
+
+/* Телефон: поля оверлея до 8px — каждая точка ширины идёт в текст */
+@media(max-width:480px){
+  #mo-contrib{padding:8px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+}
+
+/* Узкий телефон (SE, старые Android): полоса опознания и так на пределе —
+   аватар ужимаем, чтобы имени осталась строка, а не два символа с многоточием */
+@media(max-width:390px){
+  .cmp-left{gap:10px;padding:10px 48px 10px 12px}
+  .cmp-av-frame{width:48px;height:48px}
+  .mo-contrib-panel .contrib-mo-av{width:42px;height:42px;font-size:13px}
+  .mo-contrib-panel .contrib-mo-name{font-size:12px}
+  .cmp-pages-list{padding:8px 10px 14px}
+  .contrib-pg-row{padding:11px 10px}
 }
 
 /* Совсем узкие экраны: карточка в один столбец, чтобы имя и титул не рвались */

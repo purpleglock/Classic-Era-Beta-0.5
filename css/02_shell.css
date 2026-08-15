@@ -299,6 +299,13 @@ a.n-home, a.n-sub, a.np, a.ng-t { text-decoration:none; }
   background:var(--b2);
 }
 .n-home .n-home-icon{font-size:10px;flex-shrink:0;color:var(--te)}
+/* Значок пункта — контурный SVG (NAV_ICO / navIco, render.js), а не эмодзи.
+   ⚠️ КАЛИБР ЗАДАЁТСЯ САМОМУ <svg>, А НЕ РАЗМЕРУ ШРИФТА: у span'а по всему
+   каскаду висят `font-size:9-10px !important` (07_premium, 19_guide) — под
+   глиф. Картинке они безразличны, поэтому размер живёт в `.nav-i`, а span
+   становится центрирующей коробкой, чтобы иконка не съезжала по базовой линии. */
+.n-home-icon{display:inline-flex;align-items:center;justify-content:center;line-height:0}
+.nav-i{width:15px;height:15px;display:block}
 .n-home:hover{ color:var(--tel); border-color:var(--w2); background:var(--b3); }
 .n-home.on{ color:var(--gdl); border-color:var(--gd); background:var(--gdb); box-shadow:inset 2px 0 0 var(--gd); }
 .n-home.on .n-home-icon{color:var(--gd)}

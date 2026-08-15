@@ -5006,8 +5006,10 @@ canvas.ec-res-thumb-cv { border-radius: 0; background: transparent; box-shadow: 
   display: flex; align-items: center; gap: 9px; margin-bottom: 7px;
   font: 700 13px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--err);
 }
-.ec-frz-ic { font-size: 16px; }
+.ec-frz-ic { display: inline-flex; color: var(--err); }
+.ec-frz-ic .ec-ico { width: 18px; height: 18px; }
 .ec-frz-tx { font: 400 13px/1.6 inherit; color: var(--t3, var(--t4)); max-width: 78ch; }
 .ec-frz-ft { margin-top: 9px; font: 500 11.5px var(--font-mono); color: var(--t4); }
 .ec-fb-tab.frz { opacity: .6; }
-.ec-fb-tab.frz .ec-fb-tab-n { color: var(--err); }
+.ec-fb-tab.frz .ec-fb-tab-n { color: var(--err); display: inline-flex; align-items: center; }
+.ec-fb-tab-lock { width: 14px; height: 14px; }
