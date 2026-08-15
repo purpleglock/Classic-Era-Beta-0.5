@@ -1,0 +1,115 @@
+/* ════════════════════════════════════════════════════════════
+   ИНФОБОКС — карточка-досье державы, персонажа, артефакта
+
+   Инфобокс стал главным инструментом оформления фракции (карточка в реестре
+   собирается из него), поэтому он перестал быть «таблицей мелким моно».
+   Здесь он переписан целиком: строки на сетке, а не на flex с фиксированной
+   колонкой — раньше длинный ключ («Тип государства») ломался пополам и
+   оставлял рядом со значением пустой коридор.
+
+   Файл идёт ПОСЛЕДНИМ в index.css: базовый вид лежит в 03_content.css, а
+   07_premium.css перекрывает его через !important — спорить с ним из
+   середины цепочки бессмысленно, поэтому финальный слой здесь.
+   ════════════════════════════════════════════════════════════ */
+
+.blk-infobox{
+  width:300px;
+  border:1px solid color-mix(in srgb, var(--gd,#3a9bdc) 22%, transparent) !important;
+  border-radius:var(--radius-lg) !important;
+  background:linear-gradient(180deg, hsl(220 24% 10.5%), hsl(222 24% 8.5%)) !important;
+  box-shadow:0 18px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.03);
+  overflow:hidden !important;
+}
+/* Тонкая световая кромка сверху — единственный «спецэффект» рамки. */
+.blk-infobox::before{
+  height:2px !important; opacity:.85 !important; right:0 !important;
+  background:linear-gradient(90deg, var(--te), var(--gd) 55%, transparent) !important;
+}
+
+/* ── Шапка ─────────────────────────────────────────────────── */
+.ib-head{
+  padding:16px 16px 14px !important;
+  background:linear-gradient(180deg, hsl(220 26% 13%), hsl(221 25% 10%)) !important;
+  border-bottom:1px solid color-mix(in srgb, var(--gd,#3a9bdc) 18%, transparent) !important;
+}
+/* Ярлык — чипом, а не строчкой мелких букв: он несёт тип записи
+   («NPC-фракция», «Поглощённая держава») и должен читаться сразу. */
+.ib-head-label{
+  display:inline-block !important; margin-bottom:9px !important;
+  padding:3px 9px; font-size:8.5px !important; border-radius:999px;
+  border:1px solid color-mix(in srgb, var(--te,#37c8c3) 35%, transparent);
+  background:color-mix(in srgb, var(--te,#37c8c3) 10%, transparent);
+  color:var(--tel, #8fe3e0) !important;
+}
+.ib-head-title{font-size:17px !important; line-height:1.22 !important; letter-spacing:calc(1.2px * var(--deco-ls-mult,1)) !important}
+.ib-head-sub{
+  margin-top:8px !important; font-size:11.5px !important; font-style:normal !important;
+  color:var(--t2) !important; line-height:1.45;
+  padding-top:8px; border-top:1px solid rgba(255,255,255,.06);
+}
+
+/* ── Изображение ───────────────────────────────────────────── */
+/* Флаг державы — её лицо. Прежний фильтр глушил цвет до серого: герб, ради
+   которого страницу и открывают, выглядел выцветшей тряпкой. */
+.ib-image{
+  filter:none !important; cursor:zoom-in;
+  aspect-ratio:16/10; object-fit:cover;
+  transition:transform var(--duration-normal, .25s) ease;
+}
+.blk-infobox:hover .ib-image{transform:scale(1.015)}
+.ib-image-caption{
+  padding:7px 12px !important; font-size:10.5px !important; font-style:normal !important;
+  color:var(--t3) !important; text-align:center;
+  background:hsl(222 24% 9%); border-bottom:1px solid rgba(255,255,255,.05) !important;
+}
+
+/* ── Секции и строки ───────────────────────────────────────── */
+.ib-section{
+  padding:9px 12px 7px !important; font-size:8.5px !important;
+  background:hsl(221 26% 11.5%) !important;
+  color:var(--gdl, #d8b46a) !important;
+  border-top:1px solid rgba(255,255,255,.05);
+  border-bottom:1px solid color-mix(in srgb, var(--gd,#3a9bdc) 14%, transparent) !important;
+}
+.blk-infobox .ib-section:first-of-type{border-top:none}
+
+/* Сетка вместо flex: колонка ключей одна на весь инфобокс, значения выровнены
+   по общей вертикали, длинный ключ переносится внутри своей колонки. */
+.ib-row{
+  display:grid !important;
+  grid-template-columns:minmax(72px, 34%) 1fr;
+  align-items:start; gap:10px !important;
+  padding:8px 12px !important;
+  border-bottom:1px solid rgba(255,255,255,.045) !important;
+}
+.ib-row:last-child{border-bottom:none !important}
+.ib-row:nth-of-type(even){background:rgba(255,255,255,.012)}
+.ib-row:hover{background:color-mix(in srgb, var(--gd,#3a9bdc) 7%, transparent) !important}
+.ib-key{
+  width:auto !important; font-family:var(--font-mono) !important;
+  font-size:9.5px !important; line-height:1.5; letter-spacing:.4px;
+  text-transform:uppercase; color:var(--t3) !important;
+  overflow-wrap:break-word; word-break:break-word;
+}
+/* Значение — обычным шрифтом: моноширинный тут проигрывал в читаемости на
+   длинных строках вроде списка колоний. */
+.ib-val{
+  font-family:var(--font-body, inherit) !important;
+  font-size:12.5px !important; line-height:1.5 !important;
+  color:var(--t1) !important; overflow-wrap:break-word; word-break:break-word;
+}
+.ib-val a{color:var(--tel, #8fe3e0)}
+
+/* ── Планшет и телефон ─────────────────────────────────────── */
+@media (max-width: 900px) and (min-width: 769px){
+  .blk-infobox{width:250px}
+}
+@media (max-width: 768px){
+  .blk-infobox{width:100% !important; float:none !important; margin:0 0 20px !important}
+  /* Узкая колонка ключей на телефоне превращалась в столбик из двух букв —
+     ключ уходит наверх, значение занимает всю ширину. */
+  .ib-row{grid-template-columns:1fr; gap:3px !important; padding:9px 13px !important}
+  .ib-key{font-size:9px !important}
+  .ib-val{font-size:13px !important}
+  .ib-head-title{font-size:16px !important}
+}

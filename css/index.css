@@ -12,7 +12,7 @@
 @import './12_preview.css?v=20260703brand5';
 @import './13_redesign.css?v=20260703brand5';
 @import './14_map.css?v=20260813legion1';
-@import './15_faction.css?v=20260708capsphere2';
+@import './15_faction.css?v=20260816wiki16';
 @import './16_constructors.css?v=20260815hub';
 @import './17_economy.css?v=20260815hub';
 @import './18_admin.css?v=20260703brand5';
@@ -33,3 +33,4 @@
 @import './33_path.css?v=20260813path2';
 @import './34_army.css?v=20260815afkit';
 @import './35_notify.css?v=20260816notify3';
+@import './36_infobox.css?v=20260816wiki16';

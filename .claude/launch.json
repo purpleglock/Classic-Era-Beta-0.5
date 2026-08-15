@@ -102,6 +102,16 @@
       "port": 8172
     },
     {
+      "name": "wiki-registry",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8186"
+      ],
+      "port": 8186
+    },
+    {
       "name": "notify",
       "runtimeExecutable": "python",
       "runtimeArgs": [
@@ -110,6 +120,26 @@
         "8181"
       ],
       "port": 8181
+    },
+    {
+      "name": "wiki-cards",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8188"
+      ],
+      "port": 8188
+    },
+    {
+      "name": "lore-check",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8199"
+      ],
+      "port": 8199
     }
   ]
 }

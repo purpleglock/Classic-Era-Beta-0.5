@@ -881,8 +881,139 @@ function frCapital(f, cap) {
   return { sysName, planet };
 }
 
-async function renderFactionsPage() {
-  setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
+// ── Карточка державы = ИНФОБОКС её вики-статьи ──────────────────────────────
+// Оформление фракции задаётся один раз — в инфобоксе статьи; реестр только
+// показывает его. Строка анкеты (faction_applications) даёт живые данные
+// (столица, цвет), инфобокс — облик. Пары ищем по имени, чтобы уже созданные
+// державы и союзы не встали в раздел дважды: карточкой и статьёй.
+
+// Имя в сравнимый вид: регистр, ё/е, кавычки-дефисы-пробелы прочь.
+function frNorm(s) {
+  return String(s || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/gi, '');
+}
+// Ключи инфобокса, которыми автор может ПРЯМО привязать статью к анкете
+// (когда название статьи и название державы разошлись).
+const FR_IB_LINK_KEYS = ['держава', 'фракция', 'государство', 'союз', 'faction', 'fid'];
+// Что показать в строке характеристик карточки: сперва осмысленное, затем —
+// чем автор заполнил инфобокс (порядок его, поэтому берём первые непустые).
+const FR_IB_META_KEYS = ['столица', 'глава', 'правитель', 'раса', 'строй', 'правление', 'население', 'идеология'];
+
+// Кто это — читаем из ЯРЛЫКА инфобокса статьи: «NPC-фракция», «Поглощённая
+// держава». Отдельной колонки в БД нет намеренно — оформление и вид карточки
+// задаются в одном месте, редактором статьи.
+function frIbLabel(page) { return String((page && page.ib && page.ib.label) || '').toLowerCase(); }
+function frIsNpc(page) { return /npc|нпс/.test(frIbLabel(page)); }
+function frIsGone(page) {
+  const st = (page && page.infobox && (page.infobox['статус'] || page.infobox['Статус'])) || '';
+  return /поглощ/i.test(frIbLabel(page)) || /поглощ|распущ|уничтож/i.test(st);
+}
+
+// Все страницы раздела «Вики фракций» (включая подразделы) с их инфобоксами.
+function frWikiPages() {
+  if (typeof pages === 'undefined' || typeof factionWikiSec !== 'function') return [];
+  const sec = factionWikiSec();
+  if (!sec) return [];
+  const slugs = new Set([sec.slug]);
+  if (typeof sections !== 'undefined' && Array.isArray(sections)) {
+    sections.filter(s => s.parent_id === sec.id).forEach(s => slugs.add(s.slug));
+  }
+  return pages.filter(p => slugs.has(p.section) && (typeof isVisiblePage !== 'function' || isVisiblePage(p)));
+}
+// Слова, которые в названии статьи есть, а в реестре нет (и наоборот):
+// «Альянс Организации Межзвездного Договора» — та же «Организация Межзвездного
+// Договора». Родовое слово ничего не различает, поэтому в сравнении не участвует.
+const FR_STOP_WORDS = new Set(['альянс', 'союз', 'конфедерация', 'федерация', 'коалиция', 'пакт', 'блок', 'уния']);
+// Основы значимых слов: «Организация» и «Организации» — одно слово, а склонение
+// названия иначе разводило бы статью и реестр по разным карточкам.
+function frStems(name) {
+  return new Set(String(name || '').toLowerCase().replace(/ё/g, 'е')
+    .split(/[^a-zа-я0-9]+/i)
+    .filter(w => w.length >= 4 && !FR_STOP_WORDS.has(w))
+    .map(w => w.slice(0, 5)));
+}
+// Индекс «нормализованное имя → страница». В ключи идёт и заголовок статьи, и
+// заголовок инфобокса, и явная привязка из строк инфобокса.
+function frWikiIndex(list) {
+  const idx = new Map();
+  idx._stems = [];
+  (list || frWikiPages()).forEach(p => {
+    const keys = [typeof pT === 'function' ? pT(p) : p.title, p.title, p.title_ru, p.ib && p.ib.title];
+    FR_IB_LINK_KEYS.forEach(k => { if (p.infobox && p.infobox[k]) keys.push(p.infobox[k]); });
+    keys.forEach(k => { const n = frNorm(k); if (n && !idx.has(n)) idx.set(n, p); });
+    const st = frStems(keys[0]);
+    if (st.size) idx._stems.push({ st, page: p });
+  });
+  return idx;
+}
+// Статья для державы/союза — или null, если её ещё не написали.
+function frWikiPageFor(ent, idx) {
+  if (!ent) return null;
+  const exact = idx.get(frNorm(ent.name)) || (ent.id ? idx.get(frNorm(ent.id)) : null);
+  if (exact) return exact;
+  // Нестрогое совпадение: одно название целиком лежит внутри другого по основам
+  // и общих основ не меньше двух — «Братство» и «Братство Оширра» так не
+  // склеятся, а «Организация…» и «Альянс Организации…» найдут друг друга.
+  const mine = frStems(ent.name);
+  if (mine.size < 2) return null;
+  for (const rec of (idx._stems || [])) {
+    const small = rec.st.size <= mine.size ? rec.st : mine;
+    const big = rec.st.size <= mine.size ? mine : rec.st;
+    if (small.size >= 2 && [...small].every(s => big.has(s))) return rec.page;
+  }
+  return null;
+}
+
+// Единая карточка. page — облик (может не быть), live — живые данные (может не
+// быть: чисто лорная фракция или NPC). Клик ведёт в статью, если она есть.
+function frUnifiedCard(page, live, opts) {
+  opts = opts || {};
+  const ib = (page && page.ib) || null;
+  const ibGet = k => (page && page.infobox && (page.infobox[k] || page.infobox[k.toLowerCase()])) || '';
+  const color = frReadable(ibGet('цвет') || (live && live.color) || opts.color || '#5a7fb0');
+  const art = (ib && ib.img) || (page && page.image_url) || (live && live.herald_url) || '';
+  const name = (ib && ib.title) || (page ? (typeof pT === 'function' ? pT(page) : page.title) : (live && live.name)) || '—';
+  // Подпись — кто правит: подзаголовок инфобокса, иначе глава из инфобокса или
+  // из анкеты. Метку инфобокса («Фракция») сюда не берём: она у всех одинакова.
+  const sub = (ib && ib.subtitle)
+    || ibGet('глава') || ibGet('лидер') || ibGet('правитель')
+    || (live ? [live.gov || opts.kind || '', live.leader || live.leader_name || ''].filter(Boolean).join(' · ') : '');
+  // Характеристики: приоритетные ключи инфобокса, потом любые непустые. Две —
+  // третья всё равно не влезала в ширину плитки и уходила в многоточие.
+  let meta = [];
+  if (ib) {
+    const seen = new Set([frNorm(sub)]);
+    FR_IB_META_KEYS.forEach(k => { const v = ibGet(k); if (v && !seen.has(frNorm(v))) { seen.add(frNorm(v)); meta.push(v); } });
+    ib.rows.forEach(r => { if (meta.length < 2 && r.v && !seen.has(frNorm(r.v))) { seen.add(frNorm(r.v)); meta.push(r.v); } });
+    meta = meta.slice(0, 2);
+  }
+  if (!meta.length) meta = opts.meta ? [opts.meta] : [];
+  const click = page ? `go('${jsq(page.slug)}')`
+    : (opts.onclick || (live ? `frViewFaction('${jsq(live.id)}')` : ''));
+  // Плитка = ФЛАГ во всю карточку, имя поверх него. Прежний вариант (общая
+  // карточка вики) вписывал герб в поле с отступами и накрывал затемняющей
+  // маской: символика тонула в пустоте, а подписи резались многоточием.
+  // Здесь флаг заполняет плитку, текст лежит на градиенте у нижней кромки,
+  // цвет державы — кант снизу. Ничего лишнего: имя и одна строка сути.
+  const tag = opts.tag ? `<span class="frx-tag">${esc(opts.tag)}</span>` : '';
+  // Под именем — одна строка сути: кто правит; нет главы — характеристика.
+  const line = sub || meta[0] || '';
+  const cover = art
+    ? `<img class="frx-art" src="${esc(art)}" alt="${esc(name)}" loading="lazy">`
+    : `<span class="frx-noart" aria-hidden="true">${esc((name || '◈').slice(0, 1).toUpperCase())}</span>`;
+  return `<div class="frx" style="--fac:${color}" onclick="${click}" title="${esc(name)}">
+      ${cover}
+      <div class="frx-veil"></div>
+      ${tag}
+      <div class="frx-body">
+        <div class="frx-name">${esc(name)}</div>
+        ${line ? `<div class="frx-sub">${esc(line)}</div>` : ''}
+      </div></div>`;
+}
+
+// Реестр держав живёт ВНУТРИ вики (гайдбук, раздел «Реестр держав»): отдельная
+// страница #factions дублировала вики-раздел, отличаясь только оформлением.
+// Здесь собирается только начинка — вставляет её guide.js в свой gb-section.
+async function frRegistryHtml() {
   let approved = [], mine = null, cap = { byFid: {}, sysNames: {} }, unions = [];
   try {
     const [ap, capData] = await Promise.all([
@@ -911,41 +1042,97 @@ async function renderFactionsPage() {
       </div></div>`;
   }
 
-  const cards = approved.map(f => `<div class="fr-card" onclick="frViewFaction('${f.id}')">
-      <div class="fr-card-bar" style="background:${frReadable(f.color)}"></div>
-      <div class="fr-card-herald">${f.herald_url ? `<img src="${esc(f.herald_url)}">` : '<span style="color:' + frReadable(f.color) + '">◈</span>'}</div>
-      <div class="fr-card-main">
-        <div class="fr-card-name">${esc(f.name)}</div>
-        <div class="fr-card-sub">${esc(f.gov || '')}${f.leader ? ' · ' + esc(f.leader) : ''}</div>
-        <div class="fr-card-meta">★ ${esc(frCapital(f, cap).sysName)} · ${esc(f.race || '')}</div>
-      </div></div>`).join('') || `<div class="fr-empty">Пока нет одобренных фракций.</div>`;
+  // Облик берём из вики-статей раздела; use — статьи, уже показанные карточкой
+  // державы или союза, чтобы ниже они не повторились ещё раз в списке статей.
+  const wiki = frWikiPages(), idx = frWikiIndex(wiki), used = new Set();
+  const take = ent => { const p = frWikiPageFor(ent, idx); if (p) used.add(p.slug); return p; };
 
-  const unionCards = (unions || []).map(u => {
-    const col = frReadable(u.color || '#5a7fb0');
-    const kind = u.kind === 'federation' ? 'Федерация' : 'Конфедерация';
-    return `<div class="fr-card" onclick="frViewUnion('${u.id}')">
-      <div class="fr-card-bar" style="background:${col}"></div>
-      <div class="fr-card-herald">${u.herald_url ? `<img src="${esc(u.herald_url)}">` : `<span style="color:${col}">${u.kind === 'federation' ? '🛡' : '🤝'}</span>`}</div>
-      <div class="fr-card-main">
-        <div class="fr-card-name">${esc(u.name)}</div>
-        <div class="fr-card-sub">${kind}${u.leader_name ? ' · ' + esc(u.leader_name) : ''}</div>
-        <div class="fr-card-meta">👥 ${(+u.members || 0)} участник(ов)</div>
-      </div></div>`;
-  }).join('');
+  // НПС стоят особняком и ПЕРВЫМИ: это декорации мира, а не игроки, и путать
+  // их с державами живых участников нельзя — по ним не пишут заявок на службу.
+  const live = approved.map(f => ({ f, p: take(f) }));
+  const npcHtml = live.filter(x => frIsNpc(x.p)).map(x => frUnifiedCard(x.p, x.f, {
+    tag: 'NPC',
+    meta: frCapital(x.f, cap).sysName + (x.f.race ? ' · ' + x.f.race : ''),
+  })).join('');
+  const cards = live.filter(x => !frIsNpc(x.p)).map(x => frUnifiedCard(x.p, x.f, {
+    meta: frCapital(x.f, cap).sysName + (x.f.race ? ' · ' + x.f.race : ''),
+  })).join('') || `<div class="fr-empty">Пока нет одобренных фракций.</div>`;
+
+  const unionCards = (unions || []).map(u => frUnifiedCard(take(u), u, {
+    kind: u.kind === 'federation' ? 'Федерация' : 'Конфедерация',
+    color: u.color || '#5a7fb0',
+    meta: (+u.members || 0) + ' участник(ов)',
+    onclick: `frViewUnion('${jsq(u.id)}')`,
+  })).join('');
   const unionsBlock = (unions && unions.length)
-    ? `<div class="fr-section-title" style="margin-top:26px"><h2 style="font-size:18px;margin:0">Союзы <span style="font-size:12px;color:var(--t3);font-weight:400">— федерации и конфедерации</span></h2></div>
-       <div class="fr-grid">${unionCards}</div>`
+    ? `<div class="fr-reg-h">Союзы <span>— федерации и конфедерации</span></div>
+       <div class="cgrid">${unionCards}</div>`
     : '';
 
-  setPg(`<div class="fr-wrap">
-    <div class="fr-head"><h1>Фракции</h1>
-      ${user && canCreate && !mine ? `<button class="btn btn-gd" onclick="go('faction-new')">+ Создать государство</button>` : ''}
-    </div>
+  // Остальные статьи раздела — лор, вымершие державы, NPC: живой строки нет,
+  // но инфобокс есть, поэтому карточка та же самая.
+  const sec = typeof factionWikiSec === 'function' ? factionWikiSec() : null;
+  const restAll = wiki.filter(p => !used.has(p.slug) && !p.parent_slug && (!sec || p.section === sec.slug))
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  // НПС без строки в реестре — туда же, к остальным НПС, наверх.
+  const npcRest = restAll.filter(frIsNpc);
+  // Поглощённые державы не исчезают из мира: их история осталась, но живыми
+  // их показывать нельзя — отдельный блок внизу.
+  const gone = restAll.filter(p => !frIsNpc(p) && frIsGone(p));
+  const rest = restAll.filter(p => !frIsNpc(p) && !frIsGone(p));
+  const npcRestHtml = npcRest.map(p => frUnifiedCard(p, null, { tag: 'NPC' })).join('');
+  const npcBlock = (npcHtml + npcRestHtml)
+    ? `<div class="fr-reg-h">Силы НПС <span>— не игроки: держатели локаций, корпорации, автономии</span></div>
+       <div class="cgrid">${npcHtml}${npcRestHtml}</div>`
+    : '';
+  const goneBlock = gone.length
+    ? `<div class="fr-reg-h">Поглощённые державы <span>— вошли в состав других, история сохранена</span></div>
+       <div class="cgrid">${gone.map(p => frUnifiedCard(p, null, { tag: 'Поглощена' })).join('')}</div>`
+    : '';
+  const restBlock = rest.length
+    ? `<div class="fr-reg-h">Статьи раздела <span>— лор, документы, чужаки</span></div>
+       <div class="cgrid">${rest.map(p => frUnifiedCard(p, null)).join('')}</div>`
+    : '';
+
+  return `<div class="fr-wrap fr-wrap-inline">
+    ${user && canCreate && !mine ? `<div class="fr-head"><button class="btn btn-gd" onclick="go('faction-new')">+ Создать государство</button></div>` : ''}
     ${mineHtml}
     ${typeof fmServiceBlock === 'function' ? fmServiceBlock(!!mine) : ''}
-    <div class="fr-grid">${cards}</div>
+    ${npcBlock}
+    <div class="fr-reg-h">Действующие державы <span>— живой реестр, ${live.filter(x => !frIsNpc(x.p)).length}</span></div>
+    <div class="cgrid">${cards}</div>
     ${unionsBlock}
-  </div>`);
+    ${goneBlock}
+    ${restBlock}
+  </div>`;
+}
+
+// Наполняет контейнер в разделе «Вики фракций». Единственная точка отрисовки.
+async function frRenderRegistry(el) {
+  el = el || document.getElementById('fr-registry-live');
+  if (!el) return false;
+  el.innerHTML = `<div class="sload"><div class="pulse-loader"></div></div>`;
+  let html;
+  try { html = await frRegistryHtml(); }
+  catch (e) { html = `<div class="fr-empty">Не удалось загрузить реестр держав.</div>`; }
+  // Пока шли запросы (секунды), раздел мог перерисоваться — данные о страницах
+  // догружаются фоном. Писать в узел, взятый ДО ожидания, значило бы отдать
+  // готовый реестр в выброшённый кусок DOM, а на экране навсегда оставить
+  // загрузчик. Поэтому контейнер берём заново, уже после ожидания.
+  const live = document.getElementById('fr-registry-live') || el;
+  live.innerHTML = html;
+  return true;
+}
+
+// Старое имя: его зовут faction_members.js после подачи/отзыва заявки на службу.
+// Раздел вики открыт — обновляем реестр на месте; нет (вики-раздела не
+// существует) — рисуем реестр самостоятельной страницей, как раньше.
+async function renderFactionsPage() {
+  if (await frRenderRegistry()) return;
+  setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
+  let html = '';
+  try { html = await frRegistryHtml(); } catch (e) { html = `<div class="fr-empty">Не удалось загрузить реестр держав.</div>`; }
+  setPg(`<div class="fr-wrap"><div class="fr-head"><h1>Фракции</h1></div>${html}</div>`);
 }
 
 // Просмотр союза — модалка с флагом, описанием и участниками (видно всем).
@@ -1213,3 +1400,12 @@ async function frReject(id) {
     document.getElementById('fr-app-' + id)?.remove();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
+
+// render.js подключён РАНЬШЕ этого файла, поэтому вики-раздел фракций успевает
+// отрисоваться до того, как frRenderRegistry вообще существует: его вызов там
+// стоит под typeof-проверкой и молча пропускался — на месте реестра навсегда
+// оставался крутящийся загрузчик. Дозаполняем контейнер, если он уже на странице.
+(function () {
+  const el = document.getElementById('fr-registry-live');
+  if (el && !el.querySelector('.fr-wrap')) frRenderRegistry(el);
+})();

@@ -14,6 +14,10 @@
 // конкретного профиля, а не «спрячь того, кто смотрит».
 const CENSORED_MEMBER_ID = '272a2209-f2c1-4f13-ab95-136b4e039a8d'; // Setis241
 
+// Метка строки в «Истории изменений», когда раздела у страницы нет: локации в
+// дерево вики не входят, персонажи/предметы могут висеть без section.
+const PG_TYPE_TAG = { location:'Локации', character:'Персонажи', faction:'Вики фракций', item:'Предметы', ability:'Способности' };
+
 function _homeCoverKey() {
   const u = (typeof user !== 'undefined' && user) ? user : null;
   const vnTs = (typeof _heroVN !== 'undefined' && _heroVN && _heroVN._ts) || 0;
@@ -52,12 +56,19 @@ async function renderHome() {
     </a>`;
   }).filter(Boolean).join('');
 
-  const sorted = [...pages].filter(isVisiblePage).sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0)).slice(0,10);
+  const sorted = [...pages].filter(isVisiblePage).sort((a,b)=>new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0)).slice(0,10);
   const clRows = sorted.map(p => {
-    const isNew = Math.abs(new Date(p.updated_at||0)-new Date(p.created_at||0))<60000;
+    const isNew = !p.updated_at || Math.abs(new Date(p.updated_at)-new Date(p.created_at||0))<60000;
     const sec2 = p.section ? sections.find(s=>s.slug===p.section) : null;
-    const authorName = userLabel(p.author_id || p.created_by || '');
-    return `<div class="cl-row" onclick="go('${jsq(p.slug)}')"><span class="cl-type ${isNew?'ct-new':'ct-edit'}">${isNew?T('new_tag'):T('edit_tag')}</span><div class="cl-info"><span class="cl-title">${esc(pT(p))}</span><span class="cl-author">✍ ${esc(authorName)}${(typeof mlBadge === 'function' ? mlBadge(p.author_id, 'sm') : '')}</span></div>${sec2 ? `<span class="cl-sec-tag">${esc(sN(sec2))}</span>` : ''}<span class="cl-date">${timeAgo(p.updated_at)}</span></div>`;
+    // Подпись строки — тот, кто правил ПОСЛЕДНИМ (updated_by, ставит триггер).
+    // author_id годится только для «НОВОЕ»: у вики-фракций статью заводит
+    // триггер от имени владельца державы, а правит её кто угодно.
+    const whoKey = (isNew ? (p.author_id || p.updated_by) : (p.updated_by || p.author_id)) || p.created_by || '';
+    const authorName = userLabel(whoKey);
+    // У локаций раздела нет (в дерево вики они не входят) — метим типом,
+    // иначе строка выглядит безродной
+    const tagText = sec2 ? sN(sec2) : (PG_TYPE_TAG[p.page_type] || '');
+    return `<div class="cl-row" onclick="go('${jsq(p.slug)}')"><span class="cl-type ${isNew?'ct-new':'ct-edit'}">${isNew?T('new_tag'):T('edit_tag')}</span><div class="cl-info"><span class="cl-title">${esc(pT(p))}</span><span class="cl-author">✍ ${esc(authorName)}${(typeof mlBadge === 'function' ? mlBadge(whoKey, 'sm') : '')}</span></div>${tagText ? `<span class="cl-sec-tag">${esc(tagText)}</span>` : ''}<span class="cl-date">${timeAgo(p.updated_at||p.created_at)}</span></div>`;
   }).join('');
 
   // ключ автора = author_id (uuid); created_by-email — легаси-фолбэк до этапа 3
@@ -1410,11 +1421,32 @@ function renderSectionPage(sec) {
     return `<div class="grp-hdr"><span class="grp-hdr-t" onclick="go('sec:${jsq(sub.slug)}')">${iconHtml}${esc(sN(sub))}</span></div>${sg}`;
   }).filter(Boolean).join('');
 
-  const isFracSec = sec.slug?.includes('frak')||sec.slug?.includes('frac')||sec.name_ru?.toLowerCase().includes('фракц');
+  const isFracSec = isFactionWikiSec(sec);
   const fracBtn = (isFracSec && user?.role==='superadmin')
     ? `<div style="margin-top:20px"><button class="btn btn-gd" onclick="openFactionConstructor()">◈ + Новая фракция</button></div>`
     : '';
-  setPg(`${cover}${grid}${subHtml}${!grid&&!subHtml?`<p style="color:var(--t3);font-size:13px;padding:20px 0">В этом разделе нет статей.</p>`:''}${fracBtn}`);
+  // Живой реестр держав. Раньше он был отдельной страницей #factions, которая
+  // дублировала этот раздел, отличаясь только оформлением. Идёт ПЕРЕД списком
+  // статей: реестр — действующее положение дел (и вход в анкету), статьи — лор.
+  // Статьи РАЗДЕЛА рисует сам реестр (frRegistryHtml): только он знает, какая
+  // статья уже показана карточкой действующей державы — иначе созданные
+  // государства и союзы стояли бы на странице дважды.
+  const registry = isFracSec
+    ? `<div id="fr-registry-live"><div class="sload"><div class="pulse-loader"></div></div></div>`
+    : '';
+  if (isFracSec) grid = '';
+  setPg(`${cover}${registry}${grid}${subHtml}${!grid&&!subHtml&&!isFracSec?`<p style="color:var(--t3);font-size:13px;padding:20px 0">В этом разделе нет статей.</p>`:''}${fracBtn}`);
+  if (isFracSec && typeof frRenderRegistry === 'function') frRenderRegistry();
+}
+
+// Раздел «Вики фракций» — единственный дом реестра держав. Признак раздела нужен
+// и роутеру (#factions ведёт сюда), и подсветке навигации, поэтому он вынесен.
+function isFactionWikiSec(sec) {
+  if (!sec) return false;
+  return !!(sec.slug?.includes('frak') || sec.slug?.includes('frac') || sec.name_ru?.toLowerCase().includes('фракц'));
+}
+function factionWikiSec() {
+  return (typeof sections !== 'undefined' && Array.isArray(sections)) ? sections.find(isFactionWikiSec) : null;
 }
 
 function renderBlocks(content) {
@@ -1536,7 +1568,9 @@ function il(t) {
   t=t.replace(/\[(\x00\d+\x00)\]\([^)]+\)/g, '$1');
   
   // page links
-  t=t.replace(/\[page:([^\]]+)\]/g,(_,s)=>{const pg=pages.find(x=>x.slug===s);return mark(`<a href="javascript:void(0)" onclick="go('${jsq(s)}')">${pg?esc(pT(pg)):esc(s)}</a>`);});
+  // [page:slug] или [page:slug|Подпись]. Подпись нужна, когда страница ещё
+  // черновик или скрыта от читателя: без неё в тексте зиял голый слаг.
+  t=t.replace(/\[page:([^\]|]+)(?:\|([^\]]*))?\]/g,(_,s,cap)=>{const pg=pages.find(x=>x.slug===s);const label=(cap&&cap.trim())||(pg?pT(pg):s);return mark(`<a href="javascript:void(0)" onclick="go('${jsq(s)}')">${esc(label)}</a>`);});
   
   // regular links
   t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,text,url)=>mark(`<a href="${esc(safeUrl(url))}" target="_blank">${esc(text)}</a>`));
@@ -1749,7 +1783,9 @@ function buildNav(filt='') {
     if (typeof ntNavHtml==='function') h+=ntNavHtml();
   }
   h+=`<a class="n-home${curSlug==='map'?' on':''}" id="ntl-map" href="#map" onclick="return navGo(event,'map')"><span class="n-home-icon">${navIco('galaxy')}</span>${L('Карта галактики','Galaxy map')}</a>`;
-  h+=`<a class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" href="#factions" onclick="return navGo(event,'factions')"><span class="n-home-icon">${navIco('banner')}</span>${L('Фракции','Factions')}</a>`;
+  // Пункта «Фракции» здесь больше нет: он вёл в тот же реестр, который теперь
+  // стоит в разделе «Вики фракций» — в борте это была вторая дверь в одну комнату.
+  // Слаг #factions жив (старые ссылки и кнопки «К фракциям» ведут в вики-раздел).
   // Игровые локации — игрокам с одобренной анкетой и стаффу
   if (typeof canSeeLocations==='function' && canSeeLocations()) {
     h+=`<a class="n-home${curSlug==='locations'?' on':''}" id="ntl-loc" href="#locations" onclick="return navGo(event,'locations')"><span class="n-home-icon">${navIco('pin')}</span>${L('Игровые локации','Game locations')}</a>`;
@@ -1804,7 +1840,7 @@ function buildNav(filt='') {
     const cntHtml = totalCnt ? `<span class="nl-cnt">${totalCnt}</span>` : '';
 
     h+=`<div class="ns${isOpen?' op':''}" id="ns-${sec.id}">`;
-    h+=`<div class="nl-hdr${isSecPage?' on':''}" id="nlh-${escId(sec.id)}" onclick="tgNs('${jsq(sec.id)}','${jsq(sec.slug)}')">${bigIconHtml}${iconHtml}<span class="nl-name">${esc(sN(sec))}</span>${cntHtml}<span class="nl-arr">▶</span></div>`;
+    h+=`<div class="nl-hdr${isSecPage?' on':''}" id="nlh-${escId(sec.id)}" onclick="tgNs('${jsq(sec.id)}','${jsq(sec.slug)}')">${bigIconHtml}${iconHtml}<span class="nl-name">${esc(sN(sec))}</span>${cntHtml}<span class="nl-arr" onclick="event.stopPropagation();tgNsArr('${jsq(sec.id)}')">▶</span></div>`;
     h+=`<div class="nl-body" id="nlb-${sec.id}">`;
     directPgs.forEach(p=>{h+=npEl(p,pages);});
     subSecs.forEach(sub=>{
@@ -1838,14 +1874,15 @@ function npEl(p,all) {
   return `<div class="ng${isOpen||curSlug===p.slug?' op':''}" id="ngp-${escId(p.slug)}"><div class="ng-hdr${curSlug===p.slug?' on':''}" id="ngph-${escId(p.slug)}" onclick="tgNgP('${jsq(p.slug)}')"><span class="ng-arr">▶</span><a class="ng-t" href="#${esc(p.slug)}" onclick="event.stopPropagation();return navGo(event,'${jsq(p.slug)}')">${esc(pT(p))}${dd}</a></div><div class="ng-body">${kids.map(k=>npEl(k,all)).join('')}</div></div>`;
 }
 
+// Клик по шапке раздела ОТКРЫВАЕТ страницу раздела (для «Вики фракций» это
+// сводная страница всех держав), а не просто разворачивает ветку: раньше до
+// списка фракций нельзя было добраться из борта вообще. Сама ветка при этом
+// раскрывается; свернуть её можно стрелкой — у неё свой обработчик.
 const tgNs = (id, secSlug) => {
-  const ns = document.getElementById('ns-'+id);
-  const hdr = document.getElementById('nlh-'+id);
-  if (!ns) return;
-  const wasOpen = ns.classList.contains('op');
-  if (wasOpen) { ns.classList.remove('op'); }
-  else { ns.classList.add('op'); }
+  document.getElementById('ns-'+id)?.classList.add('op');
+  if (secSlug) go('sec:'+secSlug);
 };
+const tgNsArr = id => { document.getElementById('ns-'+id)?.classList.toggle('op'); };
 const tgNg  = id   => { document.getElementById('ng-'+id)?.classList.toggle('op'); };
 const tgNgP = slug => { document.getElementById('ngp-'+slug)?.classList.toggle('op'); };
 
@@ -1858,7 +1895,7 @@ function setAct(slug) {
   // Кабинет, Управление, Гайдбук, каталоги) — подсветка по slug→id кнопки.
   const TOP_NAV = {
     'home': 'ntl-h', 'map': 'ntl-map',
-    'factions': 'ntl-fac', 'faction-new': 'ntl-fac', 'locations': 'ntl-loc',
+    'locations': 'ntl-loc',
     'economy': 'ntl-eco', 'admin': 'ntl-adm', 'guide': 'ntl-guide',
     'constructors': 'ntl-con', 'build-ship': 'ntl-con', 'build-army': 'ntl-con',
     'build-ground': 'ntl-con', 'build-aviation': 'ntl-con', 'build-division': 'ntl-con',
@@ -8116,7 +8153,14 @@ async function renderFactionPage(pg) {
     ? `<div class="art-cov" style="--cov-h:260px;--cov-pos:center center"><img src="${esc(pg.image_url)}" alt="${esc(name)}" loading="eager"><div class="art-cov-scan"></div><div class="art-cov-fade"></div><div class="art-cov-hud hud-tl"></div><div class="art-cov-hud hud-tr"></div></div><div class="art-cov-spacer"></div>`
     : '';
 
-  const html = `${cover}
+  // Возврат в раздел: со страницы державы иначе не было пути назад ко всем
+  // фракциям — только кнопка браузера, а на телефоне и её под рукой нет.
+  const _fsec = (typeof factionWikiSec === 'function') ? factionWikiSec() : null;
+  const back = _fsec
+    ? `<div class="frx-back-row"><button class="frx-back" onclick="go('sec:${jsq(_fsec.slug)}')">← ${esc(sN(_fsec))}</button></div>`
+    : '';
+
+  const html = `${cover}${back}
   <div class="prose fac-prose-wrap" style="margin-bottom:24px">
     ${content_pg ? renderBlocks(content_pg) : ''}
     <div style="clear:both"></div>

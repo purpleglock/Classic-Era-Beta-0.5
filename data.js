@@ -10,7 +10,7 @@
 // подгружались в фоне — как на «нормальных» сайтах. Кешируем только
 // лёгкие поля (без тяжёлого content) — его догружает go() по странице.
 const CACHE_SECS_KEY = 'wk_cache_secs_v1';
-const CACHE_PGS_KEY  = 'wk_cache_pgs_v1';
+const CACHE_PGS_KEY  = 'wk_cache_pgs_v2'; // v2: + updated_by (кто правил последним)
 
 function _cacheSecs() {
   try { localStorage.setItem(CACHE_SECS_KEY, JSON.stringify(sections)); } catch(e) {}
@@ -20,9 +20,9 @@ function _cachePgs() {
     const slim = pages.map(p => ({
       id: p.id, slug: p.slug, title: p.title, title_ru: p.title_ru,
       section: p.section, parent_slug: p.parent_slug, status: p.status,
-      page_type: p.page_type, sort_order: p.sort_order, created_by: p.created_by, author_id: p.author_id,
+      page_type: p.page_type, sort_order: p.sort_order, created_by: p.created_by, author_id: p.author_id, updated_by: p.updated_by,
       updated_at: p.updated_at, created_at: p.created_at, image_url: p.image_url,
-      infobox: p.infobox
+      infobox: p.infobox, ib: p.ib
     }));
     localStorage.setItem(CACHE_PGS_KEY, JSON.stringify(slim));
   } catch(e) {}
@@ -61,18 +61,24 @@ async function loadPgs() {
   try {
     const base = 'select=*&order=sort_order.asc,title.asc';
     pages = await dbGet('pages', canSeeDrafts() ? base : base + '&status=eq.published') || [];
-    // Парсим инфобокс каждой страницы для быстрого доступа
+    // Парсим инфобокс каждой страницы для быстрого доступа.
+    // p.infobox — плоская карта ключ→значение (её читают старые места).
+    // p.ib — шапка инфобокса и строки В ПОРЯДКЕ автора: из неё карточка фракции
+    // в реестре берёт герб, имя и первые характеристики, поэтому порядок важен.
     pages.forEach(p => {
-      if (p.infobox) return;
+      if (p.ib) return;
       try {
         const blocks = JSON.parse(p.content || '[]');
         const ib = blocks.find(b => b.type === 'infobox');
         if (ib) {
-          const flat = {};
+          const flat = {}, rows = [];
           (ib.sections||[]).forEach(s => (s.rows||[]).forEach(r => {
-            if (r.key) { flat[r.key] = r.val||''; flat[r.key.toLowerCase()] = r.val||''; }
+            if (!r.key) return;
+            flat[r.key] = r.val||''; flat[r.key.toLowerCase()] = r.val||'';
+            rows.push({ k: r.key, v: r.val||'' });
           }));
           p.infobox = flat;
+          p.ib = { img: ib.image_url||'', title: ib.title||'', subtitle: ib.subtitle||'', label: ib.label||'', rows };
         }
       } catch(e) {}
     });
@@ -157,7 +163,13 @@ async function go(slug, push=true) {
     else { setPg('<div class="sempty">galaxy_map.js не загружен</div>'); }
     return;
   }
+  // Реестр держав переехал в вики-раздел «Фракции». Слаг #factions оставлен
+  // живым: на него ведут десятки кнопок «К фракциям» и старые ссылки игроков —
+  // все они теперь открывают вики-раздел, где реестр стоит над списком статей.
   if (slug==='factions') {
+    const fsec = (typeof factionWikiSec === 'function') ? factionWikiSec() : null;
+    if (fsec) { go('sec:' + fsec.slug); return; }
+    // Вики-раздела нет (пустая база) — не теряем вход в анкету: рисуем как раньше.
     if (typeof renderFactionsPage === 'function') { await renderFactionsPage(); }
     else { setPg('<div class="sempty">faction_reg.js не загружен</div>'); }
     return;
