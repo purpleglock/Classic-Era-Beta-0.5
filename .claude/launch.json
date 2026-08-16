@@ -132,6 +132,26 @@
       "port": 8188
     },
     {
+      "name": "wiki-editor",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8201"
+      ],
+      "port": 8201
+    },
+    {
+      "name": "throne",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8205"
+      ],
+      "port": 8205
+    },
+    {
       "name": "lore-check",
       "runtimeExecutable": "python",
       "runtimeArgs": [

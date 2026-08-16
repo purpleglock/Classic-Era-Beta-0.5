@@ -37,13 +37,22 @@
    остальных страницах (панели там нет) она на месте и работает как раньше. */
   html.mnav-on .mob-btn { display: none !important; }
 
+
 /* ── 2. НИЖНЯЯ ПАНЕЛЬ ──────────────────────────────────────────
-   Четыре мишени во всю ширину, подписи двух правых — они же хлебные крошки
-   («Внутренняя политика · Двор»). Живёт в <body>: fixed внутри #cw на iOS
-   считается от прокрутки, а не от экрана. */
+   ⚠️ МИШЕНЕЙ ТРИ, И ТРЕТЬЯ ШИРЕ ДВУХ ПЕРВЫХ. Кнопки «Ведомства» и «Разделы»
+   сведены в одну (почему — в шапке mobile_nav.js), и освободившаяся четверть
+   ширины отдана не воздуху, а КРОШКАМ: в четырёх равных колонках подпись
+   «Внутренняя политика» обрезалась до «Внутрен…» и уровня не сообщала вовсе.
+   Две служебные мишени берут по 74px (глиф с подписью помещается), навигация —
+   весь остаток и две строки текста в нём.
+   ⚠️ КНОПКУ НАВИГАЦИИ ОДНАЖДЫ СНЯЛИ ВОВСЕ, вынеся ленты уровней прямо на экран
+   («лесенка» из трёх липких лент под шапкой). НЕ ПОВТОРЯТЬ: навигация живёт за
+   этой кнопкой.
+   Панель живёт в <body>: fixed внутри #cw на iOS считается от прокрутки, а не
+   от экрана. */
   html.mnav-on #mnav {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-    display: grid; grid-template-columns: repeat(4, 1fr);
+    display: grid; grid-template-columns: 74px 74px minmax(0, 1fr);
     background: var(--b1, #0b0f16);
     border-top: 1px solid var(--w2);
     padding-bottom: env(safe-area-inset-bottom);
@@ -56,7 +65,7 @@
     font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
     min-width: 0;
   }
-  .mnav-ic { display: flex; }
+  .mnav-ic { position: relative; display: flex; }
   .mnav-gl {
     width: 21px; height: 21px; display: block;
     fill: none; stroke: currentColor; stroke-width: 1.6;
@@ -78,21 +87,52 @@
   .mnav-b.off { opacity: .3; pointer-events: none; }
   .mnav-b:active { background: rgba(255,255,255,.05); }
 
+/* ── 2б. КНОПКА НАВИГАЦИИ ──────────────────────────────────────
+   Единственная широкая мишень панели и единственная, что читается как ТЕКСТ, а
+   не как значок: глиф слева, крошки в две строки, галка справа. Волосяная линия
+   слева отделяет её от двух служебных — без заливок и рамок, как везде. */
+  .mnav-b-nav {
+    flex-direction: row; justify-content: flex-start; gap: 10px;
+    padding: 8px 12px 8px 13px;
+    border-left: 1px solid var(--w2);
+    text-align: left;
+  }
+  .mnav-crumb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .mnav-b-nav .mnav-t {
+    font-family: var(--font-display); font-size: 12.5px; font-weight: 600;
+    letter-spacing: .02em; color: var(--t1, #eaf6ff);
+  }
+  .mnav-t2 {
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 10.5px; line-height: 1.2; color: var(--t4);
+  }
+  .mnav-caret { flex: 0 0 auto; display: flex; color: var(--t4); transition: transform .16s ease; }
+  .mnav-caret .mnav-gl { width: 16px; height: 16px; }
+  /* Лист поднят — галка смотрит вниз: тот же тап её и опустит. */
+  .mnav-b-nav.open .mnav-caret { transform: rotate(180deg); }
+  @media (prefers-reduced-motion: reduce) { .mnav-caret { transition: none; } }
+  /* Игрок внутри ведомства — акцент на глифе и полосе, как у прочих кнопок. */
+  .mnav-b-nav.on::after { left: 12px; right: 12px; }
+
 /* Панель перекрывает низ страницы — возвращаем эту высоту содержимому. */
   html.mnav-on #cw { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
 /* Тосты садились ровно на панель (bottom:14px) — поднимаем над ней. */
   html.mnav-on #toasts { bottom: calc(66px + env(safe-area-inset-bottom)); }
 /* ⚠️ И ДВЕ ПЛАВАЮЩИЕ КНОПКИ — ТОЖЕ. Поддержка (#tk-fab, bottom:16px) и чат
    (#ch-fab, bottom:66px) висят в правом нижнем углу с z-index:95 — то есть
-   ЛОЖИЛИСЬ ПРЯМО НА ПАНЕЛЬ и накрывали правую мишень («Разделы»): попасть в неё
-   пальцем было нельзя. Панель поднимать нельзя (она у кромки экрана), поэтому
-   уезжают кнопки — на высоту панели, сохраняя прежний зазор между собой. */
+   ЛОЖИЛИСЬ ПРЯМО НА ПАНЕЛЬ и накрывали правую мишень: попасть в неё пальцем
+   было нельзя. Панель поднимать нельзя (она у кромки экрана), поэтому уезжают
+   кнопки — на высоту панели, сохраняя прежний зазор между собой. */
   html.mnav-on #tk-fab { bottom: calc(74px + env(safe-area-inset-bottom)); }
   html.mnav-on #ch-fab { bottom: calc(124px + env(safe-area-inset-bottom)); }
 
-/* ── 3. ЛИСТ ───────────────────────────────────────────────────
-   Поднимается снизу, занимает столько, сколько нужно списку, но не больше
-   86% экрана; список внутри скроллится сам и не пробивается на страницу. */
+/* ── 3. ЛИСТ-ЛЕСЕНКА ──────────────────────────────────────────
+   Поднимается снизу, занимает столько, сколько нужно ступени, но не больше 86%
+   экрана; список внутри скроллится сам и не пробивается на страницу.
+   ⚠️ ВНУТРИ — ВСЯ ЛЕСЕНКА СРАЗУ (раздел 3в): ведомства, под текущим его
+   разделы, под текущим разделом его главы. Пробовали и вкладки «Разделы |
+   Ведомства», и показ ступеней по одной с заменой — оба хуже, разбор в
+   mobile_nav.js. */
   html.mnav-on #mnav-sheet[hidden] { display: none; }
   html.mnav-on #mnav-sheet { position: fixed; inset: 0; z-index: 65; display: block; }
   .mn-ov { position: absolute; inset: 0; background: rgba(0, 0, 8, .74); }
@@ -108,14 +148,34 @@
   @keyframes mn-up { from { transform: translateY(14px); opacity: .6; } to { transform: none; opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .mn-panel { animation: none; } }
 
+  /* Язычок: лист снизу читают как «шторку», и полоска под кромкой — общий знак,
+     что её закрывают. Он же лишняя мишень закрытия у самой кромки. */
+  .mn-grip {
+    flex: 0 0 auto; height: 16px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .mn-grip::before {
+    content: ""; width: 34px; height: 3px; border-radius: 2px; background: var(--w3, rgba(255,255,255,.18));
+  }
   .mn-hd {
     flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
-    padding: 12px 16px; border-bottom: 1px solid var(--w2);
+    padding: 4px 16px 10px; border-bottom: 1px solid var(--w2);
   }
   .mn-hd h2 {
-    margin: 0; font-family: var(--font-display); font-size: 11px; font-weight: 600;
+    margin: 0; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--font-display); font-size: 11px; font-weight: 600;
     letter-spacing: .16em; text-transform: uppercase; color: var(--t3);
   }
+  /* Стрелка ступенью выше. На нулевой ступени её нет — идти некуда. */
+  .mn-back {
+    width: 34px; height: 34px; margin-left: -8px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--t3); cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mn-back[hidden] { display: none; }
+  .mn-back .mnav-gl { width: 17px; height: 17px; }
   .mn-x {
     margin-left: auto; width: 40px; height: 40px; margin-right: -8px;
     display: flex; align-items: center; justify-content: center;
@@ -135,9 +195,9 @@
   .mn-grp-hd::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--w2), transparent); }
   .mn-grp-foot { margin-top: 14px; border-top: 1px solid var(--w2); }
 
-/* Строка листа: 52px мишень, глиф · имя (+пояснение) · счётчик.
-   Активная помечена полосой на кромке, обращённой к тексту, — та же форма, что
-   у пункта меню в кабинете. */
+/* Строка листа: 52px мишень, глиф · имя (+пояснение) · счётчик · знак
+   продолжения. Активная помечена полосой на кромке, обращённой к тексту, — та
+   же форма, что у пункта меню в кабинете. */
   .mn-row {
     position: relative; display: flex; align-items: center; gap: 13px;
     width: 100%; min-height: 52px; padding: 10px 16px; text-align: left;
@@ -171,6 +231,41 @@
   .mn-row.on .mn-row-n { color: var(--mnav-fac, var(--gd, #3a9bdc)); }
   .mn-empty { padding: 26px 16px; font-size: 12.5px; color: var(--t4); text-align: center; }
 
+/* ── 3в. СТУПЕНИ ВНУТРИ СПИСКА ─────────────────────────────────
+   ⚠️ ЭТО И ЕСТЬ ЛЕСЕНКА: разделы текущего ведомства лежат ПОД его строкой со
+   сдвигом вправо, главы — ещё правее под своим разделом. Не вкладки, не замена
+   экрана, не «нажми, чтобы увидеть»: всё разложено сразу, глубина читается
+   отступом и поводком. Мельче с каждой ступенью — как подпункты рельсы на
+   мониторе. */
+  .mn-row[data-l="1"] { padding-left: 40px; min-height: 46px; }
+  .mn-row[data-l="2"] { padding-left: 62px; min-height: 42px; }
+  .mn-row[data-l="1"] .mn-row-tx b { font-size: 13px; font-weight: 500; }
+  .mn-row[data-l="2"] .mn-row-tx b { font-size: 12.5px; font-weight: 400; color: var(--t3); }
+  .mn-row[data-l="2"].on .mn-row-tx b { color: #eaf6ff; }
+  /* Поводок: волосяная вертикаль от строки-родителя вниз по всей вложенной
+     ветке. Без неё три отступа читаются как случайные поля. */
+  .mn-row[data-l="1"]::after, .mn-row[data-l="2"]::after {
+    content: ""; position: absolute; top: 0; bottom: 0; width: 1px;
+    background: var(--w2);
+  }
+  .mn-row[data-l="1"]::after { left: 25px; }
+  .mn-row[data-l="2"]::after { left: 47px; }
+  /* Активная строка вложенного уровня метится тем же цветом, что и всё
+     остальное, но НА СВОЁМ поводке — полоса у левого края экрана принадлежит
+     ведомству, а не разделу. */
+  .mn-row[data-l="1"].on::before, .mn-row[data-l="2"].on::before {
+    left: auto; top: 8px; bottom: 8px; width: 2px;
+  }
+  .mn-row[data-l="1"].on::before { left: 24px; }
+  .mn-row[data-l="2"].on::before { left: 46px; }
+  /* У вложенных строк глифа нет (он есть у ведомства) — место под него не
+     держим, иначе отступ съел бы половину имени. */
+  .mn-row[data-l="1"] .mn-row-ic, .mn-row[data-l="2"] .mn-row-ic { display: none; }
+
+/* ⚠️ ПЛИТКИ ВЕДОМСТВ (`.mn-tile*`) ЗДЕСЬ БЫЛИ И СНЯТЫ: в плитку не вложить
+   ступень, а ради лесенки ведомства вернулись строками. Если увидите правила
+   `.mn-tile` где-то ещё — это мёртвый след. */
+
 /* ── 4. ЧТО ОСВОБОДИЛОСЬ ПОД ПАНЕЛЬЮ ───────────────────────────
    Меню ушло вниз — экран ведомства получает всю ширину и высоту. Заодно
    правятся мелочи, из-за которых пальцем было не попасть. */
@@ -183,20 +278,10 @@
   html.mnav-on .cab-door-tx i { font-size: 11px; white-space: normal; }
   html.mnav-on .cab-door-ic .pol-gl { width: 24px; height: 24px; }
 
-  /* Главы раздела остаются НА ЭКРАНЕ, а не уезжают в лист: их две-пять штук,
-     переключают их часто, и лишний тап тут был бы налогом. Лента едет вбок и
-     не тащит за собой страницу. */
-  html.mnav-on #cab-stage .pol-chaps {
-    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
-    gap: 0 16px; margin: 0 calc(-1 * var(--cab-pad)) 12px;
-    padding: 0 var(--cab-pad) 7px;
-    scroll-snap-type: x proximity;
-  }
-  html.mnav-on #cab-stage .pol-chaps::-webkit-scrollbar { display: none; }
-  html.mnav-on #cab-stage .pol-chap {
-    flex: 0 0 auto; scroll-snap-align: start; min-height: 38px; padding: 8px 0;
-    font-size: 13px;
-  }
+  /* ⚠️ ПРАВИЛ ДЛЯ `.pol-chaps` ЗДЕСЬ БОЛЬШЕ НЕТ. Раньше главы оставляли на
+     экране собственной лентой («их две-пять штук, лишний тап — налог»). Теперь
+     они третья ступень лесенки, и своя лента была бы её вторым экземпляром в
+     сантиметре ниже: прячется как все отражённые полосы (раздел 1). */
 
   /* Шапка раздела: имя ведомства теперь и так стоит в панели — заставке
      остаётся строка с глифом и «?», без лишнего воздуха. */
@@ -331,6 +416,26 @@
   html.mnav-on #cab-stage > #hp-vn-colony.show .hp-vn-col-head {
     position: sticky; top: 0; z-index: 6;
   }
+
+  /* ── Престол: строка из трёх колонок — не строка, а три щели ──────
+     `.pol-throne` (css/27_politics.css) сверстан в РЯД: глиф, абзац, кнопка.
+     Кнопка «Взойти на престол» не переносится и держит свои ~150px, глиф ещё
+     30px — на телефоне абзацу оставалось меньше ста пикселей, и объяснение,
+     зачем державе правитель, вытягивалось в столбик по одному слову. Читать
+     нечитаемо. На узком экране кнопка уходит отдельной строкой во всю ширину
+     (палец попадает не целясь), а текст забирает себе всю ширину рядом с
+     глифом — абзац, а не столбик. */
+  html.mnav-on .pol-throne {
+    display: grid; grid-template-columns: auto 1fr;
+    align-items: start; column-gap: 12px; row-gap: 11px; padding: 13px 14px;
+  }
+  html.mnav-on .pol-throne-tx { grid-column: 2; }
+  /* «ур. N» — плашка по содержимому, слева, а не растянутая во всю ширину.
+     margin-left тут гасится: в кабинете (css/30_cabinet.css) её отодвигали
+     на 18px от текста, но текст теперь строкой выше. */
+  html.mnav-on #cab-stage .pol-throne-lvl,
+  html.mnav-on .pol-throne-lvl { grid-column: 1 / -1; justify-self: start; margin-left: 0; }
+  html.mnav-on .pol-throne > .btn { grid-column: 1 / -1; width: 100%; }
   /* Выход из схемы системы — ПЕРВОЙ строкой тела экрана (css/03_content.css
      `.hp-vn-col-body > .hpvnc-back`). Раньше здесь висела ещё и плавающая
      копия (position:fixed над нижней панелью) — она проваливалась под интерфейс

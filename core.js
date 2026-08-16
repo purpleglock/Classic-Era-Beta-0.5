@@ -444,8 +444,8 @@ function setLang(l) {
   const logoSub = document.getElementById('logo-sub');
   if (logoName) logoName.textContent = T('logoName');
   if (logoSub) logoSub.textContent = T('logoSub');
-  const editBtnText = document.getElementById('edit-btn-text');
-  if (editBtnText && !editMode) editBtnText.textContent = T('edit');
+  // Кнопка правки — значок без подписи; при смене языка обновляем только подсказку.
+  if (!editMode && typeof edSetEditBtn === 'function') edSetEditBtn(false);
   buildNav();
   if (curSlug && !editMode) {
     if (curSlug==='home') renderHome().catch(()=>{});

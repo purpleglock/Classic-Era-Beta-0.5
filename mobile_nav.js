@@ -1,12 +1,17 @@
 // © 2025–2026. Все права защищены.
 // ═══════════════════════════════════════════════════════════════
-// НАВИГАЦИЯ КАБИНЕТА НА ТЕЛЕФОНЕ — СОБРАНА ЗАНОВО.
+// НАВИГАЦИЯ КАБИНЕТА НА ТЕЛЕФОНЕ — КНОПКА И ЛИСТ-ЛЕСЕНКА.
 //
 // ⚠️ ПАНЕЛЬ СНИМАЛИ — НЕ СНИМАТЬ СНОВА. Была попытка выбросить её ради «одного
 // устройства навигации»: на телефоне те же ленты вкладок, что на мониторе. На
 // деле навигация кабинета с телефона исчезла — рельса ведомств рисуется только
-// ВНУТРИ открытого ведомства (cabinet.js), а попасть в ведомство с телефона было
-// уже нечем: на глазах оставался один борт сайта. Панель возвращена.
+// ВНУТРИ открытого ведомства (cabinet.js), а попасть в ведомство было уже
+// нечем: на глазах оставался один борт сайта. Панель возвращена.
+//
+// ⚠️ И ВТОРОЙ РАЗ СНИМАЛИ ТОЖЕ — КНОПКУ НАВИГАЦИИ, в пользу «лесенки лент прямо
+// на экране» (три липкие ленты под шапкой: ведомства, разделы, главы). НЕ
+// ПОВТОРЯТЬ: кнопка нужна, навигация живёт ЗА НЕЙ, а не занимает собой верх
+// каждого экрана. Всё, что ниже, написано под кнопку.
 //
 // ⚠️ ПОЧЕМУ ЗАНОВО, А НЕ «ПОДЖАТЬ ОТСТУПЫ». На мониторе кабинет читается: рельса
 // ведомств строкой сверху, рельса разделов колонкой у правого борта, главы —
@@ -21,26 +26,37 @@
 //     этажом навигации;
 //   • тап-мишени 12px текста без полей: попасть пальцем в «Внутренняя политика»
 //     между «Приёмной» и «Статистикой» — лотерея.
-// Ужимать это дальше некуда: проблема не в размерах, а в том, что вся навигация
-// пытается быть ВИДИМОЙ ОДНОВРЕМЕННО. На телефоне так не делают.
 //
-// КАК СДЕЛАНО. Телефонный стандарт: навигация уезжает вниз, под большой палец, и
-// раскрывается листами.
-//   1) НИЖНЯЯ ПАНЕЛЬ (#mnav) — четыре мишени по 54px: «Меню» (борт сайта),
-//      «Приёмная», текущее ВЕДОМСТВО, текущий РАЗДЕЛ. Панель же и хлебные крошки:
-//      подписи двух правых кнопок показывают, где игрок стоит.
-//   2) ЛИСТЫ (#mnav-sheet) — по тапу снизу поднимается список: ведомства по
-//      группам уклада (как в приёмной) или разделы текущего ведомства. Виден весь
-//      список сразу, строками по 52px, активный помечен полосой-акцентом.
+// КАК СДЕЛАНО.
+//   1) НИЖНЯЯ ПАНЕЛЬ (#mnav) — три мишени: «Меню» (борт сайта), «Приёмная» и
+//      широкая кнопка НАВИГАЦИИ. Она же хлебные крошки в две строки: сверху
+//      ведомство, снизу раздел внутри него — «Внутренняя политика / Двор».
+//   2) ЛИСТ (#mnav-sheet) — ЛЕСЕНКА, РАЗЛОЖЕННАЯ СРАЗУ. По тапу снизу
+//      поднимается ОДИН список, в котором уровни вложены сдвигом: ведомства, под
+//      текущим — его разделы, под текущим разделом — его главы. Ничего не надо
+//      нажимать, чтобы увидеть варианты, и ничего не заменяет собой предыдущее.
+//      Любой переход — тап по любой строке любого уровня. Подробнее — у
+//      mnavSubTree() и mnavBody().
 //
-// ⚠️ ЛИСТ РАЗДЕЛОВ НИЧЕГО НЕ ЗНАЕТ ПРО ЭКРАНЫ. Экранов полтора десятка, и каждый
-// рисует своё меню своей разметкой (`.pol-rail`, `.ec-tabs`, `.ec-fb-tabs`,
-// `.hp-vnt-rail`, `.hp-vni-tabs`…). Описывать их по одному — полтора десятка мест,
-// где завтра разъедется. Поэтому лист работает ЗЕРКАЛОМ: находит живую полосу в
-// открытом экране, перерисовывает её строками у себя, а по тапу зовёт `.click()`
-// на ИСХОДНОЙ кнопке. Обработчики, состояние, порядок — всё остаётся на месте,
-// экраны не тронуты. Та же мысль, что у `cabRailify` на мониторе (cabinet.js),
-// только там полоса переезжает в колонку, а здесь — отражается в лист.
+// ⚠️ КНОПОК БЫЛО ЧЕТЫРЕ — «Ведомства» и «Разделы» СВЕДЕНЫ В ОДНУ. Две соседние
+// мишени поднимали два почти одинаковых списка, и разница между ними («основные
+// разделы» против «подразделов») читалась только опытом: игрок тыкал в обе по
+// очереди, чтобы найти нужное. Уровень навигации — не выбор игрока, а
+// подробность одного вопроса «куда пойти»: вопрос один, кнопка одна, глубина —
+// ступенями внутри листа. Освободившаяся ширина ушла крошкам: где игрок стоит,
+// видно и с закрытым листом.
+// ⚠️ Промежуточные заходы, которые пробовали и забраковали (не возвращать):
+// вкладки «Разделы | Ведомства» внутри листа — те же два меню за лишним тапом;
+// сплошной свиток всех уровней подряд — стена из четырёх списков.
+//
+// ⚠️ ЛИСТ НИЧЕГО НЕ ЗНАЕТ ПРО ЭКРАНЫ. Экранов полтора десятка, и каждый рисует
+// своё меню своей разметкой (`.pol-rail`, `.ec-tabs`, `.ec-fb-tabs`,
+// `.hp-vnt-rail`, `.hp-vni-tabs`…). Описывать их по одному — полтора десятка
+// мест, где завтра разъедется. Поэтому лист работает ЗЕРКАЛОМ: находит живую
+// полосу в открытом экране, перерисовывает её строками у себя, а по тапу зовёт
+// `.click()` на ИСХОДНОЙ кнопке. Обработчики, состояние, порядок — всё остаётся
+// на месте, экраны не тронуты. Та же мысль, что у `cabRailify` на мониторе
+// (cabinet.js), только там полоса переезжает в колонку, а здесь — в ступень.
 //
 // ⚠️ ПАНЕЛЬ ЖИВЁТ В <body>, А НЕ В СТРАНИЦЕ. iOS Safari отсчитывает
 // `position:fixed` не от вьюпорта, а от прокручиваемого предка — им был бы #cw,
@@ -50,10 +66,10 @@
 
 const MNAV = {
   ready: false,      // разметка создана
-  sheet: null,       // какой лист открыт: 'dept' | 'sect' | null
-  pick: [],          // исходные кнопки экрана под строками листа разделов
+  sheet: null,       // лист поднят: 'nav' | null
+  pick: [],          // исходные кнопки экрана под строками ступени
   _lbl: {},          // последние подписи кнопок — чтобы не трогать DOM вхолостую
-  _marked: [],       // полосы, спрятанные в пользу листа (метка data-mnav)
+  _marked: [],       // полосы, отражённые в лист (метка data-mnav)
 };
 
 // ⚠️ ПОРОГ ТОТ ЖЕ, ЧТО У `_cabWide()` В cabinet.js, И ЭТО ОБЯЗАТЕЛЬНО. Мобильная
@@ -75,8 +91,9 @@ function mnavGl(kind) {
     menu:  '<path d="M4 7h16M4 12h16M4 17h16"/>',
     hall:  '<path d="M3 21h18"/><path d="M5 21V10l7-5 7 5v11"/><path d="M9.5 21v-6h5v6"/>',
     depts: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
-    list:  '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
     back:  '<path d="M15 5l-7 7 7 7"/>',
+    up:    '<path d="M6 14l6-6 6 6"/>',
+    go:    '<path d="M9 5l7 7-7 7"/>',
     x:     '<path d="M6 6l12 12M18 6L6 18"/>',
   }[kind] || '';
   return `<svg class="mnav-gl" viewBox="0 0 24 24" aria-hidden="true">${G}</svg>`;
@@ -100,16 +117,12 @@ function mnavDeptDef(k) {
 }
 
 // ── Полосы навигации экрана ────────────────────────────────────
-// Порядок = порядок в листе: сперва разделы ведомства, потом полосы вкладок.
-// Подпись группы — чтобы в листе было видно, где кончается один уровень.
-// ⚠️ ГЛАВЫ (`.pol-chaps`) — ТОЖЕ В ЛИСТ, ТРЕТЬИМ УРОВНЕМ. На мониторе они
-// вкладываются подпунктами В ту же вертикальную рельсу, под свой раздел
-// (politics.js: `.pol-chaps-sub` после активного `.pol-rail-b`). На телефоне
-// politics.js кладёт их ЛЕНТОЙ над телом раздела — и получалась ровно та каша,
-// от которой уходим: разделы в вертикальном листе, а «Престол · Совет ·
-// Канцелярия» отдельной горизонталью на экране. Лента отражается в лист под
-// разделами и с экрана снимается: вся глубина — в одном вертикальном меню, как
-// на ПК.
+// Порядок = порядок ступеней: сперва разделы ведомства, потом полосы вкладок.
+// ⚠️ ГЛАВЫ (`.pol-chaps`) — ТОЖЕ СТУПЕНЬ. На мониторе они вкладываются
+// подпунктами В ту же вертикальную рельсу, под свой раздел (politics.js:
+// `.pol-chaps-sub` после активного `.pol-rail-b`). На телефоне politics.js
+// кладёт их лентой над телом раздела — своей формы, своего размера, четвёртым
+// этажом навигации. В листе они становятся третьей ступенью.
 const MNAV_STRIPS = [
   ['.pol-railw .pol-rail', 'Разделы'],
   ['.pol-chaps',           'Главы'],
@@ -178,7 +191,7 @@ function mnavUnmarkAll() {
   MNAV._marked = [];
 }
 
-// Название текущего раздела — оно же подпись правой кнопки панели.
+// Название текущего раздела — оно же вторая строка крошек на кнопке панели.
 function mnavCurSect(screen) {
   if (!screen) return '';
   const strip = screen.querySelector('[data-mnav="1"]');
@@ -202,11 +215,13 @@ function mnavBuild() {
     <button class="mnav-b" type="button" data-a="home">
       <span class="mnav-ic">${mnavGl('hall')}</span><span class="mnav-t" data-t="home">Приёмная</span>
     </button>
-    <button class="mnav-b" type="button" data-a="dept">
-      <span class="mnav-ic">${mnavGl('depts')}</span><span class="mnav-t" data-t="dept">Ведомства</span>
-    </button>
-    <button class="mnav-b" type="button" data-a="sect">
-      <span class="mnav-ic">${mnavGl('list')}</span><span class="mnav-t" data-t="sect">Разделы</span>
+    <button class="mnav-b mnav-b-nav" type="button" data-a="nav" aria-haspopup="dialog" aria-expanded="false">
+      <span class="mnav-ic">${mnavGl('depts')}</span>
+      <span class="mnav-crumb">
+        <span class="mnav-t" data-t="dept">Ведомства</span>
+        <span class="mnav-t2" data-t="sect">все ведомства державы</span>
+      </span>
+      <span class="mnav-caret">${mnavGl('up')}</span>
     </button>`;
 
   const sheet = document.createElement('div');
@@ -215,8 +230,9 @@ function mnavBuild() {
   sheet.innerHTML = `
     <div class="mn-ov" data-a="close"></div>
     <div class="mn-panel" role="dialog" aria-modal="true" aria-label="Навигация">
+      <div class="mn-grip" data-a="close" aria-hidden="true"></div>
       <div class="mn-hd">
-        <h2 id="mn-title">Ведомства</h2>
+        <h2 id="mn-title">Куда пойти</h2>
         <button class="mn-x" type="button" data-a="close" aria-label="Закрыть">${mnavGl('x')}</button>
       </div>
       <div class="mn-body" id="mn-body"></div>
@@ -229,21 +245,75 @@ function mnavBuild() {
   MNAV.ready = true;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ЛЕСЕНКА ВНУТРИ ЛИСТА
+// ═══════════════════════════════════════════════════════════════
+// ⚠️ ЛЕСЕНКА РАЗЛОЖЕНА СРАЗУ, А НЕ ПОКАЗЫВАЕТСЯ ПО ОДНОЙ СТУПЕНИ. Это главное
+// свойство листа, и ломать его нельзя. Пробовали и забраковали:
+//   • вкладки «Разделы | Ведомства» внутри листа — те же два меню за лишним
+//     тапом и за догадкой, в какой из них нужное;
+//   • сплошной свиток, где уровни лежали отдельными группами подряд — четыре
+//     списка на экране, и непонятно, какой из них про «где я сейчас»;
+//   • пошаговый спуск, где ступень ЗАМЕНЯЛА предыдущую — приходилось жать,
+//     чтобы увидеть, что там внутри, и держать в голове, где ты стоишь.
+// Как сделано: ОДИН список, где уровни ВЛОЖЕНЫ друг в друга сдвигом вправо —
+// под текущим ведомством его разделы, под текущим разделом его главы:
+//     Внутренняя политика        ← ведомство, в котором стоим
+//         Двор                   ← его разделы, сразу видно
+//             Престол            ← главы текущего раздела
+//             Совет
+//         Благополучие
+//     Внешняя политика
+// Ничего не надо открывать, чтобы увидеть варианты: они уже на глазах, глубина
+// читается отступом и линией-поводком слева. Любой переход — один тап по любой
+// строке любого уровня.
+//
+// ⚠️ ВЛОЖЕННОЕ ПОКАЗЫВАЕТСЯ ТОЛЬКО У АКТИВНОГО. Развернуть разделы у ВСЕХ
+// ведомств нельзя: рельсы чужих ведомств не существует, пока ведомство не
+// открыто (её рисует сам экран, cabinet.js), а полтора десятка развёрнутых
+// списков — это и есть та каша, от которой уходили.
+function mnavStrips() {
+  const screen = mnavScreen();
+  return screen ? [...screen.querySelectorAll('[data-mnav="1"]')] : [];
+}
+
 // Строка листа. Одна форма на все уровни: глиф · имя (+пояснение) · хвост.
-function mnavRow(act, ic, nm, sub, tail, on) {
-  return `<button class="mn-row${on ? ' on' : ''}" type="button" data-a="${esc(act)}">
+// `lvl` — ступень: 0 ведомства, 1 разделы, 2 главы. Сдвиг и поводок рисует CSS.
+function mnavRow(act, ic, nm, sub, tail, on, lvl) {
+  return `<button class="mn-row${on ? ' on' : ''}" type="button" data-a="${esc(act)}" data-l="${lvl || 0}">
     <span class="mn-row-ic">${ic || ''}</span>
     <span class="mn-row-tx"><b>${esc(nm)}</b>${sub ? `<i>${esc(sub)}</i>` : ''}</span>
     ${tail ? `<span class="mn-row-n">${esc(tail)}</span>` : ''}
   </button>`;
 }
 
-// ── Лист ведомств: те же группы уклада, что в дверях приёмной ──
-function mnavDeptBody() {
+// Вложенные ступени под активной строкой: полоса `lvl` и всё, что под ней.
+// Рекурсия, а не два жёстких уровня: у экранов бывает и третья полоса, и
+// описывать её отдельным случаем значит завтра забыть про четвёртую.
+function mnavSubTree(lvl) {
+  const strips = mnavStrips();
+  const strip = strips[lvl - 1];
+  if (!strip) return '';
+  let html = '';
+  mnavItems(strip).forEach(el => {
+    const i = MNAV.pick.push(el) - 1;
+    const on = el.classList.contains('on');
+    html += mnavRow('pick:' + i, '', mnavItemTx(el), '', mnavItemTail(el), on, lvl);
+    // Глубже разворачивается только активное: главы принадлежат ТОМУ разделу,
+    // который открыт, у остальных их попросту нет в разметке.
+    if (on) html += mnavSubTree(lvl + 1);
+  });
+  return html;
+}
+
+// ── Всё дерево: кабинет, ведомства с вложенными ступенями, выход ──
+function mnavBody() {
   const depts = (typeof cabDepts === 'function') ? cabDepts() : {};
   const groups = (typeof CAB_GRP !== 'undefined') ? CAB_GRP : [];
   const cur = mnavDept();
-  // Хвост строки = сколько дел ждёт за этим ведомством (общий счёт, notify.js).
+  MNAV.pick = [];
+
+  // Хвост = сколько дел ждёт за этим ведомством (общий счёт, notify.js).
   // FM.me.inbox остаётся запасным для «Двора»: лист открывают и до первого
   // ответа notif_counts, и в этот миг единственное известное число — его.
   let inbox = 0;
@@ -255,70 +325,94 @@ function mnavDeptBody() {
     return n ? (typeof ntNum === 'function' ? ntNum(n) : String(n)) : '';
   };
 
-  // Оповещения первой строкой листа: на телефоне борта с колоколом нет вовсе,
-  // и без этой строки счётчик до игрока не доехал бы никак.
+  // Оповещения первой строкой: на телефоне борта с колоколом нет вовсе, и без
+  // этой строки счётчик до игрока не доехал бы никак.
   let ntAll = 0;
   try { ntAll = (typeof ntTotal === 'function') ? ntTotal() : 0; } catch (e) {}
-  let html = `<div class="mn-grp">
-    ${mnavRow('nt:open', (typeof ntBellIco === 'function' ? ntBellIco() : ''), 'Оповещения', 'что ждёт вашего решения', ntAll ? ntNum(ntAll) : '', false)}
-    ${mnavRow('go:home', mnavGl('hall'), 'Приёмная', 'сводка сектора и все двери', '', !cur)}
+  let html = `<div class="mn-grp"><h3 class="mn-grp-hd">Кабинет</h3>
+    ${mnavRow('nt:open', (typeof ntBellIco === 'function' ? ntBellIco() : ''), 'Оповещения', 'что ждёт вашего решения', ntAll ? ntNum(ntAll) : '', false, 0)}
+    ${mnavRow('go:home', mnavGl('hall'), 'Приёмная', 'сводка сектора и все двери', '', !cur, 0)}
   </div>`;
 
+  // Ведомства строками (не плиткой: в плитку не вложить ступени) и с пояснением
+  // только у текущего — у остальных подпись одна, чтобы полтора десятка строк
+  // помещались в экран и не отодвигали вложенное вниз.
+  const row = (k, d) => mnavRow('dept:' + k, mnavDeptGl(d.ic), d.nm,
+    k === cur ? d.sub : '', deptN(k), k === cur, 0) + (k === cur ? mnavSubTree(1) : '');
+  const seen = {};
   groups.forEach(([g, label]) => {
-    const items = Object.entries(depts).filter(([, d]) => d.grp === g);
+    const items = Object.entries(depts).filter(([k, d]) => d.grp === g && !seen[k]);
     if (!items.length) return;
     html += `<div class="mn-grp"><h3 class="mn-grp-hd">${esc(label)}</h3>` +
-      items.map(([k, d]) => mnavRow('dept:' + k, mnavDeptGl(d.ic), d.nm, d.sub,
-        deptN(k), k === cur)).join('') + '</div>';
+      items.map(([k, d]) => { seen[k] = 1; return row(k, d); }).join('') + '</div>';
   });
+  const rest = Object.entries(depts).filter(([k]) => !seen[k]);
+  if (rest.length) html += `<div class="mn-grp">` + rest.map(([k, d]) => row(k, d)).join('') + '</div>';
 
   // Выход из работы — внизу листа, а не только на обложке кабинета: из
   // глубокого ведомства до неё пришлось бы прокручивать весь экран назад.
   html += `<div class="mn-grp mn-grp-foot">
-    ${mnavRow('site:home', mnavGl('back'), 'На главную', 'сцена, новости, забавы', '', false)}
+    ${mnavRow('site:home', mnavGl('back'), 'На главную', 'сцена, новости, забавы', '', false, 0)}
   </div>`;
   return html;
 }
 
-// ── Лист разделов: зеркало живых полос открытого экрана ────────
-function mnavSectBody() {
-  const screen = mnavScreen();
-  const strips = screen ? [...screen.querySelectorAll('[data-mnav="1"]')] : [];
-  MNAV.pick = [];
-  if (!strips.length) {
-    return `<div class="mn-empty">У этого ведомства один экран — разделов нет.</div>`;
-  }
-  return strips.map(strip => {
-    const rows = mnavItems(strip).map(el => {
-      const i = MNAV.pick.push(el) - 1;
-      return mnavRow('pick:' + i, mnavItemIc(el), mnavItemTx(el), '', mnavItemTail(el),
-        el.classList.contains('on'));
-    }).join('');
-    const hd = strip.dataset.mnavT || 'Разделы';
-    return `<div class="mn-grp"><h3 class="mn-grp-hd">${esc(hd)}</h3>${rows}</div>`;
-  }).join('');
+function mnavPaint() {
+  const body = document.getElementById('mn-body');
+  if (!body) return;
+  const keep = body.scrollTop;
+  body.innerHTML = mnavBody();
+  // Держим место, на котором стоял палец: лист перерисовывается и на каждый
+  // ответ сервера, и прыжок к началу читался бы как сбой.
+  body.scrollTop = keep;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ОТКРЫТЬ / ЗАКРЫТЬ ЛИСТ
-// ═══════════════════════════════════════════════════════════════
-function mnavOpen(kind) {
+// Экран под листом дорисовался (ведомство открылось, раздел сменился) — ступени
+// под ним появились не сразу. Ждём и перерисовываем дерево.
+// ⚠️ БЕЗ requestAnimationFrame: первая попытка — СРАЗУ, остальные таймером.
+// Большинство ведомств рисуется тем же тактом, что и `cabOpen`, а сам rAF не
+// тикает в свёрнутой вкладке — дерево должно собираться и там.
+function mnavGrow(want, tries) {
+  const n = tries == null ? 10 : tries;
+  if (!MNAV.sheet) return;
+  mnavMark(mnavScreen());
+  if (mnavStrips().length >= want) { mnavPaint(); mnavShowOn(); return; }
+  if (n > 0) { setTimeout(() => mnavGrow(want, n - 1), 45); return; }
+  // Ступени ниже не появилось: у ведомства один экран, у раздела нет глав —
+  // игрок пришёл туда, куда шёл, и лист уходит с дороги.
+  mnavClose();
+}
+
+// Активная ветка — в видимой части листа. Ведомств полтора десятка, и
+// развёрнутые под «Разведуправлением» разделы иначе оказались бы за краем.
+function mnavShowOn() {
+  const body = document.getElementById('mn-body');
+  if (!body) return;
+  const on = body.querySelector('.mn-row.on[data-l="0"]');
+  if (!on) return;
+  const top = on.offsetTop, bot = top + on.offsetHeight;
+  if (top < body.scrollTop || bot > body.scrollTop + body.clientHeight * 0.6) {
+    body.scrollTop = Math.max(0, top - 12);
+  }
+}
+
+function mnavOpen() {
   mnavBuild();
   const sheet = document.getElementById('mnav-sheet');
   const body = document.getElementById('mn-body');
-  const title = document.getElementById('mn-title');
   if (!sheet || !body) return;
-  MNAV.sheet = kind;
-  title.textContent = (kind === 'dept') ? 'Ведомства державы' : 'Разделы ведомства';
-  body.innerHTML = (kind === 'dept') ? mnavDeptBody() : mnavSectBody();
+  MNAV.sheet = 'nav';
+  // ⚠️ ПОЛОСЫ ПОМЕЧАЕМ ЗДЕСЬ ЖЕ, а не полагаемся на наблюдателя: он кладёт метки
+  // следующим кадром, и лист, поднятый сразу за сменой экрана, показал бы
+  // ведомство без его разделов.
+  mnavMark(mnavScreen());
+  mnavPaint();
   sheet.hidden = false;
   document.documentElement.classList.add('mnav-sheet');
-  // Список открывается на текущем пункте, а не с начала: в длинном списке
-  // ведомств активное иначе оказывается за краем.
-  requestAnimationFrame(() => {
-    const on = body.querySelector('.mn-row.on');
-    if (on && on.offsetTop > body.clientHeight * 0.7) body.scrollTop = on.offsetTop - body.clientHeight / 2;
-  });
+  const nb = document.querySelector('#mnav .mnav-b-nav');
+  if (nb) { nb.classList.add('open'); nb.setAttribute('aria-expanded', 'true'); }
+  body.scrollTop = 0;
+  mnavShowOn();
 }
 
 function mnavClose() {
@@ -326,6 +420,8 @@ function mnavClose() {
   MNAV.sheet = null;
   document.documentElement.classList.remove('mnav-sheet');
   if (sheet) sheet.hidden = true;
+  const nb = document.querySelector('#mnav .mnav-b-nav');
+  if (nb) { nb.classList.remove('open'); nb.setAttribute('aria-expanded', 'false'); }
 }
 
 // Прокрутка к телу ведомства: после смены раздела читать начинают с его начала,
@@ -361,22 +457,34 @@ function mnavClick(e) {
   }
   if (a === 'site:home') { mnavClose(); if (typeof go === 'function') go('home'); return; }
   if (a === 'nt:open') { mnavClose(); if (typeof ntOpen === 'function') ntOpen(); return; }
-  if (a === 'dept') { mnavOpen('dept'); return; }
-  if (a === 'sect') { mnavOpen('sect'); return; }
+  // Кнопка панели: лист поднялся — тот же тап его и опустит.
+  if (a === 'nav') { if (MNAV.sheet) mnavClose(); else mnavOpen(); return; }
 
+  // ⚠️ ВЫБОР ВЕДОМСТВА ЛИСТ НЕ ЗАКРЫВАЕТ. Ведомство — ещё не цель: оно
+  // открывается за листом, а в самом листе ПОД ЕГО СТРОКОЙ разворачиваются
+  // разделы. Закрылся бы лист — игрок остался бы с вопросом «а дальше куда» и
+  // полез бы открывать его заново.
   if (a.indexOf('dept:') === 0) {
-    mnavClose();
     if (typeof cabOpen === 'function') cabOpen(a.slice(5));
     mnavScrollTop();
+    if (MNAV.sheet) mnavGrow(1); else mnavClose();
     return;
   }
   if (a.indexOf('pick:') === 0) {
     const el = MNAV.pick[+a.slice(5)];
-    mnavClose();
+    // Уровень строки: разделу (1) может отвечать своя ступень глав (2), главе —
+    // уже ничего. Считаем по строке, а не по состоянию листа: строки всех
+    // уровней лежат в одном списке.
+    const want = (+b.dataset.l || 0) + 1;
     // Зовём ИСХОДНУЮ кнопку экрана: её onclick, её порядок, её состояние.
     // Спрятанная кнопка на программный click отвечает как обычная.
     if (el) { try { el.click(); } catch (err) { console.error('[mnav]', err); } }
     mnavScrollTop();
+    // Развернулась ступень ниже (у раздела свои главы) — лист остаётся и
+    // показывает её; нет — закрывается: игрок пришёл туда, куда шёл. Попыток
+    // мало (≈0.1 с): раздел рисует свои главы сам, лишнее ожидание читалось бы
+    // как залипание.
+    mnavGrow(want, 2);
     return;
   }
 }
@@ -413,8 +521,10 @@ function mnavSync() {
   const sect = mnavCurSect(screen);
 
   mnavLbl('home', 'Приёмная', !key);
+  // Крошки на кнопке навигации: ведомство строкой, раздел под ним. Раздела нет
+  // — вторая строка не пустует, а подсказывает, что за кнопкой лежит.
   mnavLbl('dept', def ? (def.sh || def.nm) : 'Ведомства', !!key);
-  mnavLbl('sect', sect || 'Разделы', false, !screen || !screen.querySelector('[data-mnav="1"]'));
+  mnavLbl('sect', sect || (key ? 'выбрать раздел' : 'все ведомства державы'), false);
 
   // Акцент панели и листа — цвет державы, тот же, что подчёркивает вкладку на
   // мониторе. Кладём СВОЮ переменную на <html> (панель и лист — разные ветки
@@ -426,24 +536,24 @@ function mnavSync() {
     }
   } catch (e) {}
 
-  // Лист разделов открыт, а экран под ним перерисовался — строки в нём уже
-  // указывают на выброшенные из DOM кнопки. Пересобираем.
-  if (MNAV.sheet === 'sect') {
-    const body = document.getElementById('mn-body');
-    if (body && MNAV.pick.length && !document.contains(MNAV.pick[0])) body.innerHTML = mnavSectBody();
-  }
+  // Лист открыт, а экран под ним перерисовался — строки в нём уже указывают на
+  // выброшенные из DOM кнопки. Пересобираем.
+  if (MNAV.sheet && MNAV.pick.length && !document.contains(MNAV.pick[0])) mnavPaint();
 }
 
 // Подпись и состояние кнопки панели. Трогаем DOM, только если что-то изменилось:
 // sync зовётся по каждому вздоху разметки.
-function mnavLbl(slot, text, active, dead) {
-  const t = document.querySelector(`#mnav .mnav-t[data-t="${slot}"]`);
+// ⚠️ Активность ставится ПО СЛОТУ, а не «на кнопку, в которой слот лежит»:
+// строки крошек `dept` и `sect` живут в ОДНОЙ кнопке навигации, и прежний
+// `closest('.mnav-b')` заставил бы их спорить за её класс.
+function mnavLbl(slot, text, active) {
+  const t = document.querySelector(`#mnav [data-t="${slot}"]`);
   if (!t) return;
   if (MNAV._lbl[slot] !== text) { MNAV._lbl[slot] = text; t.textContent = text; }
-  const b = t.closest('.mnav-b');
-  if (!b) return;
-  b.classList.toggle('on', !!active);
-  b.classList.toggle('off', !!dead);
+  if (slot === 'sect') return;
+  const b = (slot === 'dept') ? document.querySelector('#mnav .mnav-b-nav')
+                              : t.closest('.mnav-b');
+  if (b) b.classList.toggle('on', !!active);
 }
 
 // ── Слежение ───────────────────────────────────────────────────

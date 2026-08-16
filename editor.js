@@ -4,6 +4,19 @@
 // ════════════════════════════════════════════════════════════
 // EDITOR — edit mode, block editor, block picker, admin panel
 // ════════════════════════════════════════════════════════════
+// Кнопка режима правки в шапке — ТОЛЬКО значок: подпись не помещалась
+// в срезанную плашку и вываливалась за неё. Смысл несёт title/aria-label.
+function edSetEditBtn(on) {
+  const b = document.getElementById('edit-btn'); if (!b) return;
+  const isRu = lang === 'ru';
+  const t = on ? (isRu?'Выйти из редактора':'Exit editor') : (isRu?'Редактировать':'Edit');
+  b.title = t; b.setAttribute('aria-label', t);
+  b.className = on ? 'tbtn tbtn-ico edit-on' : 'tbtn tbtn-ico';
+  b.innerHTML = on
+    ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M5.5 5.5l13 13M18.5 5.5l-13 13"/></svg>`
+    : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="M14.5 6.5l3 3"/></svg>`;
+}
+
 async function toggleEdit() {
   if (editMode) { exitEdit(); return; }
   if (!user||!['superadmin','editor','moderator'].includes(user.role)) { toast(lang==='ru'?'Недостаточно прав':'Access denied','err'); return; }
@@ -25,7 +38,7 @@ async function toggleEdit() {
 
 async function enterEditHome() {
   editMode=true; editData={isHome:true};
-  document.getElementById('edit-btn').textContent='✖ Exit'; document.getElementById('edit-btn').className='tbtn edit-on';
+  edSetEditBtn(true);
   try {
     const rows=await dbGet('pages','slug=eq.home&select=*&limit=1');
     if(rows?.length){ editData._homeId=rows[0].id; _pgCache.set('home',rows[0]); try{editBlocks=JSON.parse(rows[0].content||'[]');}catch{editBlocks=[];} }
@@ -36,7 +49,7 @@ async function enterEditHome() {
 function enterEditPage(pg) {
   if (!pg) { toast('Страница не найдена','err'); return; }
   editMode=true; editData={...pg, _origStatus: pg.status || 'draft', page_type:pg.page_type||'article'};
-  document.getElementById('edit-btn').textContent='✖ Exit'; document.getElementById('edit-btn').className='tbtn edit-on';
+  edSetEditBtn(true);
   const raw=pg.content||''; try{editBlocks=JSON.parse(raw);}catch{editBlocks=raw?[{type:'text',id:uid(),content:raw}]:[];}
   renderEditUI(pg,pT(pg),false);
 }
@@ -63,15 +76,27 @@ function renderEditUI(pg, titleVal, isHome) {
           <span class="ed-st-dot dft"></span>${isRu?'Черновик':'Draft'}
         </button>
       </div>` : `<span class="ed-bar-label">${isRu?'ГЛАВНАЯ':'HOME'}</span>`}
-      ${pg ? `<button class="ed-meta-btn" onclick="edToggleMeta()" id="ed-meta-btn">⚙ ${isRu?'Настройки':'Settings'}</button>` : ''}
+      ${pg ? `<button class="ed-meta-btn" onclick="edToggleMeta()" id="ed-meta-btn">${edIco('gear',13)} ${isRu?'Настройки':'Settings'}</button>` : ''}
     </div>
     <div class="ed-bar-c">
       <span class="ed-bar-title">${esc(isHome?(isRu?'Главная страница':'Home page'):titleVal)}</span>
     </div>
     <div class="ed-bar-r">
+      <span class="ed-save-state" id="ed-save-state">${isRu?'Всё сохранено':'All saved'}</span>
       <button class="ed-btn-cancel" onclick="exitEdit()">${isRu?'Отмена':'Cancel'}</button>
-      <button class="ed-btn-save" onclick="saveEdit()">✓ ${isRu?'Сохранить':'Save'}</button>
+      <button class="ed-btn-save" onclick="saveEdit()" title="Ctrl+S">${edIco('check',13)} ${isRu?'Сохранить':'Save'}</button>
     </div>
+  </div>
+
+  <!-- HINT STRIP -->
+  <div class="ed-hints">
+    <span class="ed-hint">${edIco('drag',12)}${isRu?'тяните за ручку — меняет порядок':'drag the grip to reorder'}</span>
+    <span class="ed-hint">${isRu?'клик по блоку — открыть настройки':'click a block to edit it'}</span>
+    <span class="ed-hint"><kbd>Ctrl+S</kbd>${isRu?'сохранить':'save'}</span>
+    <span class="ed-hint"><kbd>Ctrl+D</kbd>${isRu?'дублировать':'duplicate'}</span>
+    <span class="ed-hint"><kbd>Alt+↑↓</kbd>${isRu?'сдвинуть':'move'}</span>
+    <span class="ed-hint"><kbd>Esc</kbd>${isRu?'свернуть / выйти':'collapse / exit'}</span>
+    <span class="ed-hint ed-hint-cnt" id="ed-blk-cnt"></span>
   </div>
 
   <!-- META DRAWER (hidden by default) -->
@@ -156,6 +181,12 @@ function renderEditUI(pg, titleVal, isHome) {
     </div>
   </div>
 </div>`;
+  edClearDirty();
+  // Любой ввод внутри редактора помечает страницу изменённой — блочные формы
+  // правят editBlocks напрямую, поэтому ловим событиями, а не в каждом обработчике.
+  const wrap=document.getElementById('sb-wrap');
+  wrap?.addEventListener('input', edMarkDirty);
+  wrap?.addEventListener('change', edMarkDirty);
   renderBlockEditor();
 }
 
@@ -233,7 +264,7 @@ async function saveEdit() {
     _pgCache.delete(finalSlug); exitEdit(true); go(finalSlug, false); toast(T('saveOk'),'ok');
   } catch(e) { toast(T('saveErr')+' '+e.message,'err'); }
 }
-function exitEdit(restore=false) { editMode=false; editData=null; editBlocks=[]; _edSelIdx=null; const eb=document.getElementById('edit-btn'); if(eb){eb.textContent='✎ '+(lang==='ru'?'Редактировать':'Edit');eb.className='tbtn';} updAuthUI(); if(!restore) go(curSlug, false); }
+function exitEdit(restore=false) { if(!restore && !edConfirmLeave()) return; edClearDirty(); editMode=false; editData=null; editBlocks=[]; _edSelIdx=null; edSetEditBtn(false); updAuthUI(); if(!restore) go(curSlug, false); }
 
 function upBlock(i,key,val) { if(editBlocks[i]) editBlocks[i][key]=val; }
 function mvBlock(i,dir) { const j=i+dir; if(j<0||j>=editBlocks.length) return; [editBlocks[i],editBlocks[j]]=[editBlocks[j],editBlocks[i]]; renderBlockEditor(); }
@@ -241,28 +272,39 @@ function rmBlock(i) { editBlocks.splice(i,1); renderBlockEditor(); }
 function renderBlockEditor() {
   const c=document.getElementById('sb-blocks'); if(!c) return;
   const isRu=lang==='ru';
+  const cnt=document.getElementById('ed-blk-cnt');
+  if(cnt) cnt.textContent = editBlocks.length + ' ' + (isRu?'бл.':'blocks');
   if(!editBlocks.length){
+    const quick=['text','heading','image','infobox','table','quote'];
     c.innerHTML=`<div class="ed-empty-blocks">
-      <div style="font-size:32px;opacity:.12;margin-bottom:8px">⊞</div>
-      <div>${isRu?'Нет блоков. Нажмите «Добавить блок».':'No blocks yet.'}</div>
+      <div class="ed-empty-ico">${edIco('plus',34)}</div>
+      <div class="ed-empty-t">${isRu?'Страница пустая':'Page is empty'}</div>
+      <div class="ed-empty-s">${isRu?'Выберите блок, с которого начнём — или нажмите «Добавить блок» ниже':'Pick a block to start — or use “Add block” below'}</div>
+      <div class="ed-empty-quick">${quick.map(t=>`<button class="ed-quick" onclick="pickerInsertIdx=-1;insertBlock('${t}')">${edIco(t,15)}<span>${esc(blockLabel(t))}</span></button>`).join('')}</div>
     </div>`;
     _edSelIdx=null;
     return;
   }
-  c.innerHTML=editBlocks.map((b,i)=>{
+  const gap=(idx)=>`<div class="ed-gap"><button class="ed-gap-btn" title="${isRu?'Вставить блок сюда':'Insert block here'}" onclick="openPicker(${idx},event)">${edIco('plus',13)}<span>${isRu?'Блок':'Block'}</span></button></div>`;
+  const cards = editBlocks.map((b,i)=>{
     const isSel=_edSelIdx===i;
     const label=blockLabel(b.type);
     const rendered = renderBlock(b);
     const formHtml = isSel ? blockEditorHtml(b,i) : '';
-    return `<div class="ed-block${isSel?' open':''}" id="sbc-${b.id}">
+    return `<div class="ed-block${isSel?' open':''}" id="sbc-${b.id}" data-idx="${i}"
+        ondragover="edDragOver(event,${i})" ondrop="edDrop(event,${i})" ondragend="edDragEnd(event)">
       <div class="ed-block-hdr" onclick="selectBlock(${i})">
+        <span class="ed-grip" draggable="true" title="${isRu?'Перетащить':'Drag to reorder'}"
+          ondragstart="edDragStart(event,${i})" onclick="event.stopPropagation()">${edIco('drag',14)}</span>
         <span class="ed-block-icon">${blockIcon(b.type)}</span>
-        <span class="ed-block-lbl">${label}</span>
+        <span class="ed-block-lbl">${esc(label)}</span>
+        <span class="ed-block-num">${i+1}</span>
         <div class="ed-block-acts">
-          <button title="↑" onclick="event.stopPropagation();mvBlock(${i},-1)">↑</button>
-          <button title="↓" onclick="event.stopPropagation();mvBlock(${i},1)">↓</button>
-          <button title="＋" onclick="event.stopPropagation();openPicker(${i},event)" class="ed-act-add">＋</button>
-          <button title="✕" onclick="event.stopPropagation();rmBlock(${i})" class="ed-act-del">✕</button>
+          <button title="${isRu?'Выше (Alt+↑)':'Move up (Alt+↑)'}" onclick="event.stopPropagation();mvBlock(${i},-1)"${i===0?' disabled':''}>${edIco('up',13)}</button>
+          <button title="${isRu?'Ниже (Alt+↓)':'Move down (Alt+↓)'}" onclick="event.stopPropagation();mvBlock(${i},1)"${i===editBlocks.length-1?' disabled':''}>${edIco('down',13)}</button>
+          <button title="${isRu?'Дублировать (Ctrl+D)':'Duplicate (Ctrl+D)'}" onclick="event.stopPropagation();dupBlock(${i})">${edIco('copy',13)}</button>
+          <button title="${isRu?'Добавить после':'Add after'}" onclick="event.stopPropagation();openPicker(${i},event)" class="ed-act-add">${edIco('plus',13)}</button>
+          <button title="${isRu?'Удалить':'Delete'}" onclick="event.stopPropagation();rmBlock(${i})" class="ed-act-del">${edIco('trash',13)}</button>
         </div>
       </div>
       <div class="ed-block-render">
@@ -271,7 +313,9 @@ function renderBlockEditor() {
       </div>
       ${isSel ? `<div class="ed-block-form">${formHtml}</div>` : ''}
     </div>`;
-  }).join('');
+  });
+  // карточки, разделённые точками вставки «＋ Блок»
+  c.innerHTML = gap(-1) + cards.map((html,i)=>html + gap(i)).join('');
   // Init canvas-based blocks inside editor
   setTimeout(()=>{
     c.querySelectorAll('.blk-rg-canvas[data-nodes]').forEach(canvas=>{
@@ -283,10 +327,48 @@ function renderBlockEditor() {
   }, 80);
 }
 
-function blockIcon(t) {
-  const icons={text:'¶',heading:'Aa',quote:'❞',alert:'⚠',callout:'💬',spoiler:'🔒',image:'🖼',imgtext:'🖼',gallery:'⊞',infobox:'📋',cols:'⫛',frame:'🗂',divider:'—',table:'▦',stats:'◉',timeline:'◈',vis_timeline:'⟿',rel_graph:'◎',chart:'📈',battle_map:'🗺',statblock:'🐉'};
-  return icons[t]||'◈';
+// ── Значки редактора: контурный SVG 24×24, currentColor (эмодзи в UI запрещены) ──
+const ED_ICO = {
+  text:        '<path d="M4 6h16M4 11h16M4 16h10"/>',
+  heading:     '<path d="M5 5v14M13 5v14M5 12h8M17 9h3v10M17 9l3-2"/>',
+  toc:         '<path d="M4 6h2M4 12h2M4 18h2M10 6h10M10 12h10M10 18h6"/>',
+  quote:       '<path d="M9 7c-2.2 0-4 1.8-4 4s1.8 4 4 4c0 2-1.3 3.2-3 3.6M20 7c-2.2 0-4 1.8-4 4s1.8 4 4 4c0 2-1.3 3.2-3 3.6"/>',
+  alert:       '<path d="M12 4 2.5 20h19L12 4Z"/><path d="M12 10v4M12 17h.01"/>',
+  callout:     '<path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 9h8M8 12.5h5"/>',
+  spoiler:     '<rect x="4" y="10" width="16" height="10" rx="1.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/>',
+  image:       '<rect x="3" y="5" width="18" height="14" rx="1.5"/><circle cx="8.5" cy="10" r="1.5"/><path d="m3.5 17 5-5 4.5 4.5L16 14l4.5 4.5"/>',
+  imgtext:     '<rect x="3" y="5" width="8" height="8" rx="1.5"/><path d="M14 6h7M14 10h7M3 16h18M3 19.5h13"/>',
+  gallery:     '<rect x="3" y="3.5" width="7.5" height="7.5" rx="1"/><rect x="13.5" y="3.5" width="7.5" height="7.5" rx="1"/><rect x="3" y="13" width="7.5" height="7.5" rx="1"/><rect x="13.5" y="13" width="7.5" height="7.5" rx="1"/>',
+  infobox:     '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M7 7h10M7 11h10M7 15h6"/>',
+  cols:        '<rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/>',
+  frame:       '<path d="M3 8V6a1.5 1.5 0 0 1 1.5-1.5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18V8Z"/>',
+  divider:     '<path d="M3 12h5M16 12h5"/><path d="m12 9 2.5 3L12 15l-2.5-3L12 9Z"/>',
+  table:       '<rect x="3" y="4.5" width="18" height="15" rx="1.5"/><path d="M3 9.5h18M3 14.5h18M9 4.5v15M15 4.5v15"/>',
+  stats:       '<path d="M4 20V13M10 20V7M16 20v-9M22 20h-2"/><path d="M2 20h20"/>',
+  timeline:    '<path d="M6 3v18"/><circle cx="6" cy="7.5" r="2"/><circle cx="6" cy="16" r="2"/><path d="M11 7.5h9M11 16h6"/>',
+  vis_timeline:'<path d="M3 12h18"/><circle cx="7" cy="12" r="1.8"/><circle cx="13" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/><path d="M7 10.2V6M13 13.8V18M19 10.2V6"/>',
+  rel_graph:   '<circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M10.5 7.2 6.4 15.8M13.5 7.2l4.1 8.6M7.5 18h9"/>',
+  chart:       '<path d="M3 3v18h18"/><path d="m7 15 3.5-4.5 3 2.5L20 6"/>',
+  battle_map:  '<path d="m3 6.5 6-2.5 6 2.5 6-2.5v13.5l-6 2.5-6-2.5-6 2.5V6.5Z"/><path d="M9 4v13.5M15 6.5V20"/>',
+  statblock:   '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M8 8h8M8 12h8M8 16h4"/><circle cx="16.5" cy="16" r="1.5"/>',
+  // служебные
+  drag:        '<circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/>',
+  up:          '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  down:        '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  plus:        '<path d="M12 5v14M5 12h14"/>',
+  copy:        '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
+  trash:       '<path d="M4 6.5h16M9.5 6.5V4h5v2.5M6.5 6.5 7.5 20h9l1-13.5M10.5 10v6M13.5 10v6"/>',
+  gear:        '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2 7.3 7.3M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"/>',
+  check:       '<path d="m4.5 12.5 5 5 10-11"/>',
+  close:       '<path d="M5.5 5.5l13 13M18.5 5.5l-13 13"/>',
+  eye:         '<path d="M2.5 12S6.5 5.5 12 5.5 21.5 12 21.5 12 17.5 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
+};
+function edIco(name, px) {
+  const p = ED_ICO[name] || ED_ICO.text;
+  const s = px || 16;
+  return `<svg class="ed-i" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 }
+function blockIcon(t) { return edIco(t, 16); }
 
 function selectBlock(i){
   _edSelIdx = (_edSelIdx === i) ? null : i; // toggle
@@ -299,6 +381,107 @@ function selectBlock(i){
   }
 }
 function refreshBlockPropsPanel(){ renderBlockEditor(); }
+
+// ── Перетаскивание блоков ────────────────────────────────────────
+let _edDragFrom = null;
+function edDragStart(e,i){
+  _edDragFrom = i;
+  try { e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(i)); } catch(_){}
+  const card = e.target.closest('.ed-block');
+  if (card) { card.classList.add('dragging'); try{ e.dataTransfer.setDragImage(card, 20, 14); }catch(_){} }
+}
+function edDragOver(e,i){
+  if (_edDragFrom===null || _edDragFrom===i) return;
+  e.preventDefault();
+  try { e.dataTransfer.dropEffect='move'; } catch(_){}
+  const card = e.currentTarget;
+  const before = (e.clientY - card.getBoundingClientRect().top) < card.offsetHeight/2;
+  document.querySelectorAll('.ed-block.drop-before,.ed-block.drop-after')
+    .forEach(el=>el.classList.remove('drop-before','drop-after'));
+  card.classList.add(before?'drop-before':'drop-after');
+}
+function edDrop(e,i){
+  if (_edDragFrom===null) return;
+  e.preventDefault(); e.stopPropagation();
+  const card = e.currentTarget;
+  const before = (e.clientY - card.getBoundingClientRect().top) < card.offsetHeight/2;
+  let to = before ? i : i+1;
+  const from = _edDragFrom; _edDragFrom = null;
+  if (to>from) to--;
+  if (to===from) { renderBlockEditor(); return; }
+  const [blk] = editBlocks.splice(from,1);
+  editBlocks.splice(to,0,blk);
+  if (_edSelIdx===from) _edSelIdx=to;
+  else if (_edSelIdx!==null) { if(from<_edSelIdx) _edSelIdx--; if(to<=_edSelIdx) _edSelIdx++; }
+  edMarkDirty();
+  renderBlockEditor();
+}
+function edDragEnd(){
+  _edDragFrom = null;
+  document.querySelectorAll('.ed-block.dragging,.ed-block.drop-before,.ed-block.drop-after')
+    .forEach(el=>el.classList.remove('dragging','drop-before','drop-after'));
+}
+
+function dupBlock(i){
+  const src = editBlocks[i]; if(!src) return;
+  const copy = JSON.parse(JSON.stringify(src));
+  copy.id = uid();
+  if (Array.isArray(copy.cards)) copy.cards.forEach(c=>{ if(c && c.id) c.id = uid(); });
+  editBlocks.splice(i+1,0,copy);
+  _edSelIdx = i+1;
+  edMarkDirty();
+  renderBlockEditor();
+  setTimeout(()=>document.getElementById('sbc-'+copy.id)?.scrollIntoView({behavior:'smooth',block:'nearest'}),60);
+}
+
+// ── Несохранённые изменения ──────────────────────────────────────
+let _edDirty = false;
+function edMarkDirty(){
+  if (!editMode) return;
+  _edDirty = true;
+  document.getElementById('sb-wrap')?.classList.add('ed-dirty');
+  const s = document.getElementById('ed-save-state');
+  if (s) s.textContent = lang==='ru' ? 'Есть несохранённые правки' : 'Unsaved changes';
+}
+function edClearDirty(){
+  _edDirty = false;
+  document.getElementById('sb-wrap')?.classList.remove('ed-dirty');
+  const s = document.getElementById('ed-save-state');
+  if (s) s.textContent = lang==='ru' ? 'Всё сохранено' : 'All saved';
+}
+function edConfirmLeave(){
+  if (!_edDirty) return true;
+  return confirm(lang==='ru'
+    ? 'Есть несохранённые правки. Закрыть редактор и потерять их?'
+    : 'You have unsaved changes. Close the editor and lose them?');
+}
+window.addEventListener('beforeunload', e=>{
+  if (editMode && _edDirty) { e.preventDefault(); e.returnValue=''; }
+});
+
+// ── Горячие клавиши редактора ────────────────────────────────────
+function edKeydown(e){
+  if (!editMode) return;
+  const pickerOpen = document.getElementById('bp-modal-ov')?.classList.contains('show');
+  if (pickerOpen) return; // у палитры свой обработчик
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && (e.key==='s'||e.key==='ы')) { e.preventDefault(); saveEdit(); return; }
+  if (mod && (e.key==='d'||e.key==='в')) {
+    if (_edSelIdx===null) return;
+    e.preventDefault(); dupBlock(_edSelIdx); return;
+  }
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName||'')
+    || document.activeElement?.isContentEditable;
+  if (e.altKey && (e.key==='ArrowUp'||e.key==='ArrowDown')) {
+    if (_edSelIdx===null) return;
+    e.preventDefault(); mvBlock(_edSelIdx, e.key==='ArrowUp'?-1:1); return;
+  }
+  if (e.key==='Escape' && !typing) {
+    if (_edSelIdx!==null) { _edSelIdx=null; renderBlockEditor(); }
+    else exitEdit();
+  }
+}
+document.addEventListener('keydown', edKeydown);
 
 function blockMiniPreview(b){
   const esc2=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -329,37 +512,56 @@ function blockMiniPreview(b){
   }
 }
 
+// Живой предпросмотр: перерисовываем ТОЛЬКО отрендеренную часть блока с задержкой,
+// иначе полный re-render съедает фокус и каретку в поле ввода.
+const _EDNOLIVE = new Set(['rel_graph','chart','battle_map']); // canvas — только по кнопке/выбору
+let _edLiveT = null;
+function edLivePreview(i){
+  clearTimeout(_edLiveT);
+  _edLiveT = setTimeout(()=>{
+    const b = editBlocks[i]; if(!b || _EDNOLIVE.has(b.type)) return;
+    const host = document.getElementById('sbc-'+b.id)?.querySelector('.ed-block-render > div');
+    if (!host) return;
+    try { host.innerHTML = renderBlock(b); } catch(e){}
+  }, 350);
+}
 function upBlock(i,key,val) {
   if(editBlocks[i]) editBlocks[i][key]=val;
-  // refresh just the preview card (not full re-render to preserve cursor)
-  const b=editBlocks[i];
-  const card=document.getElementById('sbc-'+(b?.id||''));
-  if(card){const pv=card.querySelector('.sb-block-preview');if(pv&&b) pv.innerHTML=blockMiniPreview(b);}
+  edMarkDirty();
+  edLivePreview(i);
 }
-function mvBlock(i,dir) { const j=i+dir; if(j<0||j>=editBlocks.length) return; [editBlocks[i],editBlocks[j]]=[editBlocks[j],editBlocks[i]]; if(_edSelIdx===i)_edSelIdx=j;else if(_edSelIdx===j)_edSelIdx=i; renderBlockEditor(); }
-function rmBlock(i) { editBlocks.splice(i,1); if(_edSelIdx===i)_edSelIdx=null;else if(_edSelIdx>i)_edSelIdx--; renderBlockEditor(); }
+function mvBlock(i,dir) { const j=i+dir; if(j<0||j>=editBlocks.length) return; [editBlocks[i],editBlocks[j]]=[editBlocks[j],editBlocks[i]]; if(_edSelIdx===i)_edSelIdx=j;else if(_edSelIdx===j)_edSelIdx=i; edMarkDirty(); renderBlockEditor(); }
+function rmBlock(i) {
+  const b=editBlocks[i];
+  if (b && !confirm((lang==='ru'?'Удалить блок «':'Delete block “')+blockLabel(b.type)+(lang==='ru'?'»?':'”?'))) return;
+  editBlocks.splice(i,1); if(_edSelIdx===i)_edSelIdx=null;else if(_edSelIdx>i)_edSelIdx--; edMarkDirty(); renderBlockEditor();
+}
 
 function blockLabel(t){
   const isRu=lang==='ru';
   const labels={
-    text:isRu?'📝 Текст':'📝 Text',
-    image:isRu?'🖼 Изображение':'🖼 Image',
-    imgtext:isRu?'🖼 Фото + Текст':'🖼 Photo + Text',
-    callout:isRu?'💬 Выноска':'💬 Callout',
-    frame:isRu?'🗂 Фрейм':'🗂 Frame',
-    table:isRu?'📊 Таблица':'📊 Table',
-    divider:isRu?'— Разделитель':'— Divider',
-    cols:isRu?'⫛ Колонки':'⫛ Columns',
-    quote:isRu?'❞ Цитата':'❞ Quote',
-    gallery:isRu?'⊞ Галерея':'⊞ Gallery',
-    infobox:isRu?'📋 Инфобокс':'📋 Infobox',
-    heading:isRu?'Aa Заголовок':'Aa Heading',
-    alert:isRu?'⚠ Метка':'⚠ Alert',
-    spoiler:isRu?'🔒 Спойлер':'🔒 Spoiler',
-    stats:isRu?'◉ Статистика':'◉ Stats',
-    timeline:isRu?'◈ Хронология':'◈ Timeline',
-    battle_map:isRu?'🗺 Тактическая карта':'🗺 Battle Map',
-    statblock:isRu?'🐉 Чарник':'🐉 Statblock'
+    text:isRu?'Текст':'Text',
+    image:isRu?'Изображение':'Image',
+    imgtext:isRu?'Фото + Текст':'Photo + Text',
+    callout:isRu?'Выноска':'Callout',
+    frame:isRu?'Фрейм':'Frame',
+    table:isRu?'Таблица':'Table',
+    divider:isRu?'Разделитель':'Divider',
+    cols:isRu?'Колонки':'Columns',
+    quote:isRu?'Цитата':'Quote',
+    gallery:isRu?'Галерея':'Gallery',
+    infobox:isRu?'Инфобокс':'Infobox',
+    heading:isRu?'Заголовок':'Heading',
+    toc:isRu?'Содержание':'Contents',
+    alert:isRu?'Метка':'Alert',
+    spoiler:isRu?'Спойлер':'Spoiler',
+    stats:isRu?'Статистика':'Stats',
+    timeline:isRu?'Хронология':'Timeline',
+    vis_timeline:isRu?'Хронология (визуал)':'Visual Timeline',
+    rel_graph:isRu?'Граф связей':'Relation Graph',
+    chart:isRu?'График':'Chart',
+    battle_map:isRu?'Тактическая карта':'Battle Map',
+    statblock:isRu?'Чарник':'Statblock'
   };
   return labels[t]||t;
 }
@@ -1451,17 +1653,73 @@ const BLOCKS=[
   {type:'chart',cat:'special',icon:'📈',ru:'График',en:'Chart',dRu:'Столбчатый, линейный или круговой',dEn:'Bar, line or pie chart'},
   {type:'statblock',cat:'special',icon:'🐉',ru:'Чарник',en:'Statblock',dRu:'Карточка существа: КЗ, хиты, действия; листается',dEn:'Creature card: AC, HP, actions; pageable'},
 ];
-function openPicker(afterIdx,e){e.stopPropagation();pickerInsertIdx=afterIdx;_pickerQ='';document.getElementById('bp-search').value='';renderPickerCats();renderPickerBlocks();document.getElementById('bp-modal-ov').classList.add('show');setTimeout(()=>document.getElementById('bp-search').focus(),80);}
-function closePicker(){document.getElementById('bp-modal-ov')?.classList.remove('show');document.getElementById('bp-ov')?.classList.remove('show');}
-function filterPicker(q){_pickerQ=q.toLowerCase();renderPickerBlocks();}
-function setPickerCat(cat){_pickerCat=cat;renderPickerCats();renderPickerBlocks();}
-function renderPickerCats(){document.getElementById('bp-cats').innerHTML=BLOCK_CATS.map(c=>`<button class="bp-cat${_pickerCat===c.id?' on':''}" onclick="setPickerCat('${c.id}')">${lang==='en'?c.en:c.ru}</button>`).join('');}
-function renderPickerBlocks(){
-  const filtered=BLOCKS.filter(b=>{if(_pickerCat!=='all'&&b.cat!==_pickerCat)return false;if(_pickerQ){const n=lang==='en'?b.en:b.ru;return n.toLowerCase().includes(_pickerQ)||(lang==='en'?b.dEn:b.dRu).toLowerCase().includes(_pickerQ);}return true;});
-  document.getElementById('blk-picker').innerHTML=filtered.length?filtered.map(b=>`<div class="bpr" onclick="insertBlock('${b.type}')"><span class="bpr-i">${b.icon}</span><div><div class="bpr-n">${lang==='en'?b.en:b.ru}</div><div class="bpr-d">${lang==='en'?b.dEn:b.dRu}</div></div></div>`).join(''):`<div style="grid-column:1/-1;padding:32px;text-align:center;font-size:12px;color:var(--t3)">${lang==='ru'?'Ничего не найдено':'Nothing found'}</div>`;
+let _pickerSel = 0;          // подсвеченная карточка (навигация стрелками)
+let _pickerList = [];        // текущая выборка
+function edRecentBlocks(){ try { return JSON.parse(localStorage.getItem('wk_ed_recent')||'[]'); } catch(_) { return []; } }
+function edPushRecent(type){
+  try {
+    const r = edRecentBlocks().filter(t=>t!==type);
+    r.unshift(type);
+    localStorage.setItem('wk_ed_recent', JSON.stringify(r.slice(0,6)));
+  } catch(_){}
 }
+function openPicker(afterIdx,e){
+  if(e) e.stopPropagation();
+  pickerInsertIdx=afterIdx;_pickerQ='';_pickerSel=0;
+  const s=document.getElementById('bp-search'); if(s) s.value='';
+  renderPickerCats();renderPickerBlocks();
+  document.getElementById('bp-modal-ov').classList.add('show');
+  setTimeout(()=>s?.focus(),80);
+}
+function closePicker(){document.getElementById('bp-modal-ov')?.classList.remove('show');document.getElementById('bp-ov')?.classList.remove('show');}
+function filterPicker(q){_pickerQ=q.toLowerCase();_pickerSel=0;renderPickerBlocks();}
+function setPickerCat(cat){_pickerCat=cat;_pickerSel=0;renderPickerCats();renderPickerBlocks();}
+function renderPickerCats(){
+  const cats=[{id:'recent',ru:'Недавние',en:'Recent'},...BLOCK_CATS];
+  const rec=edRecentBlocks();
+  document.getElementById('bp-cats').innerHTML=cats
+    .filter(c=>c.id!=='recent'||rec.length)
+    .map(c=>`<button class="bp-cat${_pickerCat===c.id?' on':''}" onclick="setPickerCat('${c.id}')">${lang==='en'?c.en:c.ru}</button>`).join('');
+}
+function renderPickerBlocks(){
+  let filtered;
+  if(_pickerCat==='recent'&&!_pickerQ){
+    const rec=edRecentBlocks();
+    filtered=rec.map(t=>BLOCKS.find(b=>b.type===t)).filter(Boolean);
+  } else {
+    filtered=BLOCKS.filter(b=>{
+      if(_pickerCat!=='all'&&_pickerCat!=='recent'&&b.cat!==_pickerCat)return false;
+      if(_pickerQ){const n=lang==='en'?b.en:b.ru;return n.toLowerCase().includes(_pickerQ)||(lang==='en'?b.dEn:b.dRu).toLowerCase().includes(_pickerQ);}
+      return true;
+    });
+  }
+  _pickerList=filtered;
+  if(_pickerSel>=filtered.length) _pickerSel=Math.max(0,filtered.length-1);
+  document.getElementById('blk-picker').innerHTML=filtered.length
+    ? filtered.map((b,k)=>`<div class="bpr${k===_pickerSel?' sel':''}" onclick="insertBlock('${b.type}')" onmouseenter="_pickerSel=${k};document.querySelectorAll('.bpr').forEach((el,j)=>el.classList.toggle('sel',j===${k}))"><span class="bpr-i">${edIco(b.type,20)}</span><div><div class="bpr-n">${lang==='en'?b.en:b.ru}</div><div class="bpr-d">${lang==='en'?b.dEn:b.dRu}</div></div></div>`).join('')
+    : `<div class="bp-empty">${lang==='ru'?'Ничего не найдено':'Nothing found'}</div>`;
+}
+// Стрелки/Enter/Esc внутри палитры — выбор блока без мыши
+document.addEventListener('keydown', e=>{
+  if(!document.getElementById('bp-modal-ov')?.classList.contains('show')) return;
+  if(e.key==='Escape'){ e.preventDefault(); closePicker(); return; }
+  if(e.key==='Enter'){
+    const b=_pickerList[_pickerSel];
+    if(b){ e.preventDefault(); insertBlock(b.type); }
+    return;
+  }
+  const cols = Math.max(1, Math.round((document.getElementById('blk-picker')?.clientWidth||600)/212));
+  const step = {ArrowRight:1,ArrowLeft:-1,ArrowDown:cols,ArrowUp:-cols}[e.key];
+  if(step===undefined) return;
+  e.preventDefault();
+  const n=_pickerList.length; if(!n) return;
+  _pickerSel=Math.min(n-1,Math.max(0,_pickerSel+step));
+  document.querySelectorAll('.bpr').forEach((el,j)=>el.classList.toggle('sel',j===_pickerSel));
+  document.querySelectorAll('.bpr')[_pickerSel]?.scrollIntoView({block:'nearest'});
+});
 function insertBlock(type){
   closePicker();
+  edPushRecent(type);
   const defaults={
     text:{type:'text',id:uid(),content:''},
     heading:{type:'heading',id:uid(),text:'',style:'h-scan'},
@@ -1500,14 +1758,17 @@ function insertBlock(type){
     statblock:{type:'statblock',id:uid(),cards:[ SB_NEW_CARD() ]},
   };
   
-  const blk=defaults[type]||{type,id:uid()}; editBlocks.splice(pickerInsertIdx+1,0,blk); renderBlockEditor();
-  _edSelIdx=pickerInsertIdx+1; // auto-select newly inserted block
+  const blk=defaults[type]||{type,id:uid()};
+  editBlocks.splice(pickerInsertIdx+1,0,blk);
+  _edSelIdx=pickerInsertIdx+1;           // сразу открываем форму нового блока
+  edMarkDirty();
   renderBlockEditor();
   setTimeout(()=>{
     const card=document.getElementById('sbc-'+(blk.id||''));
-    if(card){card.classList.add('selected');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
-    refreshBlockPropsPanel();
-  },80);
+    if(card) card.scrollIntoView({behavior:'smooth',block:'center'});
+    // фокус в первое поле — можно печатать без лишнего клика
+    card?.querySelector('.ed-block-form input,.ed-block-form textarea')?.focus();
+  },90);
 }
 
 function openCovMo() {
@@ -2504,7 +2765,7 @@ ${sections}
 // ══════════════════════════════════════════════════════════════
 function enterEditItem(pg) {
   editMode=true; editData={...pg,_origStatus:pg.status||'draft',page_type:'item'};
-  document.getElementById('edit-btn').textContent='✖'; document.getElementById('edit-btn').className='tbtn edit-on';
+  edSetEditBtn(true);
   const raw=pg.content||''; try{editBlocks=JSON.parse(raw);}catch{editBlocks=[];}
   // Обычный редактор — infobox уже создан при создании страницы
   renderEditUI(pg, pT(pg), false);
@@ -2515,7 +2776,7 @@ function enterEditItem(pg) {
 // ══════════════════════════════════════════════════════════════
 function enterEditAbility(pg) {
   editMode=true; editData={...pg,_origStatus:pg.status||'draft',page_type:'ability'};
-  document.getElementById('edit-btn').textContent='✖'; document.getElementById('edit-btn').className='tbtn edit-on';
+  edSetEditBtn(true);
   const raw=pg.content||''; try{editBlocks=JSON.parse(raw);}catch{editBlocks=[];}
   renderEditUI(pg, pT(pg), false);
 }
@@ -2542,7 +2803,7 @@ async function loadCharLib(slug){try{const sec=sections.find(s=>s.slug===slug);i
 
 async function enterEditCharacter(pg){
   editMode=true; editData={...pg,_origStatus:pg.status||'draft',page_type:'character'};
-  document.getElementById('edit-btn').textContent='✖'; document.getElementById('edit-btn').className='tbtn edit-on';
+  edSetEditBtn(true);
   let ch=null;
   try{const r=await dbGet('characters',`slug=eq.${encodeURIComponent(pg.slug)}&select=*&limit=1`);ch=r?.[0]||null;}catch(e){}
   if(!editData) return; // пользователь вышел пока шёл запрос
