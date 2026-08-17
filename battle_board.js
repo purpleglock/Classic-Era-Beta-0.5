@@ -4522,6 +4522,14 @@ function hsEta(iso) {
   if (h < 48) return '~' + Math.round(h) + ' ч';
   return '~' + Math.round(h / 24) + ' сут';
 }
+// Срок ближайшего сбора добычи: минуты, а не «~1 ч» — ватага доит систему
+// раз в час, и игрок должен видеть, сколько у него осталось до следующей потери.
+function hsSoon(iso) {
+  const ms = Date.parse(iso) - Date.now();
+  if (!(ms > 0)) return 'вот-вот';
+  const m = Math.round(ms / 60000);
+  return m < 60 ? ('через ' + m + ' мин') : ('через ~' + Math.round(m / 60) + ' ч');
+}
 function hsThreatsBlock(list) {
   if (!list || !list.length) return '';
   const known = list.filter(t => t.grade !== 'ghost')
@@ -4546,6 +4554,9 @@ function hsThreatsBlock(list) {
           ? 'Оценка сил: ' + (+t.ships || 1) + ' кор.'
             + (t.stood ? ' · сама не уйдёт — выбивать флотом' : '')
           : 'Сила: ' + esc(t.band || '?') + ' · замысел не вскрыт'}</div>
+        ${t.stood && (t.looted || t.next_at) ? `<div class="hs-card-loot">
+          ${t.looted ? `Угнано за стоянку: <b>${(+t.looted).toLocaleString('ru')}</b> жит.` : ''}
+          ${t.next_at ? `<span>следующий сбор ${hsSoon(t.next_at)}</span>` : ''}</div>` : ''}
       </div>`;
   }).join('');
 

@@ -2772,45 +2772,16 @@ function adMultiaccPanel() {
         <tbody>${rows}</tbody></table></div>`;
 }
 
-// ── Новости игроков: лента всех публикаций + нейро-вердикты ───────────────────
+// ── Новости игроков: лента всех публикаций ───────────────────
 // Грузим только авторские новости (owner_id задан), свежие сверху.
 async function adNewsLoad() {
   try {
     AD.news = await dbGet('faction_news',
       'owner_id=not.is.null&order=created_at.desc&limit=120'
-      + '&select=id,title,body,faction_name,faction_color,faction_id,owner_id,status,published_at,created_at,ai_verdict,staff_verdict')
+      + '&select=id,title,body,faction_name,faction_color,faction_id,owner_id,status,published_at,created_at,staff_verdict')
       || [];
   } catch (e) { AD.news = { error: e.message }; }
   adPaint();
-}
-
-// Запросить/переоценить нейро-вердикт по новости из админ-ленты.
-async function adNewsVerdict(id, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = '🧠 Оцениваю…'; }
-  let token = (typeof SB_ANON !== 'undefined') ? SB_ANON : '';
-  try { token = await getTokenFresh(); } catch (e) {}
-  try {
-    const r = await fetch(FN_AI_VERDICT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: (typeof SB_ANON !== 'undefined' ? SB_ANON : ''), Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ news_id: id }),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok || d.error) { toast('Нейро-оценка: ' + (d.error || ('HTTP ' + r.status)), 'err'); }
-    else {
-      const v = d.verdict || {};
-      toast('Нейро-оценка готова: ' + (v.verdict || '—') + (v.ok === false ? ' (модель не ответила корректно)' : ''), 'ok');
-      // Подтянуть свежую строку и обновить кэш ленты.
-      try {
-        const rows = await dbGet('faction_news', `id=eq.${encodeURIComponent(id)}&limit=1`);
-        if (rows && rows[0] && Array.isArray(AD.news)) {
-          const i = AD.news.findIndex(n => n.id === id);
-          if (i >= 0) AD.news[i] = Object.assign({}, AD.news[i], rows[0]);
-        }
-      } catch (e) {}
-    }
-  } catch (e) { toast('Нейро-оценка: ' + (e.message || String(e)), 'err'); }
-  finally { adPaint(); }
 }
 
 // Раскрыть/свернуть полный текст новости в админ-ленте.
@@ -2838,15 +2809,8 @@ function adNewsPanel() {
   if (list.error) return `<div style="${wrap};color:#ff7a7a">Ошибка: ${esc(list.error)}</div>`;
   if (!list.length) return `<div style="${wrap};color:var(--t3,#8aa0b0)">Пока нет новостей от игроков.</div>`;
 
-  const vMeta = (typeof FN_AI_LABELS !== 'undefined') ? FN_AI_LABELS : {};
   const cardCss = 'border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:12px 14px;display:flex;flex-direction:column;gap:8px';
   const rows = list.map(n => {
-    const v = n.ai_verdict;
-    const meta = v ? (vMeta[v.verdict] || vMeta.review || {}) : null;
-    const vColor = meta && meta.cls === 'ok' ? '#5fd08a' : meta && meta.cls === 'bad' ? '#ff7a7a' : meta && meta.cls === 'mid' ? '#e6c25f' : 'var(--t4,#6a7a88)';
-    const badge = v
-      ? `<span style="font-size:11px;color:${vColor};border:1px solid ${vColor};border-radius:5px;padding:2px 7px" title="${esc((v.ruling || v.reason || '').slice(0, 200))}">🧠 ${esc((meta && meta.ic) || '')} ${esc((meta && meta.t) || v.verdict || '')}${v.injection ? ' ⚠' : ''}</span>`
-      : `<span style="font-size:11px;color:var(--t4,#6a7a88);border:1px dashed var(--w2,#2a3340);border-radius:5px;padding:2px 7px">нет вердикта</span>`;
     const staff = n.staff_verdict ? `<span style="font-size:11px;color:var(--gdl,#5fb0e6)" title="${esc((n.staff_verdict || '').slice(0,200))}">⚖ есть вердикт админа</span>` : '';
     const fac = n.faction_name ? esc(n.faction_name.toUpperCase()) : 'ФРАКЦИЯ';
     const accent = n.faction_color || 'var(--gd,#3a7fbf)';
@@ -2867,10 +2831,9 @@ function adNewsPanel() {
       <div style="font-size:14px;font-weight:600;color:var(--t1,#e8edf2)">${esc(n.title || 'Без заголовка')}</div>
       ${bodyHtml}
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:2px">
-        ${badge}${staff}
+        ${staff}
         <span style="margin-left:auto;display:flex;gap:6px">
           ${readBtn}
-          <button class="btn btn-gd btn-xs" onclick="adNewsVerdict('${esc(n.id)}', this)">🧠 ${v ? 'Переоценить' : 'Вердикт'}</button>
           <button class="btn btn-gh btn-xs" onclick="adNewsDelete('${esc(n.id)}')">🗑 Удалить</button>
         </span>
       </div>
@@ -2883,7 +2846,7 @@ function adNewsPanel() {
       <span style="font-size:12px;color:var(--t3,#8aa0b0)">${list.length}${list.length >= 120 ? ' (последние)' : ''}</span>
       <button class="btn btn-gh btn-sm" style="margin-left:auto" onclick="AD.news=null;adNewsLoad()">↻ Обновить</button>
     </div>
-    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin-bottom:12px;line-height:1.5">Все публикации игроков с нейро-вердиктами. Кнопка «🧠 Вердикт» запросит нейро-оценку (или переоценит), «🗑 Удалить» уберёт новость безвозвратно.</div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin-bottom:12px;line-height:1.5">Все публикации игроков. «🗑 Удалить» уберёт новость безвозвратно.</div>
     <div style="display:flex;flex-direction:column;gap:10px">${rows}</div>
   </div>`;
 }

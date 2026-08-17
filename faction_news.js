@@ -19,53 +19,8 @@ const FN = {
 
 function fnIsStaff() { return !!(user && ['superadmin', 'editor', 'moderator'].includes(user.role)); }
 
-// Edge Function нейро-вердикта: держит ключ OpenRouter, читает новость+лор из
-// БД сама (клиент шлёт только id — подменить контекст с клиента нельзя).
-const FN_AI_VERDICT_URL = 'https://pgngkkiiopymvrcozvvr.supabase.co/functions/v1/news-verdict';
-
-// Запросить нейро-вердикт на новость (fire-and-forget — не блокирует UI).
-async function fnTriggerAiVerdict(newsId) {
-  if (!newsId) return;
-  let token = (typeof SB_ANON !== 'undefined') ? SB_ANON : '';
-  try { token = await getTokenFresh(); } catch (e) {}
-  try {
-    fetch(FN_AI_VERDICT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: (typeof SB_ANON !== 'undefined' ? SB_ANON : ''), Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ news_id: newsId }),
-    }).catch(() => {});
-  } catch (e) {}
-}
-
-// Стафф: запросить/переоценить нейро-вердикт ВРУЧНУЮ с показом результата.
-// Ждёт ответ функции (не fire-and-forget), сообщает об ошибке, перерисовывает статью.
-async function fnRequestAiVerdict(newsId) {
-  if (!newsId) return;
-  const btn = document.getElementById('fn-art-aibtn');
-  if (btn) { btn.disabled = true; btn.textContent = '🧠 Оцениваю…'; }
-  let token = (typeof SB_ANON !== 'undefined') ? SB_ANON : '';
-  try { token = await getTokenFresh(); } catch (e) {}
-  try {
-    const r = await fetch(FN_AI_VERDICT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: (typeof SB_ANON !== 'undefined' ? SB_ANON : ''), Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ news_id: newsId }),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok || d.error) { toast('Нейро-оценка: ' + (d.error || ('HTTP ' + r.status)), 'err'); }
-    else {
-      const v = d.verdict || {};
-      toast('Нейро-оценка готова: ' + (v.verdict || '—') + (v.ok === false ? ' (модель не ответила корректно)' : ''), 'ok');
-      // Подтянуть свежую строку и перерисовать статью.
-      try {
-        const rows = await dbGet('faction_news', `id=eq.${encodeURIComponent(newsId)}&limit=1`);
-        if (rows && rows[0]) { FN.byId.set(newsId, rows[0]); fnOpenArticle(newsId); }
-      } catch (e) {}
-    }
-  } catch (e) { toast('Нейро-оценка: ' + (e.message || String(e)), 'err'); }
-  finally { if (btn) { btn.disabled = false; btn.textContent = '🧠 Нейро-оценка'; } }
-}
-
+// Нейро-вердикт снят со строя (модели у провайдеров отвалились). Колонка
+// faction_news.ai_verdict оставлена в БД, но ни писать, ни показывать её не надо.
 // Перерисовать активный список новостей — где бы он сейчас ни был открыт:
 // в экономическом кабинете (вкладка «Новости») или в панели профиля (#ap).
 function fnRefresh() {
@@ -1266,99 +1221,9 @@ function fnRenderVerdictBlock(n) {
     ${bodyHtml}
   </div>`;
 }
-// ── Нейро-вердикт (авто-оценка ИИ) ──────────────────────────
-// Виден стаффу всегда; игроку — только на свою новость (как подсказка).
-// Метка считается на сервере; здесь только отображение.
-const FN_AI_LABELS = {
-  approve: { t: 'согласуется с лором', cls: 'ok',  ic: '✓' },
-  review:  { t: 'требует проверки',    cls: 'mid', ic: '◐' },
-  reject:  { t: 'противоречия / риск', cls: 'bad', ic: '✕' },
-};
-function fnAiBar(label, val) {
-  const v = Math.max(0, Math.min(100, Number(val) || 0));
-  const cls = v >= 60 ? 'ok' : (v >= 35 ? 'mid' : 'bad');
-  return `<div class="fn-ai-bar"><span class="fn-ai-bar-l">${esc(label)}</span>
-    <span class="fn-ai-bar-track"><span class="fn-ai-bar-fill fn-ai-${cls}" style="width:${v}%"></span></span>
-    <span class="fn-ai-bar-v">${v}</span></div>`;
-}
-function fnRenderAiVerdictBlock(n) {
-  const v = n && n.ai_verdict;
-  // Нейро-вердикт публичный — виден всем под любой новостью.
-  if (!v) return '';
-  const meta = FN_AI_LABELS[v.verdict] || FN_AI_LABELS.review;
-  const inj = v.injection ? `<div class="fn-ai-flag">⚠ Замечена попытка манипуляции текстом — оценка снижена.</div>` : '';
-  // Юридический фильтр (законы РФ): блокировка или отметка на проверку.
-  const lg = v.legal;
-  const legalHtml = (lg && lg.flag) ? `<div class="fn-ai-flag fn-ai-legal${lg.blocked ? ' fn-ai-legal-block' : ''}">
-      ${lg.blocked ? '⛔ ЗАБЛОКИРОВАНО: запрещённый по законам РФ контент' : '⚠ Автофильтр: возможный запрещённый контент — требуется проверка человеком'}${lg.cats && lg.cats.length ? ' · ' + esc(lg.cats.join(', ')) : ''}${lg.note ? `<div class="fn-ai-legal-note">${esc(lg.note)}</div>` : ''}
-    </div>` : '';
-  // Развёрнутый вердикт-«колонка»; если его нет (старые записи) — краткое резюме.
-  const rulingTxt = (v.ruling || '').trim() || (v.reason || '').trim();
-  const rulingHtml = rulingTxt ? `<div class="fn-verdict-body fn-ai-reason">${fnRenderBody(rulingTxt)}</div>` : '';
-  // Сюжетные последствия — список в стиле выдач администрации.
-  const effects = Array.isArray(v.effects) ? v.effects.filter(e => (e || '').trim()) : [];
-  const effectsHtml = effects.length ? `<div class="fn-verdict-grants fn-ai-effects">
-      <div class="fn-verdict-grants-hd">◈ Последствия в хронике</div>
-      <ul class="fn-verdict-grant-list">${effects.map(e =>
-        `<li class="fn-verdict-grant fn-ai-effect"><span class="fn-verdict-grant-ic" aria-hidden="true">↯</span><span class="fn-verdict-grant-t">${esc(e)}</span></li>`
-      ).join('')}</ul></div>` : '';
-  // Стафф может перенести нейро-вердикт в редактируемый вердикт администрации.
-  const adopt = fnIsStaff() ? `<button type="button" class="btn btn-gh btn-xs fn-ai-adopt" onclick="fnAdoptAiVerdict('${esc(n.id)}')">✎ В вердикт администрации</button>` : '';
-  const uid = 'fn-aiverdict-' + Math.random().toString(36).substr(2, 9);
-  return `<div class="fn-art-verdict fn-art-aiverdict fn-ai-${meta.cls} fn-ai-collapsed" data-aid="${uid}">
-    <div class="fn-verdict-hd" style="cursor:pointer;user-select:none" onclick="fnToggleAiVerdict('${uid}')">
-      <span class="fn-verdict-badge fn-ai-badge">🧠 Нейро-оценка хроники</span>
-      <span class="fn-ai-tag fn-ai-${meta.cls}">${meta.ic} ${esc(meta.t)}</span>
-      <span class="fn-ai-toggle" style="margin-left:auto;opacity:0.6">▶</span>
-    </div>
-    <div class="fn-ai-body">
-      <div class="fn-ai-bars">
-        ${fnAiBar('Соответствие лору', v.lore)}
-        ${fnAiBar('Связность с событиями', v.continuity)}
-        ${fnAiBar('Актуальность', v.relevance)}
-        ${v.feasibility != null ? fnAiBar('Соразмерность средств', v.feasibility) : ''}
-      </div>
-      ${legalHtml}
-      ${inj}
-      ${rulingHtml}
-      ${effectsHtml}
-      <div class="fn-ai-foot">Автоматическая оценка ИИ${v.model ? ' · ' + esc(String(v.model).split('/').pop().replace(':free','')) : ''} · носит рекомендательный характер ${adopt}</div>
-    </div>
-  </div>`;
-}
-// Стафф: перенести нейро-вердикт (текст + последствия) в редактор вердикта
-// администрации, где его можно отредактировать и утвердить официально.
-function fnAdoptAiVerdict(id) {
-  const n = FN.byId.get(id);
-  const v = n && n.ai_verdict;
-  if (!v) { toast('Нейро-вердикт не найден', 'err'); return; }
-  const parts = [];
-  if ((v.ruling || '').trim()) parts.push(v.ruling.trim());
-  const effects = Array.isArray(v.effects) ? v.effects.filter(e => (e || '').trim()) : [];
-  if (effects.length) parts.push('Последствия:\n' + effects.map(e => '• ' + e).join('\n'));
-  const draft = parts.join('\n\n');
-  fnCloseArticle();
-  fnOpenComposer(id);
-  // Дать композитору отрисоваться, затем подставить текст в поле вердикта.
-  setTimeout(() => {
-    const ta = document.getElementById('fn-c-verdict');
-    if (ta) {
-      if (ta.value.trim() && !confirm('В вердикте уже есть текст. Заменить его нейро-вердиктом?')) return;
-      ta.value = draft;
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-      fnVerdictPreviewRefresh();
-      ta.focus();
-    }
-  }, 300);
-}
-// Переключить видимость содержимого нейро-вердикта (слайдер).
-function fnToggleAiVerdict(uid) {
-  const el = document.querySelector(`[data-aid="${uid}"]`);
-  if (!el) return;
-  el.classList.toggle('fn-ai-collapsed');
-  const toggle = el.querySelector('.fn-ai-toggle');
-  if (toggle) toggle.textContent = el.classList.contains('fn-ai-collapsed') ? '▶' : '▼';
-}
+// ── Нейро-вердикт СНЯТ ──────────────────────────
+// Блок не рисуется; заглушка оставлена, чтобы не ломать вызов в статье.
+function fnRenderAiVerdictBlock() { return ''; }
 function fnVerdictPreviewHtml() {
   const text = (document.getElementById('fn-c-verdict')?.value || '').trim();
   const grants = fnGrantsCollect();
@@ -1664,7 +1529,6 @@ function fnOpenArticle(id) {
     <div class="fn-art-foot">
       <span>◈◈◈</span>
       ${fnIsStaff() ? `
-        <button class="btn btn-gh btn-sm" id="fn-art-aibtn" style="margin-right: 15px; border-color: #8b7cf6; color: #8b7cf6;" onclick="fnRequestAiVerdict('${esc(n.id)}')">🧠 Нейро-оценка</button>
         <button class="btn btn-gh btn-sm" style="margin-right: 15px; border-color: var(--gd); color: var(--gd);" onclick="fnCloseArticle(); fnOpenComposer('${esc(n.id)}')">⚖ Редактировать вердикт</button>
         <button class="fn-art-del" title="Удалить новость (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">🗑 Удалить</button>
       ` : ''}
@@ -2476,8 +2340,6 @@ let fxArr = [];
         patch.status = 'pending';   // правка игрока снова уходит на проверку
       }
       await dbPatch('faction_news', `id=eq.${encodeURIComponent(id)}`, patch);
-      // Переоценка нейросетью при правке игроком (текст изменился).
-      if (!isPrivate) fnTriggerAiVerdict(id);
       toast(isPrivate ? 'Личное сообщение обновлено и доставлено фракции' : (staff ? 'Новость обновлена и опубликована' : 'Изменения отправлены на проверку'), 'ok');
     } else {
       const _ins = await dbPost('faction_news', {
@@ -2496,9 +2358,6 @@ let fxArr = [];
         verdict_by: hasVerdict ? (getDisplayName() || 'штаб') : null,
         verdict_at: hasVerdict ? now : null,
       });
-      // Нейро-оценка свежей новости игрока (id из representation-ответа).
-      const _newId = Array.isArray(_ins) ? _ins[0]?.id : _ins?.id;
-      if (!isPrivate && _newId) fnTriggerAiVerdict(_newId);
       toast(isPrivate ? 'Личное сообщение доставлено фракции' : (staff ? 'Опубликовано на главной' : 'Новость отправлена на проверку'), 'ok');
     }
     // Отправлено успешно — черновик больше не нужен. Сбрасываем ключ ДО закрытия,
