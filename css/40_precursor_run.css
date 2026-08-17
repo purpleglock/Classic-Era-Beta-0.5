@@ -1,0 +1,316 @@
+/* ════════════════════════════════════════════════════════════
+   ДОЗВЁЗДНЫЕ · ЭКРАН ПАРТИИ (precursor_run_ui.js)
+
+   HUD орбитального наблюдения: терминал, а не карточка сайта. Срезанные углы,
+   моноширинные метки, сетка развёртки, два неона — циан (развитие) и пурпур
+   (ущерб). Третий цвет только один: янтарь на том, что можно нажать сейчас.
+
+   Интерактив здесь не украшение: наведение на действие показывает, КУДА
+   уедут шкалы (призрачный сегмент и «было → станет»), до нажатия.
+   ════════════════════════════════════════════════════════════ */
+
+.pcr {
+  --нео: #35e0d8;        /* развитие  */
+  --кровь: #ff4d7a;      /* ущерб     */
+  --янтарь: #ffb454;     /* доступное */
+  --сталь: rgba(150,200,215,.55);
+  --линия: rgba(53,224,216,.22);
+  --подложка: rgba(10,18,24,.72);
+  display: flex; flex-direction: column; gap: 12px;
+  font-feature-settings: "tnum";
+}
+
+/* ── КАРКАС ГРАНЁНОЙ ПАНЕЛИ ───────────────────────────────
+   Обводка — СЛОЙ-ПОДЛОЖКА (::before цвет + ::after инсет-фон), а НЕ border:
+   border с clip-path несовместим, срез просто отрезает рамку. Тот же приём,
+   что у колонизации (css/03_content.css) — форма-язык на сайте один. */
+.pcr-гр {
+  position: relative; z-index: 0; border: none; border-radius: 0;
+  background: transparent;
+  --cyb-cut: 10px;
+  --cyb-bd: var(--линия);
+  --cyb-bg: var(--подложка);
+  clip-path: polygon(0 var(--cyb-cut), var(--cyb-cut) 0, 100% 0,
+                     100% calc(100% - var(--cyb-cut)),
+                     calc(100% - var(--cyb-cut)) 100%, 0 100%);
+}
+.pcr-гр::before {
+  content: ''; position: absolute; inset: 0; z-index: -2; pointer-events: none;
+  background: var(--cyb-bd);
+}
+.pcr-гр::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1; pointer-events: none;
+  background: var(--cyb-bg);
+  clip-path: polygon(0 var(--cyb-cut), var(--cyb-cut) 0, 100% 0,
+                     100% calc(100% - var(--cyb-cut)),
+                     calc(100% - var(--cyb-cut)) 100%, 0 100%);
+}
+
+.pcr-имя {
+  font-size: 20px; font-weight: 700; letter-spacing: .02em; line-height: 1.2;
+}
+.pcr-имя span {
+  display: block; margin-top: 3px; font-size: 11px; font-weight: 400;
+  font-family: ui-monospace, Consolas, monospace; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--сталь);
+}
+
+/* ── ЗОНА 1 · HUD ────────────────────────────────────────── */
+.pcr-hud {
+  display: flex; gap: 16px; align-items: center; padding: 14px 16px;
+  /* сетка развёртки идёт поверх подложки, а не вместо неё */
+  background-image: repeating-linear-gradient(0deg,
+    rgba(53,224,216,.05) 0 1px, transparent 1px 4px);
+}
+.pcr-hud-к { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
+
+.pcr-скан { width: 116px; height: 116px; flex: none; }
+.pcr-скан-фон { stroke: rgba(150,200,215,.13); }
+.pcr-дуга-разв  { stroke: var(--нео); filter: drop-shadow(0 0 4px rgba(53,224,216,.6)); }
+.pcr-дуга-ущерб { stroke: var(--кровь); filter: drop-shadow(0 0 4px rgba(255,77,122,.5)); }
+.pcr-дуга-разв-п, .pcr-дуга-ущерб-п { stroke: #fff; opacity: .75; }
+.pcr-дуга-разв-п.вниз, .pcr-дуга-ущерб-п.вниз { stroke: #8b98a5; opacity: .9; }
+.pcr-скан-век {
+  text-anchor: middle; fill: currentColor; font-size: 17px; font-weight: 700;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.pcr-скан-под {
+  text-anchor: middle; font-size: 8px; letter-spacing: .14em;
+  font-family: ui-monospace, Consolas, monospace; fill: currentColor;
+}
+
+.pcr-строка { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pcr-мет {
+  font-family: ui-monospace, Consolas, monospace; font-size: 9.5px;
+  letter-spacing: .16em; color: var(--сталь);
+}
+.pcr-срок-л, .pcr-вним-л { display: flex; gap: 3px; }
+.pcr-t { width: 13px; height: 5px; background: rgba(150,200,215,.16); }
+.pcr-t.был { background: var(--нео); opacity: .55; }
+.pcr-t.тут {
+  background: var(--янтарь);
+  box-shadow: 0 0 8px var(--янтарь);
+}
+.pcr-a {
+  width: 10px; height: 10px; transform: rotate(45deg);
+  border: 1px solid rgba(150,200,215,.35);
+}
+.pcr-a.есть { background: var(--янтарь); border-color: var(--янтарь); box-shadow: 0 0 6px rgba(255,180,84,.7); }
+.pcr-вним-что { font-size: 11.5px; color: var(--сталь); }
+
+.pcr-клон {
+  margin-left: auto; font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px; letter-spacing: .12em; padding: 3px 9px;
+  border: 1px solid currentColor;
+}
+.pcr-ok  { color: var(--нео); }
+.pcr-bad { color: var(--кровь); }
+.pcr-mid { color: var(--сталь); }
+
+.pcr-q {
+  width: 24px; height: 24px; cursor: pointer; flex: none;
+  border: 1px solid var(--линия); background: transparent; color: var(--сталь);
+  font-family: ui-monospace, Consolas, monospace; font-size: 12px; line-height: 1;
+}
+.pcr-q:hover { color: var(--нео); border-color: var(--нео); }
+
+/* шкалы: полоса + призрак примерки */
+.pcr-шкалы { display: flex; gap: 12px; }
+.pcr-ш { flex: 1; min-width: 0; }
+.pcr-ш-hd { display: flex; justify-content: space-between; align-items: baseline; }
+.pcr-ш-hd b {
+  font-family: ui-monospace, Consolas, monospace; font-size: 9.5px;
+  letter-spacing: .14em; color: var(--сталь); font-weight: 400;
+}
+.pcr-ш-hd u {
+  text-decoration: none; font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px; font-weight: 700;
+}
+.pcr-ш-hd u.примерка { color: var(--янтарь); font-size: 11.5px; }
+.pcr-ш-п {
+  position: relative; height: 4px; margin: 4px 0 3px;
+  background: rgba(150,200,215,.12);
+}
+.pcr-ш-п i { position: absolute; left: 0; top: 0; height: 100%; display: block; }
+.pcr-ш-п s {
+  position: absolute; top: -2px; height: 8px; display: block;
+  background: var(--янтарь); box-shadow: 0 0 7px var(--янтарь);
+}
+.pcr-ш-п s.вниз { background: #8b98a5; box-shadow: none; }
+.pcr-ш-разв  .pcr-ш-п i { background: var(--нео); box-shadow: 0 0 6px rgba(53,224,216,.55); }
+.pcr-ш-ущерб .pcr-ш-п i { background: var(--кровь); box-shadow: 0 0 6px rgba(255,77,122,.5); }
+.pcr-ш-что { font-size: 11px; color: var(--сталь); }
+
+.pcr-приборы { border-top: 1px solid var(--линия); padding-top: 10px; margin-top: 4px; }
+.pcr-пусто { color: var(--сталь); font-size: 13px; padding: 10px 0; }
+
+/* ── ЗОНА 2 · событие века ───────────────────────────────── */
+.pcr-сцена {
+  padding: 16px;
+  background-size: cover; background-position: center;
+}
+.pcr-сцена[style*="background-image"] { padding-top: 130px; }
+.pcr-сцена[style*="background-image"] .pcr-текст,
+.pcr-сцена[style*="background-image"] .pcr-глава {
+  background: rgba(8,14,19,.85); padding: 12px;
+}
+.pcr-глава {
+  font-family: ui-monospace, Consolas, monospace; font-size: 10px;
+  letter-spacing: .18em; color: var(--нео); margin-bottom: 10px;
+}
+.pcr-текст p { margin: 0 0 9px; line-height: 1.62; font-size: 14.5px; }
+.pcr-текст p:last-child { margin-bottom: 0; }
+
+.pcr-вары { display: flex; flex-direction: column; gap: 7px; margin-top: 15px; }
+.pcr-вар {
+  display: flex; flex-direction: column; gap: 3px; text-align: left; cursor: pointer;
+  padding: 11px 13px; color: inherit;
+  /* Фон — тёмный, как у всех панелей. Янтарь только КРОМКОЙ: залитый янтарём
+     вариант превращается в кирпич, а пять кирпичей подряд — в стену, на
+     которой не видно ни текста, ни того, что их пять разных. */
+  --cyb-bd: rgba(255,180,84,.32); --cyb-bg: rgba(10,18,24,.78);
+}
+.pcr-вар::before {
+  /* акцент-полоса слева: чем выбор дороже, тем он заметнее — но фоном не жжёт */
+  background:
+    linear-gradient(90deg, var(--янтарь) 0 3px, var(--cyb-bd) 3px);
+}
+.pcr-вар:hover:not(:disabled) {
+  --cyb-bd: var(--янтарь); --cyb-bg: rgba(38,28,14,.85);
+}
+.pcr-вар:disabled {
+  cursor: default; opacity: .35;
+  --cyb-bd: rgba(150,200,215,.2); --cyb-bg: transparent;
+}
+.pcr-вар-т { font-size: 14.5px; font-weight: 600; line-height: 1.35; }
+.pcr-вар-ц {
+  font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+  letter-spacing: .05em; color: rgba(190,215,225,.75);
+}
+.pcr-вар-хвост { font-size: 11.5px; line-height: 1.4; color: var(--сталь); font-style: italic; }
+.pcr-решено {
+  font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+  letter-spacing: .12em; color: var(--нео); margin-top: 14px;
+}
+
+/* ── ЗОНА 3 · рука державы ───────────────────────────────── */
+.pcr-рука { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pcr-карта {
+  display: flex; flex-direction: column; gap: 5px; text-align: left; cursor: pointer;
+  padding: 11px; color: inherit;
+}
+.pcr-карта:hover:not(:disabled) {
+  --cyb-bd: var(--нео); --cyb-bg: rgba(53,224,216,.08);
+}
+.pcr-карта.нельзя { cursor: default; opacity: .32; }
+/* Обряд — не четвёртая ступень, а выход из партии, и рука это должна
+   показывать до нажатия: карта стоит в крови, а не в неоне. */
+.pcr-карта.обряд { --cyb-bd: rgba(255,77,122,.45); }
+.pcr-карта.обряд .pcr-карта-hd b,
+.pcr-карта.обряд .pcr-карта-сдвиг,
+.pcr-карта.обряд .pcr-карта-цена { color: var(--кровь); opacity: 1; }
+.pcr-карта.обряд:hover:not(:disabled) {
+  --cyb-bd: var(--кровь); --cyb-bg: rgba(255,77,122,.09);
+}
+.pcr-карта-hd { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.pcr-карта-hd b {
+  font-family: ui-monospace, Consolas, monospace; font-size: 11.5px;
+  letter-spacing: .06em; line-height: 1.2;
+}
+/* Цена — цифра в срезанном шестиугольнике. Ромбом (rotate) её делать нельзя:
+   вместе с рамкой повернётся и сама цифра. */
+.pcr-карта-hd i {
+  font-style: normal; font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px; font-weight: 700; color: var(--янтарь); flex: none;
+  width: 20px; height: 18px; display: grid; place-items: center;
+  border: 1px solid currentColor;
+}
+.pcr-карта-что   { font-size: 12px; line-height: 1.42; opacity: .8; }
+.pcr-карта-сдвиг {
+  font-family: ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: .03em;
+}
+.pcr-карта-хвост { font-size: 11px; line-height: 1.35; color: var(--сталь); }
+.pcr-карта-нет   { font-size: 10.5px; color: var(--кровь); }
+
+.pcr-век {
+  padding: 14px; cursor: pointer; color: inherit;
+  font-family: ui-monospace, Consolas, monospace; font-size: 13px; letter-spacing: .14em;
+  --cyb-bd: var(--янтарь); --cyb-bg: rgba(255,180,84,.12);
+}
+.pcr-век:hover:not(.нельзя) {
+  --cyb-bg: rgba(255,180,84,.22);
+  filter: drop-shadow(0 0 10px rgba(255,180,84,.3));
+}
+.pcr-век.нельзя {
+  cursor: default; color: var(--сталь); letter-spacing: .06em;
+  --cyb-bd: rgba(150,200,215,.18); --cyb-bg: transparent;
+}
+
+/* ── конец партии ────────────────────────────────────────── */
+.pcr-конец {
+  padding: 24px; --cyb-cut: 16px;
+  display: flex; flex-direction: column; gap: 11px;
+}
+.pcr-конец-держава { --cyb-bd: rgba(53,224,216,.6); }
+.pcr-конец-кризис  { --cyb-bd: rgba(255,77,122,.6); }
+.pcr-конец-нм {
+  font-family: ui-monospace, Consolas, monospace; font-size: 26px;
+  font-weight: 700; letter-spacing: .16em;
+}
+.pcr-конец-держава .pcr-конец-нм { color: var(--нео); text-shadow: 0 0 18px rgba(53,224,216,.5); }
+.pcr-конец-кризис  .pcr-конец-нм { color: var(--кровь); text-shadow: 0 0 18px rgba(255,77,122,.45); }
+/* Обмен — не победа и не поражение: мира просто нет. Поэтому не неон и не
+   кровь, а погасший янтарь. */
+.pcr-конец-обмен { --cyb-bd: rgba(210,160,60,.5); }
+.pcr-конец-обмен .pcr-конец-нм { color: var(--янтарь); text-shadow: 0 0 18px rgba(210,160,60,.35); }
+.pcr-конец-txt  { font-size: 14.5px; line-height: 1.6; opacity: .88; }
+.pcr-конец-счёт {
+  font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+  letter-spacing: .08em; color: var(--сталь);
+}
+.pcr-конец-след {
+  display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--сталь);
+  border-top: 1px solid var(--линия); padding-top: 11px;
+}
+
+/* ── телефон ─────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  .pcr-рука { grid-template-columns: repeat(2, 1fr); }
+  .pcr-hud { flex-direction: column; align-items: stretch; }
+  .pcr-скан { align-self: center; }
+  .pcr-клон { margin-left: 0; }
+  .pcr-шкалы { flex-direction: column; gap: 9px; }
+  .pcr-сцена[style*="background-image"] { padding-top: 95px; }
+}
+
+/* ── чем платит держава: казна и досье Фонда ─────────────── */
+.pcr-держава { gap: 8px; }
+.pcr-казна {
+  font-family: ui-monospace, Consolas, monospace; font-size: 12px; font-weight: 700;
+}
+.pcr-казна em { font-style: normal; font-weight: 400; color: var(--сталь); font-size: 11px; }
+/* Досье — полоска «докуда дошло до кары», а не абстрактное число: на −100
+   Фонд забирает четверть казны. */
+.pcr-фонд {
+  position: relative; display: inline-flex; align-items: center; gap: 7px;
+  min-width: 96px; padding: 2px 8px;
+  border: 1px solid rgba(150,200,215,.28);
+}
+.pcr-фонд i {
+  position: absolute; left: 0; top: 0; bottom: 0; display: block;
+  background: rgba(255,77,122,.22);
+}
+.pcr-фонд b {
+  position: relative; font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px; font-weight: 700;
+}
+.pcr-фонд.горит { border-color: var(--кровь); color: var(--кровь); }
+.pcr-фонд.горит i { background: rgba(255,77,122,.4); }
+.pcr-штраф {
+  font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+  letter-spacing: .06em; color: var(--кровь);
+}
+.pcr-карта-цена {
+  font-family: ui-monospace, Consolas, monospace; font-size: 10.5px;
+  letter-spacing: .03em; color: var(--янтарь); opacity: .85;
+}

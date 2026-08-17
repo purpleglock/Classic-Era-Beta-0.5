@@ -1,0 +1,104 @@
+/* ════════════════════════════════════════════════════════════
+   ДОЗВЁЗДНЫЕ · ЛИНИЯ МИРА В ЕГО КАРТОЧКЕ (precursor_saga.js)
+
+   Своего экрана у хроники больше нет. Ни новеллы (кадр во весь экран, реплика
+   по клику), ни «пульта» — оба были ОТДЕЛЬНЫМ входом в мир, а вход в мир один:
+   его карточка. Здесь только стили разделов внутри неё.
+
+   Поэтому и правило простое: ничего fixed, ничего во весь экран, никаких своих
+   кнопок. Решения линии носят те же классы, что дар и урок (pc-act), и должны
+   выглядеть с ними одинаково — это один список того, что игрок может сделать
+   с этим народом. Эмодзи нет.
+   ════════════════════════════════════════════════════════════ */
+
+/* ── донесение ──────────────────────────────────────────────
+   Узел приходит ЦЕЛИКОМ, абзацами: между двумя решениями не осталось ни одного
+   нажатия «ради следующей фразы». Ширина строки ограничена — читают глазами. */
+.pcs-disp {
+  margin: 4px 0 12px; padding: 14px 16px;
+  border: 1px solid var(--color-border-medium); border-radius: 4px;
+  background: rgba(255, 255, 255, .02);
+}
+.pcs-disp p {
+  margin: 0 0 .8em; max-width: 68ch;
+  font-size: var(--text-sm); line-height: 1.7; color: var(--color-text-primary);
+}
+.pcs-disp p:last-child { margin-bottom: 0; }
+
+/* Кадр места — полосой над текстом. Он подписывает место, а не занимает экран:
+   файла нет — полосы нет, и это честнее натянутой заглушки. */
+.pcs-strip {
+  height: 96px; margin: -14px -16px 12px;
+  background-size: cover; background-position: center;
+  filter: saturate(.72) contrast(1.04) brightness(.62);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+/* Кто говорит. Голос свода — не человек, и подпись у него приглушена; тон
+   различает ПОДПИСЬ, а не цвет текста: цвет в тексте читается как оценка. */
+.pcs-from {
+  margin-bottom: 8px;
+  font-size: var(--text-xs); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--color-accent);
+}
+.pcs-t-narr { color: var(--color-text-faint); }
+.pcs-t-coll { color: hsl(var(--hue-red) var(--sat-red) 62%); }
+
+/* Ваш человек внизу. Про него говорят только делами — ходок, прикипел,
+   сломан, — потому что отчёт пишет он, и врёт в отчётах тоже он. */
+.pcs-envoy {
+  margin: 2px 0 8px; font-size: var(--text-xs); color: var(--color-text-muted);
+}
+.pcs-envoy b { color: var(--color-text-primary); }
+.pcs-envoy i { font-style: normal; color: var(--color-text-faint); }
+
+/* Решение линии = такая же строка, как «Дар с неба»: всё остальное (подложка,
+   тон, кнопка) берётся от .pc-act. Своего вида у него нет намеренно —
+   в карточке это один список решений по народу, а не «сюжет» сбоку. */
+.pcs-act .pc-act-nm i {
+  display: block; margin-top: 2px;
+  font-style: normal; font-size: var(--text-xs); color: var(--color-text-faint);
+}
+
+/* Выдержка и исход — обычные плашки правила (.fc-rule), отличаются только
+   полосой слева: срок и счёт. Ускорить срок нечем, и кнопки для этого нет. */
+.pcs-wait { border-left: 2px solid var(--color-accent); }
+.pcs-end  { border-left: 2px solid hsl(var(--hue-red) var(--sat-red) 55%); }
+
+/* ── чужой след ─────────────────────────────────────────────
+   Что мир записал про пришедших сверху ДО вас. Стоит у летописи: это тоже
+   прошлое, только не ваше. */
+.pcs-past { margin: 6px 0 10px; }
+.pcs-past-r {
+  padding-left: 9px; margin-bottom: 8px;
+  border-left: 1px solid var(--color-border-subtle);
+  font-size: var(--text-xs); line-height: 1.55; color: var(--color-text-muted);
+}
+.pcs-past-r i { display: block; font-style: normal; color: var(--color-text-faint); }
+
+/* ── строка мира в списке ───────────────────────────────────
+   Подсвечен ровно один случай — «ждут решения». Список миров это очередь дел,
+   и в ней должно быть видно, куда идти, не открывая всё подряд. */
+.sn-row.pc-row-ask { border-left: 2px solid var(--color-accent); }
+
+/* ── ЧАША: полоска узлов ────────────────────────────────────
+   По метке на каждый узел мира, где что-то решают. Ни числа, ни подписи, ни
+   тултипа: метка — МЕСТО, а не счётчик. Что с ней сделали, видно по тому, как
+   отзывается местность: у воды огни (ромб), в камне тепло (квадрат), в суши
+   колодцы (круг). Переходов нет: это карта, а не индикатор загрузки. */
+.pcg-marks { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 10px; }
+.pcg-marks i {
+  width: 7px; height: 7px;
+  border: 1px solid var(--color-border-medium); background: transparent;
+}
+.pcg-marks i.flat { background: var(--color-border-medium); }
+.pcg-marks i.up   { background: var(--color-accent); border-color: var(--color-accent); }
+.pcg-marks i.down { background: transparent; border-color: var(--color-text-faint); opacity: .45; }
+.pcg-m-огонь i { transform: rotate(45deg); }
+.pcg-m-вода  i { border-radius: 50%; }
+.pcg-m-тепло i { border-radius: 1px; }
+
+@media (max-width: 760px) {
+  .pcs-disp { padding: 12px 13px; }
+  .pcs-strip { height: 72px; margin: -12px -13px 10px; }
+}

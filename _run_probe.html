@@ -1,0 +1,192 @@
+<!doctype html>
+<!-- Стенд партии (lore/precursor_run.md): экран мира без входа в игру.
+     Сервер подставной, мир — найденный, собранный станом и полками, как у
+     игрока. Файл рабочий, в сборку не входит. -->
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Партия — стенд</title>
+<link rel="stylesheet" href="css/index.css?v=1787000010">
+<style>
+  body { margin:0; background:#0b0e13; color:#dfe6ef; font-family:system-ui,sans-serif; }
+  .bar { padding:12px 14px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+         border-bottom:1px solid rgba(255,255,255,.09); }
+  .bar button { padding:6px 12px; cursor:pointer; }
+  #st { font-size:12px; color:#8e9bad; }
+  #door { max-width:780px; padding:16px 14px 60px; }
+</style></head><body>
+<div class="bar">
+  <button onclick="сброс()">Сброс партии</button>
+  <button onclick="доКонца('ритм')">Доиграть Ритмом</button>
+  <button onclick="pcrОбряд()">Служить обряд</button>
+  <button onclick="ДЕРЖ.gc=90000;PrecursorRunUI.run(ЦИВ);draw()">Опустошить казну</button>
+  <span id="st"></span>
+</div>
+<div id="door"></div>
+
+<script>
+// ── подставной сервер: партия своей кассы не заводит, но хроника ходит ──
+const SAGA = { node:'p0', flags:{}, scale:0, done:false, ending:null };
+let BAG = { 'Жидкая вода':200, 'Реликтовое дерево':200, 'Дейтерий':200,
+            'Ионит':200, 'Изотопы':200, 'Платина':200 };
+function toast(t, k){ console.log('[toast]', k || '', t); }
+// Партия теперь серверная (_precursor_run.sql). Стенд держит ту же строку в
+// памяти и отвечает теми же полями, что и база, — иначе он проверял бы не то,
+// что работает у игрока.
+const ДЕРЖ = { gc: 4200000, rep: -20 };
+let RUN_ROW = null;
+const К = { срок:12, приход:3, потолок:5, предел:100, дрейф:3 };
+const ЦЕНЫ = {
+  'покой':  { att:1, gc:0,     rep:  5, flow: 0, wound:-7, tail:'глухо' },
+  'ритм':   { att:2, gc:60000, rep: -3, flow: 8, wound:-5, tail:'беда'  },
+  'слово':  { att:2, gc:90000, rep:-15, flow:12, wound: 5, tail:'ноет'  },
+};  // 'тёмное' здесь нет: обряд ходит своей дверью (precursor_run_rite)
+function свежая() {
+  return { turn:1, att:К.приход, flow:20, wound:22, ache:0, mark:null, node:null,
+           flags:{}, decided:false, tier:0, spent:0, fined:0, trail:[], ending:null, why:null };
+}
+function срыв(r) { if (!r.ending && r.wound >= К.предел) { r.ending='кризис'; r.why='срыв'; } return r; }
+
+async function ecRpc(fn, p) {
+  p = p || {};
+  if (fn === 'precursor_saga_get') {
+    return { ok:true, now:new Date().toISOString(),
+      me:{ race:'Гуманоиды', ideology:'Ксенофилия', gov:'Республика' },
+      'склад': Object.assign({}, BAG),
+      rows:[{ world:МИР, node:SAGA.node, flags:SAGA.flags, scale:SAGA.scale,
+              done:SAGA.done, ending:SAGA.ending, ready_at:null }] };
+  }
+  if (fn === 'precursor_run_get') {
+    const fresh = !RUN_ROW;
+    return { ok:true, fresh, run: RUN_ROW || свежая(), gc:ДЕРЖ.gc, rep:ДЕРЖ.rep };
+  }
+  if (fn === 'precursor_run_act') {
+    if (!RUN_ROW) RUN_ROW = свежая();
+    const a = ЦЕНЫ[p.p_act];
+    if (!a) return { ok:false, why:'нет такого действия' };
+    if (RUN_ROW.ending) return { ok:false, why:'партия окончена' };
+    if (RUN_ROW.att < a.att) return { ok:false, why:'в этом веке уже некогда' };
+    const цена = a.gc + (a.gc ? 0 : 0) * RUN_ROW.tier;
+    if (цена > ДЕРЖ.gc) return { ok:false, why:'казна не тянет: нужно ' + цена + ' ГС' };
+    ДЕРЖ.gc -= цена;
+    const было = ДЕРЖ.rep;
+    ДЕРЖ.rep = Math.max(-300, Math.min(50, ДЕРЖ.rep + a.rep));
+    let fine = 0;
+    if (было > -100 && ДЕРЖ.rep <= -100) { fine = Math.floor(ДЕРЖ.gc * 0.25); ДЕРЖ.gc -= fine; ДЕРЖ.rep = -50; }
+    RUN_ROW.att -= a.att;
+    RUN_ROW.flow = Math.max(0, Math.min(100, RUN_ROW.flow + a.flow));
+    RUN_ROW.wound = Math.max(0, Math.min(К.предел, RUN_ROW.wound + a.wound));
+    if (a.tail === 'ноет') RUN_ROW.ache++;
+    if (a.tail === 'беда' || a.tail === 'злоба') RUN_ROW.mark = a.tail;
+    RUN_ROW.spent += цена; RUN_ROW.fined += fine;
+    RUN_ROW.trail = RUN_ROW.trail.concat([{ 'век':RUN_ROW.turn, 'что':p.p_act }]);
+    срыв(RUN_ROW);
+    return { ok:true, run:RUN_ROW, gc:ДЕРЖ.gc, rep:ДЕРЖ.rep, fine, cost:цена };
+  }
+  // Обряд: своей кассы нет, всё считает серверный rite. Стенд повторяет его
+  // след — ихор на склад, партия закрыта исходом «обмен».
+  if (fn === 'precursor_run_rite') {
+    if (!RUN_ROW) RUN_ROW = свежая();
+    if (RUN_ROW.ending) return { ok:false, why:'партия окончена' };
+    if (RUN_ROW.att < 1) return { ok:false, why:'в этом веке уже некогда' };
+    const ихор = Math.round((ЦИВ.pop || 0) / 100 * 10) / 10;
+    BAG['Ихор'] = (BAG['Ихор'] || 0) + ихор;
+    ДЕРЖ.rep = Math.max(-300, ДЕРЖ.rep - 80);
+    RUN_ROW.att = Math.max(0, RUN_ROW.att - 1);
+    RUN_ROW.flow = Math.min(100, RUN_ROW.flow + 18);
+    RUN_ROW.wound = К.предел;
+    RUN_ROW.trail = RUN_ROW.trail.concat([{ 'век':RUN_ROW.turn, 'что':'тёмное' }]);
+    RUN_ROW.ending = 'обмен'; RUN_ROW.why = 'обряд';
+    return { ok:true, run:RUN_ROW, gc:ДЕРЖ.gc, rep:ДЕРЖ.rep, ихор,
+             txt:'Мира больше нет. Получено ихора: ' + ихор };
+  }
+  if (fn === 'precursor_run_pick') {
+    if (!RUN_ROW) RUN_ROW = свежая();
+    if (RUN_ROW.ending) return { ok:false, why:'партия окончена' };
+    if (RUN_ROW.decided) return { ok:false, why:'в этом веке уже решено' };
+    const w = Math.max(-2, Math.min(2, +p.p_weight || 0));
+    const att = Math.max(0, Math.min(2, +p.p_att || 0));
+    if (RUN_ROW.att < att) return { ok:false, why:'в этом веке уже некогда' };
+    RUN_ROW.att -= att;
+    RUN_ROW.flow = Math.max(0, Math.min(100, RUN_ROW.flow + w * 6));
+    RUN_ROW.wound = Math.max(0, Math.min(К.предел, RUN_ROW.wound - w * 3));
+    if (p.p_node) RUN_ROW.node = p.p_node;
+    Object.assign(RUN_ROW.flags, p.p_flags || {});
+    RUN_ROW.decided = true;
+    RUN_ROW.trail = RUN_ROW.trail.concat([{ 'век':RUN_ROW.turn, 'что':p.p_name || 'решение' }]);
+    срыв(RUN_ROW);
+    return { ok:true, run:RUN_ROW };
+  }
+  if (fn === 'precursor_run_turn') {
+    if (!RUN_ROW) return { ok:false, why:'партия не начата' };
+    if (RUN_ROW.ending) return { ok:false, why:'партия окончена' };
+    if (!RUN_ROW.decided) return { ok:false, why:'век не решён' };
+    RUN_ROW.wound = Math.min(К.предел, RUN_ROW.wound + К.дрейф + RUN_ROW.ache * 2
+                      + (RUN_ROW.mark === 'беда' ? 3 : 0));
+    RUN_ROW.mark = null;
+    if (RUN_ROW.turn >= К.срок) {
+      const d = RUN_ROW.flow - RUN_ROW.wound;
+      RUN_ROW.ending = d > 15 ? 'держава' : d < -15 ? 'кризис' : 'собой';
+      RUN_ROW.why = 'срок';
+    } else if (RUN_ROW.wound >= К.предел) { RUN_ROW.ending='кризис'; RUN_ROW.why='срыв'; }
+    else {
+      RUN_ROW.turn++;
+      RUN_ROW.att = Math.min(К.потолок, RUN_ROW.att + К.приход);
+      RUN_ROW.decided = false;
+    }
+    return { ok:true, run:RUN_ROW };
+  }
+  if (fn === 'precursor_saga_step') {
+    SAGA.node = p.p_node; Object.assign(SAGA.flags, p.p_flags || {});
+    return { ok:true, cost:{ok:true}, scale:SAGA.scale };
+  }
+  return { ok:true };
+}
+
+function draw() {
+  if (!window.PrecursorRunUI || typeof ЦИВ === 'undefined') return;
+  document.getElementById('door').innerHTML = PrecursorRunUI.экран(ЦИВ);
+  const R = PrecursorRunUI.run(ЦИВ);
+  document.getElementById('st').textContent =
+    `век ${R.ход}/${R.срок} · внимание ${R.внимание} · русло ${R.русло} · надлом ${R.надлом}`
+    + ` · ${R.решено ? 'решено' : 'ждёт решения'}${R.конец ? ' · КОНЕЦ: ' + R.конец : ''}`;
+}
+function сброс() { location.reload(); }
+// Доиграть до конца одной рукой — чтобы увидеть экран исхода, а не только первый век.
+async function доКонца(id) {
+  for (let i = 0; i < 60; i++) {
+    if (PrecursorRunUI.run(ЦИВ).конец) break;
+    await pcrСтупень(id);
+    // Решение века берём настоящее (первый вариант сцены), а не «молча»:
+    // иначе курсор хроники стоит на месте и стенд врёт про повтор сцены.
+    if (!PrecursorRunUI.run(ЦИВ).решено) await pcrРешить(0);
+    if (!PrecursorRunUI.run(ЦИВ).решено) await pcrРешить(-1);
+    await pcrВек();
+  }
+  draw();
+}
+// Экран зовёт перерисовку карточки мира — на стенде её место занимает draw().
+window.heroVNTamaRefresh = draw;
+window.heroVNTamaBack = () => console.log('[назад к списку]');
+</script>
+<script src="precursor_art.js?v=1787000010"></script>
+<script src="precursor_saga.js?v=1787000010"></script>
+<script src="saga_weave.js?v=1787000010"></script>
+<script src="saga_kit.js?v=1787000010"></script>
+<script src="saga_layers.js?v=1787000010"></script>
+<script src="saga_layers2.js?v=1787000010"></script>
+<script src="saga_worlds.js?v=1787000010"></script>
+<script src="precursor_run.js?v=1787000010"></script>
+<script src="precursor_run_ui.js?v=1787000010"></script>
+<script>
+  const ЦИВ = { system_id:'probe', pid:1, self_name:'Придонные', planet_name:'Мелководье',
+                system_name:'Проба', races:['Акватики (Водные)'], env:'океан, архипелаг',
+                phase:8, ideology:'', gov:'', state:'умолчание', pop:120000,
+                anchor:{ wounds:[{ state:'вскрытый', src:'святилище' }] } };
+  const МИР = 'civ:probe:1';
+  // Экран спрашивает открытый мир у карточки — на стенде карточки нет.
+  window._pcOpenCiv = { s:'probe', p:1 };
+  window._pcState = { civs:[ЦИВ] };   // казна и досье теперь приходят дверью партии
+  SagaWorlds.bind([ЦИВ], { race:'Гуманоиды', ideology:'Ксенофилия', gov:'Республика' });
+  PrecursorSaga.load().then(draw);
+</script>
+</body></html>

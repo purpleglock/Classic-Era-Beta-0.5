@@ -160,6 +160,76 @@
         "8199"
       ],
       "port": 8199
+    },
+    {
+      "name": "precursor-sim",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8211"
+      ],
+      "port": 8211
+    },
+    {
+      "name": "saga-worlds",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8215"
+      ],
+      "port": 8215
+    },
+    {
+      "name": "saga-nowait",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8219"
+      ],
+      "port": 8219
+    },
+    {
+      "name": "saga-kit",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8223"
+      ],
+      "port": 8223
+    },
+    {
+      "name": "hull-spr",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8233"
+      ],
+      "port": 8233
+    },
+    {
+      "name": "saga-pult",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8229"
+      ],
+      "port": 8229
+    },
+    {
+      "name": "saga-bench",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8241"
+      ],
+      "port": 8241
     }
   ]
 }

@@ -42,7 +42,41 @@ const ALLOWED_DIRS = {
   vnmenu:    'assets/vn/menu',      // фоны экранов новеллы (<ключ>.webp: fight, sinli, rating…)
   perks:     'assets/perks',        // иконки перков оперативников (<ключ>.webp: ghost, saboteur…)
   artifacts: 'assets/artifacts',    // арты артефактов агентуры (<ключ>.webp; каталог spy_artifact_kinds)
+  pcworlds:  'assets/precursor/worlds', // сцены хроник сеткой раса × эпоха (?sub=<раса>, имя E8_1.webp)
+  pcsaga:    'assets/precursor/saga',   // арт одной хроники (?sub=<мир>: who_<кто>, bg_<узел>, door)
 };
+
+// ── Сетка «раса × эпоха»: та же раскладка, что у батника ──────────────────
+// Заливка сцен отличается от прочих артов двумя вещами: файл ложится в
+// ПОДПАПКУ расы и после каждой записи надо переписать manifest.json — клиент
+// читает клетки только из него. Логика взята из tools/precursor_arts.js,
+// чтобы админка и перетаскивание картинок на .bat не разъехались.
+const PCW = require('./precursor_arts.js');
+
+// ?sub= — только известная раса, иначе запись ушла бы в произвольную папку.
+function pcwSub(sub) {
+  const s = String(sub || '').toLowerCase();
+  return PCW.RACES[s] ? s : null;
+}
+// Мир хроники сервер не проверяет по списку: реестр миров живёт в клиенте
+// (saga_*.js), и знать его здесь неоткуда. Проверяем только форму имени —
+// этого достаточно, чтобы запись не ушла мимо папки.
+const pcSagaSub = s => /^[a-z0-9-]{2,24}$/i.test(String(s || '')) ? String(s).toLowerCase() : null;
+const pcSagaName = (name, ext) => {
+  const m = String(name || '').match(/^((?:who|bg)_[a-z0-9_-]{1,40}|door)(?:\.(webp|png|jpe?g))?$/i);
+  return m ? `${m[1].toLowerCase()}.${(m[2] || ext || 'webp').toLowerCase()}` : null;
+};
+
+// Имя варианта: E8.webp (номер подберём) или E8_2.webp (номер задан).
+function pcwName(name, race, ext) {
+  const m = String(name || '').match(/^(E\d+)(?:_(\d+))?(?:\.(webp|png|jpe?g))?$/i);
+  if (!m) return null;
+  const epoch = m[1].toUpperCase();
+  if (!PCW.EPOCHS[epoch]) return null;
+  const e = (m[3] || ext || 'webp').toLowerCase();
+  const num = m[2] ? parseInt(m[2], 10) : PCW.freeNum(race, epoch);
+  return `${epoch}_${num}.${e}`;
+}
 // Возвращает {rel, abs} для папки назначения по query ?dir= (или дефолт-портреты).
 // Незнакомый ключ раньше молча падал в портреты: старый (не перезапущенный)
 // сервер складывал туда иконки примитивов, и это выглядело как «арт не грузится».
@@ -109,17 +143,52 @@ const server = http.createServer((req, res) => {
       const dirKey = url.searchParams.get('dir');
       const d = destDir(dirKey);
       if (!d) return badDir(res, dirKey);
-      const { rel: relDir, abs: absDir } = d;
+      let { rel: relDir, abs: absDir } = d;
       // ?name= — фиксированное имя (для заливки классов планет, перезаписью);
       //          иначе случайное (портреты — пул, имена не должны конфликтовать).
       const fixed = safeName(url.searchParams.get('name'));
-      const name = fixed ? (/\.[a-z0-9]+$/i.test(fixed) ? fixed : `${fixed}.${ext}`)
-                         : `${Date.now()}-${crypto.randomBytes(3).toString('hex')}.${ext}`;
+      let name = fixed ? (/\.[a-z0-9]+$/i.test(fixed) ? fixed : `${fixed}.${ext}`)
+                       : `${Date.now()}-${crypto.randomBytes(3).toString('hex')}.${ext}`;
+
+      // Сцены хроник: подпапка расы + имя по сетке эпох.
+      if (dirKey === 'pcworlds') {
+        const race = pcwSub(url.searchParams.get('sub'));
+        if (!race) return json(res, 400, { ok: false, error: `неизвестная раса «${url.searchParams.get('sub')}»` });
+        absDir = path.join(absDir, race);
+        relDir = `${relDir}/${race}`;
+        fs.mkdirSync(absDir, { recursive: true });
+        const nm = pcwName(url.searchParams.get('name'), race, ext);
+        if (!nm) return json(res, 400, { ok: false, error: 'имя должно быть вида E8.webp или E8_2.webp' });
+        name = nm;
+      }
+
+      // Арт одной хроники: подпапка мира, имя who_<кто> / bg_<узел> / door.
+      // Вариантов тут не бывает — заливка перезаписывает, поэтому чистим
+      // однофамильцев с другим расширением, иначе манифест возьмёт старый.
+      if (dirKey === 'pcsaga') {
+        const world = pcSagaSub(url.searchParams.get('sub'));
+        if (!world) return json(res, 400, { ok: false, error: 'не назван мир хроники' });
+        const nm = pcSagaName(url.searchParams.get('name'), ext);
+        if (!nm) return json(res, 400, { ok: false, error: 'имя должно быть who_<кто>, bg_<узел> или door' });
+        absDir = path.join(absDir, world);
+        relDir = `${relDir}/${world}`;
+        fs.mkdirSync(absDir, { recursive: true });
+        const stem = nm.replace(/\.[a-z0-9]+$/i, '');
+        for (const e of ['.webp', '.png', '.jpg', '.jpeg']) {
+          const old = path.join(absDir, stem + e);
+          if (old !== path.join(absDir, nm) && fs.existsSync(old)) { try { fs.unlinkSync(old); } catch (err) {} }
+        }
+        name = nm;
+      }
+
       const dest = path.join(absDir, name);
       fs.writeFile(dest, Buffer.concat(chunks), (err) => {
         if (err) { console.error('[upload] write', err); return json(res, 500, { ok: false, error: String(err.message || err) }); }
         const rel = `${relDir}/${name}`;
         console.log(`[upload] +${(size / 1024).toFixed(0)} КБ → ${rel}`);
+        // Клиент читает клетки только из манифеста: файл без него невидим.
+        if (dirKey === 'pcworlds') { try { PCW.manifest(); } catch (e) { console.error('[upload] манифест', e); } }
+        if (dirKey === 'pcsaga')   { try { PCW.sagaManifest(); } catch (e) { console.error('[upload] манифест хроник', e); } }
         json(res, 200, { ok: true, url: rel, name });
       });
     });
@@ -134,10 +203,22 @@ const server = http.createServer((req, res) => {
     const dirKey = url.searchParams.get('dir');
     const d = destDir(dirKey);
     if (!d) return badDir(res, dirKey);
-    const { rel: relDir, abs: absDir } = d;
+    let { rel: relDir, abs: absDir } = d;
+    if (dirKey === 'pcworlds') {
+      const race = pcwSub(url.searchParams.get('sub'));
+      if (!race) return json(res, 400, { ok: false, error: 'неизвестная раса' });
+      absDir = path.join(absDir, race); relDir = `${relDir}/${race}`;
+    }
+    if (dirKey === 'pcsaga') {
+      const world = pcSagaSub(url.searchParams.get('sub'));
+      if (!world) return json(res, 400, { ok: false, error: 'не назван мир хроники' });
+      absDir = path.join(absDir, world); relDir = `${relDir}/${world}`;
+    }
     fs.unlink(path.join(absDir, name), (err) => {
       if (err && err.code !== 'ENOENT') { console.error('[delete]', err); return json(res, 500, { ok: false, error: String(err.message || err) }); }
       console.log(`[delete] ${relDir}/${name}`);
+      if (dirKey === 'pcworlds') { try { PCW.manifest(); } catch (e) { console.error('[delete] манифест', e); } }
+      if (dirKey === 'pcsaga')   { try { PCW.sagaManifest(); } catch (e) { console.error('[delete] манифест хроник', e); } }
       json(res, 200, { ok: true });
     });
     return;

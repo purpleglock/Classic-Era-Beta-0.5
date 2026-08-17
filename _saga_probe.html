@@ -1,0 +1,113 @@
+<!doctype html>
+<!-- Проба сцены хроники без входа в игру: ecRpc подменён, срок выдержки
+     подставляется вручную. Файл рабочий, в сборку не входит.
+
+     На стенде стоит НАЙДЕННЫЙ мир, собранный станом и полками (как у игрока),
+     а не только две рукописи: цена, склад и чаша живут именно там. Склад
+     подставной, и его можно опустошить кнопкой — тогда варианты, на которые
+     нечем платить, должны исчезнуть из кадра. -->
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Хроника — проба</title>
+<link rel="stylesheet" href="css/index.css?v=1786893788">
+<style>
+  body { margin:0; background:#0b0e13; color:#dfe6ef; font-family:system-ui,sans-serif; }
+  .bar { padding:14px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .bar button { padding:6px 12px; cursor:pointer; }
+  #door { max-width:640px; padding:0 14px; }
+  #st { font-size:12px; color:#8e9bad; }
+</style></head><body>
+<div class="bar">
+  <button onclick="SAGA.node='p0';SAGA.flags={};SAGA.scale=0;SAGA.done=false;SAGA.ending=null;SAGA.wait=0;draw()">Сброс</button>
+  <button onclick="SAGA.wait=0;draw()">Срок вышел</button>
+  <button onclick="SAGA.wait=50;draw()">Срок 50 ч</button>
+  <button onclick="BAG={};PrecursorSaga.load().then(draw)">Опустошить склад</button>
+  <button onclick="BAG=полный();PrecursorSaga.load().then(draw)">Наполнить склад</button>
+  <span id="st"></span>
+</div>
+<div id="door"></div>
+
+<script>
+// ── подставной сервер ────────────────────────────────────────
+const SAGA = { node:'p0', flags:{}, scale:0, done:false, ending:null, wait:0 };
+const полный = () => ({ 'Жидкая вода':200, 'Реликтовое дерево':200, 'Дейтерий':200,
+                        'Ионит':200, 'Изотопы':200, 'Платина':200 });
+let BAG = полный();
+function toast(t){ console.log('[toast]', t); }
+
+// Тот же порядок, что на сервере: срок → цена → след. Ошибиться здесь значит
+// проверить не то, что работает у игрока.
+function цена(c) {
+  if (!c) return { ok:true };
+  const г = c['груз'];
+  if (г && г.id && г.n) {
+    if ((BAG[г.id] || 0) < г.n) {
+      return { ok:false, err: г.id + ': нужно ' + г.n + ', на складе ' + (BAG[г.id] || 0) };
+    }
+    BAG[г.id] -= г.n;
+    return { ok:true, 'груз': { id: г.id, n: г.n }, 'срок': c['срок'] || 0 };
+  }
+  return { ok:true, 'срок': c['срок'] || 0 };
+}
+
+async function ecRpc(fn, p) {
+  p = p || {};
+  if (fn === 'precursor_saga_get') {
+    return { ok:true, now:new Date().toISOString(),
+      me:{ race:'Гуманоиды', ideology:'Ксенофилия', gov:'Республика' },
+      // Копией: настоящий сервер отдаёт JSON, и движок, вычитая из своей
+      // записи склада, не должен лезть в чужую. Отдай ссылкой — списание
+      // пройдёт дважды, и стенд соврёт про то, чего в игре не бывает.
+      'склад': Object.assign({}, BAG),
+      rows:[{ world:МИР, node:SAGA.node, flags:SAGA.flags, scale:SAGA.scale,
+        done:SAGA.done, ending:SAGA.ending,
+        ready_at:SAGA.wait ? new Date(Date.now()+SAGA.wait*3600e3).toISOString() : null }] };
+  }
+  if (fn === 'precursor_saga_step') {
+    if (SAGA.wait) return { ok:false, wait:true,
+      ready_at:new Date(Date.now()+SAGA.wait*3600e3).toISOString() };
+    const c = цена(p.p_cost);
+    if (!c.ok) return { ok:false, err:c.err, cost:c };
+    SAGA.scale += Math.max(-3, Math.min(3, +p.p_weight || 0));
+    SAGA.node = p.p_node;
+    Object.assign(SAGA.flags, p.p_flags || {});
+    if (p.p_ending) { SAGA.done = true; SAGA.ending = p.p_ending;
+      return { ok:true, cost:c, scale:SAGA.scale, pay:{ ichor:45, arrears:80 } }; }
+    return { ok:true, cost:c, scale:SAGA.scale };
+  }
+  if (fn === 'precursor_saga_reset') { console.log('[reset]', p.p_world); SAGA.node='p0'; SAGA.flags={}; SAGA.scale=0; SAGA.done=false; return {ok:true}; }
+  return { ok:true };
+}
+function draw() {
+  if (!window.PrecursorSaga || typeof ЦИВ === 'undefined') return;
+  // Своего экрана у линии нет: стенд рисует ровно те куски, что уходят в
+  // карточку мира (precursor_ui.js).
+  document.getElementById('door').innerHTML =
+    PrecursorSaga.block(ЦИВ) + PrecursorSaga.past(ЦИВ)
+    + '<div style="margin-top:10px;color:#8e9bad;font-size:12px">в списке: ' + PrecursorSaga.mark(ЦИВ) + '</div>';
+  document.getElementById('st').textContent =
+    'узел ' + SAGA.node + ' · чаша ' + SAGA.scale
+    + ' · дейтерий ' + (BAG['Дейтерий'] || 0)
+    + ' · флаги ' + JSON.stringify(SAGA.flags);
+}
+</script>
+<script src="precursor_art.js?v=1787000001"></script>
+<script src="precursor_saga.js?v=1787000001"></script>
+<script src="saga_weave.js?v=1787000001"></script>
+<script src="saga_kit.js?v=1787000001"></script>
+<script src="saga_layers.js?v=1787000001"></script>
+<script src="saga_layers2.js?v=1787000001"></script>
+<script src="saga_worlds.js?v=1787000001"></script>
+<script>
+  // Найденный мир: то же, что отдаёт precursor_get на карте.
+  const ЦИВ = { system_id:'probe', pid:1, self_name:'Придонные', races:['Акватики (Водные)'],
+                env:'океан, архипелаг', phase:8, ideology:'', gov:'', state:'умолчание', pop:120000 };
+  const МИР = 'civ:probe:1';
+  SagaWorlds.bind([ЦИВ], { race:'Гуманоиды', ideology:'Ксенофилия', gov:'Республика' });
+  PrecursorSaga.load().then(draw);
+  // Решение линии зовёт перерисовку КАРТОЧКИ мира — на стенде карточки нет,
+  // и её место занимает draw().
+  const _old = window.heroVNTamaRefresh;
+  window.heroVNTamaRefresh = function(){ draw(); if (_old) _old(); };
+</script>
+</body></html>

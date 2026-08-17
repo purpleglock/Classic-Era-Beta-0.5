@@ -488,10 +488,15 @@ function bbIsStaff() {
 // Сторона, которой сейчас ходить, — это боты? (арена Бойцовского клуба:
 // fid 'bot' на одной из сторон дуэли). Тогда ход легиона может запустить
 // ЛЮБОЙ, кто смотрит доску, — и боец, и трибуна: у ботов нет своей сессии.
-const BB_BOT_FID = 'bot';
+// ⚠ Машинных сторон ДВЕ: боты клуба ('bot') и Железный Легион ('legion'). У обеих
+// нет своей сессии — ход за них запускает тот, кто смотрит доску. Раньше здесь
+// был один зашитый 'bot' И проверка kind==='duel', поэтому бой с ватагой вставал
+// намертво: игрок отходил, а пираты не ходили никогда.
+const BB_MACHINE_FIDS = ['bot', 'legion'];
 function bbClubBotTurn(s) {
-  if (!s || s.status !== 'active' || s.kind !== 'duel') return false;
-  return (s.side_to_move === 'attacker' ? s.attacker : s.defender) === BB_BOT_FID;
+  if (!s || s.status !== 'active') return false;
+  if (s.kind !== 'duel' && (s.attacker !== 'legion' && s.defender !== 'legion')) return false;
+  return BB_MACHINE_FIDS.includes(s.side_to_move === 'attacker' ? s.attacker : s.defender);
 }
 async function bbMaybeBotTurn() {
   const s = BB.st;
@@ -513,6 +518,14 @@ async function bbMaybeBotTurn() {
   } catch (e) {
     BB.botRunning = false;
     if (bbGone(e)) { bbShowGone(); return; }
+    // ⚠ Тяжёлый ход ИИ не всегда влезает в 8 c, отведённые запросу из браузера
+    // (statement_timeout роли authenticated). Это не поломка: ход досчитает
+    // серверный крон legion_ai_tick, раз в минуту. Сырой 57014 игроку не показываем.
+    if (e && /statement timeout|57014/i.test(e.message || '')) {
+      toast('Противник обдумывает ход — доска обновится сама', 'info');
+      setTimeout(() => { if (BB.id) bbReload(); }, 15000);
+      return;
+    }
     // «сейчас ход игрока» и т.п. — тихо игнорируем, доска просто останется как есть
     if (e && e.message && !/ход игрока|не бой с ботами/i.test(e.message))
       toast(e.message, 'err');
@@ -4516,16 +4529,22 @@ function hsThreatsBlock(list) {
   const secs = [...new Set(list.filter(t => t.grade === 'ghost').map(t => t.sector).filter(Boolean))];
 
   const cards = known.map(t => {
-    const res = t.grade === 'resolved';
-    return `<div class="hs-card hs-card-threat${t.mine ? ' hs-card-hot' : ''}">
+    // ⚠ ВСТАВШАЯ ватага (stood) — не «сигнатура на подходе», а объект на карте:
+    // она уже висит над системой. Раньше в этот момент карточка вообще пропадала
+    // из списка (RPC отдавала только летящие) — самый острый момент угрозы
+    // исчезал с экрана ровно тогда, когда наступал.
+    const res = t.grade === 'resolved' || t.stood;
+    return `<div class="hs-card hs-card-threat${t.mine || t.stood ? ' hs-card-hot' : ''}">
         <div class="hs-card-top">
-          <span class="hs-kind">☠ ${res ? esc(HS_LEGION_KIND[t.kind] || 'налёт') : 'Неопознанная сигнатура'}</span>
-          <span class="hs-st${t.mine ? ' hs-st-hot' : ''}">${hsEta(t.eta)}</span>
+          <span class="hs-kind">☠ ${t.stood ? 'Ватага в системе'
+            : (res ? esc(HS_LEGION_KIND[t.kind] || 'налёт') : 'Неопознанная сигнатура')}</span>
+          <span class="hs-st${t.mine || t.stood ? ' hs-st-hot' : ''}">${t.stood ? 'стоит' : hsEta(t.eta)}</span>
         </div>
-        <div class="hs-card-t">${esc(t.sys || 'направление неизвестно')}</div>
+        <div class="hs-card-t">${esc(t.sys_name || t.sys || 'направление неизвестно')}</div>
         <div class="hs-card-foe">Железный Легион${t.mine ? ' · <b>цель — вы</b>' : ''}</div>
         <div class="hs-card-fl">${res
           ? 'Оценка сил: ' + (+t.ships || 1) + ' кор.'
+            + (t.stood ? ' · сама не уйдёт — выбивать флотом' : '')
           : 'Сила: ' + esc(t.band || '?') + ' · замысел не вскрыт'}</div>
       </div>`;
   }).join('');

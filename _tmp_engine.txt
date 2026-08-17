@@ -1,0 +1,359 @@
+// ════════════════════════════════════════════════════════════
+// ДОЗВЁЗДНЫЕ · ХРОНИКА КАЙЛАТА — авторская новелла-кампания (этап 10)
+//
+// Этапы 1–9 (lore/precursor_memory.md §20) собрали модель: надломы, русло,
+// лестницу, ихор, недоимку, Сбор. Модель работала — но игрок видел приборы
+// и ряд подписанных кнопок. Здесь та же модель рассказана как история: один
+// авторский мир, названные люди, пять глав и финал, где Сбор приходит по
+// счёту, набранному самим игроком.
+//
+// Устройство: узлы (NODES) — сцена = фон + говорящий + реплики + развилка.
+// Ветвление читает флаги, флаги ставит выбор игрока. Сервер (precursor_saga_*)
+// хранит только «где я и что выбрал»; текст и правила — здесь, у всех одни.
+//
+// ⚠ ГОЛОС (lore/precursor_memory.md §0): ни одного слова из клиники. Летописец
+// и историк, а не наблюдатель за человеком: смута, застой, зарок, вира,
+// умолчание, неоплаченный счёт. Проверка каждой строки — «так мог бы написать
+// летописец, никогда не слышавший ни слова про психику?»
+//
+// Эмодзи запрещены: значки — контурный SVG на currentColor.
+// ════════════════════════════════════════════════════════════
+(function () {
+  'use strict';
+
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+
+
+  // ══════════════════════════════════════════════════════════
+  // СОСТОЯНИЕ
+  // ══════════════════════════════════════════════════════════
+  const S = {
+    node: null, flags: {}, line: 0, typing: false, open: false,
+    loaded: false, done: false, ending: null, chapterShown: {},
+    readyAt: null, skew: 0,     // skew — поправка на часы игрока (сервер прав)
+  };
+
+  // «через 2 дн. 4 ч» — срок называем словами, а не отсчётом до секунды:
+  // это выдержка в истории, а не таймер в мобильной игре.
+  function untilTxt(ms) {
+    if (ms <= 0) return '';
+    const h = Math.floor(ms / 3600000), d = Math.floor(h / 24);
+    if (d >= 1) return `${d} дн. ${h - d * 24} ч`;
+    if (h >= 1) return `${h} ч ${Math.floor((ms - h * 3600000) / 60000)} мин`;
+    return `${Math.max(1, Math.floor(ms / 60000))} мин`;
+  }
+  const untilMs = () => S.readyAt ? S.readyAt - (Date.now() + S.skew) : 0;
+
+  const nodeOf = id => NODES[id] || null;
+  // Переход может зависеть от всей истории, а не от последнего клика: финалы
+  // расходятся по тому, как игрок вёл себя пять глав, а не по тому, какую
+  // кнопку он нажал в последней сцене.
+  const goOf = (n, f) => typeof n.go === 'function' ? n.go(f || S.flags) : n.go;
+  // Реплика может быть функцией от флагов: одна и та же сцена помнит, что
+  // игрок делал в третьей главе. Это и есть «последствие», а не строка в логе.
+  const lineText = (l, f) => typeof l === 'function' ? String(l(f) || '') : String(l || '');
+
+  function visibleLines(n) {
+    return (n.t || []).map(l => lineText(l, S.flags)).filter(Boolean);
+  }
+  function visibleAsks(n) {
+    return (n.ask || []).filter(a => !a.if || a.if(S.flags));
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // СЕРВЕР
+  // ══════════════════════════════════════════════════════════
+  async function load() {
+    if (typeof ecRpc !== 'function') return;
+    try {
+      const r = await ecRpc('precursor_saga_get', {});
+      if (r && r.ok) {
+        S.node = r.node || 'p0';
+        S.flags = r.flags || {};
+        S.done = !!r.done;
+        S.ending = r.ending || null;
+        S.readyAt = r.ready_at ? Date.parse(r.ready_at) : null;
+        // Часы игрока могут врать в любую сторону — срок считаем от серверных.
+        if (r.now) S.skew = Date.parse(r.now) - Date.now();
+      }
+    } catch (e) { /* хроника не должна ронять вкладку: откроется с начала */ }
+    S.loaded = true;
+  }
+
+  // Шаг спрашивает сервер ПЕРВЫМ и только потом двигает сцену: срок выдержки
+  // знает он, и опережать его картинкой значит показать игроку главу, которой
+  // у него ещё нет.
+  async function step(to, set, ending) {
+    const apply = () => {
+      S.node = to; S.line = 0; S.readyAt = null; S._tail = null;
+      if (set) Object.keys(set).forEach(k => { S.flags[k] = set[k]; });
+      if (ending) { S.done = true; S.ending = ending; }
+    };
+    if (typeof ecRpc !== 'function') { apply(); return { ok: true }; }
+    let r = null;
+    try {
+      r = await ecRpc('precursor_saga_step', {
+        p_node: to, p_flags: set || {}, p_ending: ending || null,
+      });
+    } catch (e) { apply(); return { ok: true, offline: true }; }
+    if (r && r.ok === false && r.wait) {
+      S.readyAt = r.ready_at ? Date.parse(r.ready_at) : null;
+      return { ok: false, wait: true };
+    }
+    if (r && r.ok === false) return { ok: false, err: r.err };
+    if (r && r.pay) S.pay = r.pay;      // чем исход отозвался на складе и в реестре
+    apply();
+    // Куда пришли — там может стоять своя выдержка. Узнаём её сразу, чтобы
+    // «вернуться через…» было видно и на двери, и в самой сцене.
+    const n = nodeOf(to);
+    if (n && n.wait) { try { await load(); } catch (e) {} }
+    return { ok: true };
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // ОТРИСОВКА
+  // ══════════════════════════════════════════════════════════
+  function chapterCard(n) {
+    return `<div class="pcg-chapter" id="pcg-chapter"><span>${esc(n.ch)}</span></div>`;
+  }
+
+  function paint() {
+    const host = document.getElementById('pcg-stage');
+    if (!host) return;
+    const n = nodeOf(S.node);
+    if (!n) { close(); return; }
+
+    const lines = visibleLines(n);
+    const who = WHO[n.who] || WHO.obs;
+    const last = S.line >= lines.length - 1;
+    const asks = visibleAsks(n);
+    const showAsk = last && !S.typing && asks.length;
+    const showGo = last && !S.typing && !asks.length && n.go;
+    const showEnd = last && !S.typing && !asks.length && !n.go;
+
+    // Арт берётся сеткой «раса × эпоха» (precursor_art.js). Кайлат — гуманоиды,
+    // а эпоха по ходу хроники меняется: паруса → пар → порог.
+    // Ставим фон прямо на элемент, а НЕ через css-переменную: url() внутри
+    // переменной резолвится относительно файла стилей (css/), и относительный
+    // путь превращается в css/assets/… — 404 на каждой сцене.
+    const bg = window.PcArt ? PcArt.pick(RACE, n.ep || 'E8', S.node) : null;
+
+    const askHtml = showAsk && !(S.readyAt && untilMs() > 0) ? `<div class="pcg-asks">${asks.map((a, i) =>
+      `<button class="pcg-ask" type="button" onclick="pcgPick(${i})">
+         <i>${i + 1}</i><span>${esc(a.t)}</span>
+       </button>`).join('')}</div>` : '';
+
+    // Чем исход отозвался в игре. Стоит ПОСЛЕ последней строки и сказано
+    // счётом, а не похвалой: хроника про неоплаченные счета и кончается счётом.
+    const pay = showEnd && S.pay && (S.pay.ichor || S.pay.arrears) ? `<div class="pcg-pay">
+      ${S.pay.ichor ? `<span>Ихор <b>${S.pay.ichor > 0 ? '+' : ''}${
+        (+S.pay.ichor).toFixed(1)}</b></span>` : ''}
+      ${S.pay.arrears ? `<span>Недоимка <b>−${(+S.pay.arrears).toFixed(1)}</b></span>` : ''}
+    </div>` : '';
+
+    const endHtml = showEnd ? `${pay}<div class="pcg-asks">
+      <button class="pcg-ask pcg-ask-end" type="button" onclick="pcgClose()">
+        <span>Закрыть хронику</span></button></div>` : '';
+
+    // Выдержка: срок не вышел — дальше не идём, и это сказано словами.
+    // Торопить нечем и незачем: у державы своё время (§7.2).
+    //
+    // Считаем по ОТВЕТУ СЕРВЕРА (S.readyAt), а не по разметке узла: сроки живут
+    // в таблице, и если там появится выдержка на узле, который здесь не помечен,
+    // игрок должен увидеть её причину, а не молчаливое «ничего не произошло».
+    const left = last && !S.typing ? untilMs() : 0;
+    const waitHtml = left > 0 ? `<div class="pcg-wait">
+      <div class="pcg-wait-t">Здесь хроника ждёт срока</div>
+      <div class="pcg-wait-n">Вернуться через ${esc(untilTxt(left))}</div>
+      <div class="pcg-wait-s">Кайлат не отвечает раньше своего дня. Закройте — глава дождётся вас.</div>
+    </div>` : '';
+
+    host.innerHTML = `
+      <div class="pcg-scene" id="pcg-scene"></div>
+      ${n.ch && !S.chapterShown[S.node] ? chapterCard(n) : ''}
+      <div class="pcg-box" id="pcg-box" ${showAsk || showEnd || left > 0 ? '' : 'onclick="pcgNext()"'}>
+        ${who.name ? `<div class="pcg-name pcg-t-${who.tone}">${esc(who.name)}</div>` : ''}
+        <div class="pcg-text" id="pcg-text"></div>
+        ${askHtml}${endHtml}${waitHtml}
+        ${!waitHtml && (showGo || (!showAsk && !showEnd)) ? `<div class="pcg-more" id="pcg-more"></div>` : ''}
+      </div>
+      <div class="pcg-bar">
+        <button class="pcg-btn" type="button" onclick="pcgBack()" ${S.line ? '' : 'disabled'}>Назад</button>
+        <span class="pcg-dots">${lines.map((_, i) =>
+          `<i class="${i <= S.line ? 'on' : ''}"></i>`).join('')}</span>
+        <button class="pcg-btn" type="button" onclick="pcgLeave()">Выйти</button>
+      </div>`;
+
+    const sc = document.getElementById('pcg-scene');
+    if (sc) {
+      // Арта на эту клетку ещё не залили — показываем ровный тон, а не растянутый
+      // значок: подделка под кадр хуже честной пустоты.
+      sc.style.backgroundImage = bg ? `url("${bg}")` : '';
+      sc.classList.toggle('bare', !bg);
+    }
+
+    if (n.ch) S.chapterShown[S.node] = true;
+    type(lines[S.line] || '');
+  }
+
+  // Печать по буквам. Клик в любом месте окна — дописать сразу: ждать текст
+  // должен тот, кто хочет, а не тот, кто уже читал.
+  let _typer = null;
+  function type(txt) {
+    const el = document.getElementById('pcg-text');
+    if (!el) return;
+    clearInterval(_typer);
+    const full = esc(txt);
+    // Мгновенно: либо игрок дописал реплику кликом, либо это перечитывание
+    // назад — уже прочитанное во второй раз печатать по буквам издевательство.
+    if (S._fast || S._once) { S._once = false; el.innerHTML = full; S.typing = false; done(); return; }
+    S.typing = true;
+    let i = 0;
+    el.innerHTML = '';
+    _typer = setInterval(() => {
+      i += 2;
+      el.innerHTML = full.slice(0, i);
+      if (i >= full.length) { clearInterval(_typer); el.innerHTML = full; S.typing = false; done(); }
+    }, 16);
+    // Дописали последнюю реплику — надо дорисовать развилку, а развилка
+    // рисуется в paint(), который снова зовёт печать. Без засечки это кольцо:
+    // при мгновенной печати оно замыкается синхронно и кладёт стек.
+    function done() {
+      const more = document.getElementById('pcg-more');
+      const n = nodeOf(S.node);
+      const lines = visibleLines(n);
+      if (more && S.line < lines.length - 1) { more.classList.add('on'); return; }
+      if (S.line < lines.length - 1) return;
+      const mark = S.node + ':' + S.line;
+      if (S._tail === mark) return;                  // развилка уже на месте
+      S._tail = mark;
+      paint();
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // УПРАВЛЕНИЕ
+  // ══════════════════════════════════════════════════════════
+  window.pcgNext = async function () {
+    const n = nodeOf(S.node); if (!n || S._busy) return;
+    if (S.typing) { S._fast = true; type(visibleLines(n)[S.line] || ''); return; }
+    const lines = visibleLines(n);
+    if (S.line < lines.length - 1) { S.line++; paint(); return; }
+    const to = goOf(n);
+    if (!to) return;
+    S._busy = true;
+    const r = await step(to, null, (nodeOf(to)||{}).end);
+    S._busy = false;
+    if (!r.ok && !r.wait && r.err && typeof toast === 'function') toast(r.err, 'err');
+    paint();
+  };
+
+  window.pcgBack = function () {
+    if (S.line > 0) { S.line--; S._once = true; paint(); }
+  };
+
+  window.pcgPick = async function (i) {
+    const n = nodeOf(S.node); if (!n) return;
+    const a = visibleAsks(n)[i]; if (!a || S._busy) return;
+    const to = nodeOf(a.to);
+    S._busy = true;
+    const r = await step(a.to, a.set, to && to.end);
+    S._busy = false;
+    if (r.ok && a.tail && typeof toast === 'function') toast(a.tail, 'ok');
+    else if (!r.ok && r.err && typeof toast === 'function') toast(r.err, 'err');
+    paint();
+  };
+
+  window.pcgClose = function () { close(); };
+  window.pcgLeave = function () { close(); };
+
+  window.pcgReset = async function () {
+    if (!confirm('Перечитать хронику с начала? След прошлого прохождения будет утерян.')) return;
+    if (typeof ecRpc === 'function') { try { await ecRpc('precursor_saga_reset', {}); } catch (e) {} }
+    S.node = 'p0'; S.flags = {}; S.line = 0; S.done = false; S.ending = null; S.chapterShown = {};
+    paint();
+  };
+
+  // ══════════════════════════════════════════════════════════
+  // ОКНО
+  // ══════════════════════════════════════════════════════════
+  function keys(e) {
+    if (!S.open) return;
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); window.pcgNext(); return; }
+    if (/^[1-4]$/.test(e.key)) {
+      const n = nodeOf(S.node);
+      if (n && visibleAsks(n).length >= +e.key && !S.typing) window.pcgPick(+e.key - 1);
+    }
+  }
+
+  window.pcgOpen = async function () {
+    if (S.open) return;
+    let w = document.getElementById('pcg-wrap');
+    if (!w) {
+      w = document.createElement('div');
+      w.id = 'pcg-wrap'; w.className = 'pcg-wrap';
+      document.body.appendChild(w);
+    }
+    S.open = true;
+    w.innerHTML = `<div class="pcg-stage" id="pcg-stage"><div class="pcg-load">Хроника открывается…</div></div>`;
+    w.classList.add('on');
+    document.addEventListener('keydown', keys);
+    if (window.PcArt) { try { await PcArt.load(); } catch (e) {} }
+    if (!S.loaded) await load();
+    if (!S.node) S.node = 'p0';
+    S.line = 0; S._fast = false; S._once = false; S._tail = null;
+    paint();
+  };
+
+  function close() {
+    const w = document.getElementById('pcg-wrap');
+    clearInterval(_typer);
+    S.open = false; S.typing = false;
+    document.removeEventListener('keydown', keys);
+    if (w) { w.classList.remove('on'); w.innerHTML = ''; }
+    if (typeof heroVNTamaRefresh === 'function') heroVNTamaRefresh();
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // ДВЕРЬ: карточка над списком миров в досье дозвёздных
+  // ══════════════════════════════════════════════════════════
+  // Правил в карточке нет ни строки (они в руководстве) — только приглашение
+  // и место, на котором игрок остановился.
+  function doorHtml() {
+    const started = S.loaded && S.node && S.node !== 'p0';
+    const end = S.done && ENDINGS[S.ending];
+    const где = started && !S.done ? chapterOf(S.node) : '';
+    const left = !S.done ? untilMs() : 0;
+    return `<div class="pcg-door" onclick="pcgOpen()">
+      <div class="pcg-door-art" style="background-image:url('${A}world.webp')"></div>
+      <div class="pcg-door-body">
+        <div class="pcg-door-kick">Хроника
+          <button class="pcs-q" type="button" title="Как это работает"
+            onclick="event.stopPropagation();gbHelpOpen('pc_saga')">${
+              (window.PrecursorDossier && PrecursorDossier.ICO.q) || '?'}</button></div>
+        <div class="pcg-door-nm">Одиннадцать пристаней</div>
+        <div class="pcg-door-txt">${end
+          ? esc(end[1])
+          : started
+          ? 'Вы остановились на главе: ' + esc(где)
+          : 'Мир Кайлат, век парусов. Свод летописи полон — кроме одного разворота, где восемьдесят лет назад выскоблены три строки.'}</div>
+        <div class="pcg-door-cta${left > 0 ? ' wait' : ''}">${end
+          ? 'Исход: ' + esc(end[0]) + ' · перечитать'
+          : left > 0 ? 'Ждёт срока · ' + esc(untilTxt(left))
+          : started ? 'Продолжить' : 'Начать'}</div>
+      </div>
+    </div>`;
+  }
+
+  function chapterOf(id) {
+    // Заголовок ближайшей главы вверх по цепочке узлов.
+    const order = Object.keys(NODES);
+    let i = order.indexOf(id);
+    for (; i >= 0; i--) { const n = NODES[order[i]]; if (n && n.ch) return n.ch; }
+    return 'Пролог';
+  }
+
+  window.PrecursorSaga = { doorHtml, load, open: window.pcgOpen, NODES, ENDINGS, S };
+})();

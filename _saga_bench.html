@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- Верстак хроники вне консоли: та же панель (admin_saga.js), но без входа
+     под админом. Нужен для правки на глаз — в консоли панель живёт вкладкой
+     «📜 Хроника», тут она одна на странице. -->
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Верстак хроники</title>
+<style>
+  :root { --t1:#e8edf2; --t3:#8aa0b0; --w2:#2a3340; --b2:#141a22; --b3:#0c1322; --gdl:#5fb0e6; }
+  body { background:#0a0f16; color:var(--t1); font-family:system-ui,sans-serif; margin:0; padding:20px; }
+  .btn { border:1px solid var(--w2); background:var(--b3); color:var(--t1); border-radius:6px; padding:5px 10px; font-size:12px; cursor:pointer; }
+  .btn-gd { border-color:var(--gdl); color:var(--gdl); }
+  #pg { max-width:1100px; margin:0 auto; }
+</style>
+<!-- Раскладка верстака (в игре приезжает через css/index.css). -->
+<link rel="stylesheet" href="css/41_saga_verstak.css">
+</head><body>
+<div id="pg">загрузка…</div>
+<script src="saga_weave.js"></script>
+<script src="saga_text.js"></script>
+<script src="saga_kit.js"></script>
+<script src="saga_layers.js"></script>
+<script src="saga_layers2.js"></script>
+<script src="admin_saga.js"></script>
+<script>
+  // Панель зовёт adPaint после каждого выбора — тут это просто перерисовка.
+  function adPaint() { document.getElementById('pg').innerHTML = adSagaPanel(); }
+  adPaint();
+</script>
+</body></html>

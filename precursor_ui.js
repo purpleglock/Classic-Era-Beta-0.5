@@ -6,7 +6,7 @@
 // Видит держава только те миры, где у неё есть колония в системе (или уже был
 // контакт). Тир показывается ВИДИМЫЙ: Розенкрейцеры и ушедшие в космос врут.
 // ════════════════════════════════════════════════════════════
-let _pcState = null, _pcOpenCiv = null;
+let _pcState = null, _pcOpenCiv = null, _pcArrears = null;
 
 const PC_TIER = ['племена', 'бронза', 'железо и вера', 'паруса и пар', 'атомный век', 'на пороге космоса'];
 // Названия шрамов берём прямо из банка генератора (их около сотни) — держать
@@ -259,12 +259,12 @@ function pcCdTxt(ms) {
   return m >= 60 ? `${Math.floor(m / 60)} ч ${m % 60} мин` : `${m} мин`;
 }
 // Заголовок блока решений: сразу видно, свободны ли руки.
+// Часы наблюдения и даров умерли вместе с этими решениями — остались только
+// часы вмешательства: их делят Завет и Обряд, единственные две дороги ихора.
 function _pcActsHead(cdStudy, cdAct, cdGift) {
   const busy = [];
-  if (cdStudy > 0) busy.push('наблюдение ' + pcCdTxt(cdStudy));
   if (cdAct > 0) busy.push('вмешательство ' + pcCdTxt(cdAct));
-  if (cdGift > 0) busy.push('дары ' + pcCdTxt(cdGift));
-  return `<div class="sn-sec">Решения${busy.length ? ' · занято: ' + esc(busy.join(' · ')) : ''}</div>`;
+  return `<div class="sn-sec">Решения державы${busy.length ? ' · занято: ' + esc(busy.join(' · ')) : ''}</div>`;
 }
 
 function heroVNTamaClose() {
@@ -304,6 +304,9 @@ async function heroVNTamaOpen() {
       return;
     }
   } catch (e) {}
+  // Где игрок остановился в хронике — знать надо ДО отрисовки списка, иначе
+  // дверь один раз мигнёт словом «Начать» тому, кто читает пятую главу.
+  if (window.PrecursorSaga) { try { await PrecursorSaga.load(); } catch (e) {} }
   await heroVNTamaRefresh();
 }
 
@@ -311,6 +314,13 @@ async function heroVNTamaRefresh() {
   const el = document.getElementById('hp-vn-tama');
   if (!el || !el.classList.contains('show')) return;
   const en = (typeof lang !== 'undefined' && lang === 'en');
+  // Реестр недоимки идёт отдельным заходом и НЕ обязателен: он общий для
+  // галактики, а не про конкретный мир, и падать из-за него вкладке нельзя.
+  ecRpc('precursor_arrears').then(r => {
+    _pcArrears = r || null;
+    const box = document.getElementById('pc-arr');
+    if (box && window.PrecursorDossier) box.innerHTML = PrecursorDossier.arrears(_pcArrears);
+  }).catch(() => {});
   try { _pcState = await ecRpc('precursor_get'); }
   catch (e) {
     const why = (e && (e.message || e.hint || e.details)) || String(e || '');
@@ -319,6 +329,18 @@ async function heroVNTamaRefresh() {
   }
   if (!el.classList.contains('show')) return;
   const civs = (_pcState && _pcState.civs) || [];
+  // У каждого найденного мира своя хроника, и заводится она отсюда: до этого
+  // ответа список миров неизвестен, а после отрисовки двери — уже поздно.
+  if (window.PrecursorSaga) { try { PrecursorSaga.bindCivs(civs); } catch (e) {} }
+  // Вставшие миры — те, что уже вышли из хроники субъектами. Идут отдельным
+  // заходом и НЕ обязательны: они про галактику, а не про этот список, и
+  // падать из-за них вкладке нельзя.
+  if (window.PrecursorRisen) {
+    PrecursorRisen.load().then(() => {
+      const box = document.getElementById('pc-ris');
+      if (box) box.innerHTML = PrecursorRisen.html();
+    }).catch(() => {});
+  }
   if (_pcOpenCiv) {
     const c = civs.find(x => x.system_id === _pcOpenCiv.s && x.pid === _pcOpenCiv.p);
     if (c) { el.innerHTML = _pcHead(en) + `<div class="hp-vn-col-body hp-vn-sinli-body">${_pcCard(c)}</div>`; return; }
@@ -329,19 +351,28 @@ async function heroVNTamaRefresh() {
 
 function _pcList(civs) {
   const parts = ['<div class="sn-col">'];
-  parts.push(`<div class="fc-rule">Мораторий Фонда по защите от невмешательства действует с 2986 года. Всё, что вы сделаете на этих страницах, — нарушение. Изучение Фонд терпит; остальное записывает.<br>
-    <i>История этих миров идёт сама: раз в неделю каждый делает шаг по своей летописи. Дошедший до звёздного полёта перестаёт быть находкой и становится державой на карте.</i>
-    ${_pcState && _pcState.enlightened ? '<br>Ваш уклад (демократия/эгалитаризм или пацифизм/ксенофилия) закрывает геноцид, рабство, выкачивание, протектораты и карательные удары. Наблюдать, возвышать и проповедовать — можно.' : ''}
-    ${_pcState && +_pcState.faith_boost > 1 ? '<br>Обращённые миры разгоняют ваши храмы: ставка ×' + (+_pcState.faith_boost).toFixed(2) + '.' : ''}</div>`);
-  parts.push(`<div class="fc-rule">Лояльность не покупается. Она складывается из мнения о вас и из <b>доверия</b>, и упирается в потолок: эпоха мира, память его обид и его же зависимость от ваших подачек. Дары поднимают мнение и тут же поднимают зависимость — три подряд, и вы построили себе карго-культ с крышей. Настоящий рычаг один: <b>приходить на их беду</b>.<br>
-    Лояльность 90 открывает <b>Завет</b>: мир отказывается от собственного звёздного полёта и остаётся при вас. Если под ним лежат руины Даллерианцев — каждые сутки он отдаёт <b>ихор</b>, которого нет больше нигде.${
-      _pcState && +_pcState.ichor > 0 ? ' Ихора на складе: <b>' + (+_pcState.ichor).toFixed(1) + '</b>.' : ''}</div>`);
+  // Правил здесь больше нет: они уехали в руководство (GB_TOPICS) и открываются
+  // окном по значку — иначе список снова превращается в стену текста.
+  // ⚠ Вход в мир ОДИН — его карточка. Была развилка: живые миры открывались
+  // только хроникой (афиша с кадром и «Начать»), а карточка с дарами, Заветом,
+  // возвышением и уроком висела в стороне. Это и разрывало работу с примитивами
+  // надвое: читать мир отдельно от того, что ты с ним делаешь, нельзя.
+  // Теперь хроника — раздел внутри карточки (PrecursorSaga.block), а список
+  // ниже показывает, чего каждый мир от игрока ждёт.
+  // Ихор и мораторий — в руководстве (gbHelpOpen('pc_wound')).
+  // Недоимка — общий счёт галактики, поэтому стоит НАД списком миров, а не в
+  // карточке: она не про мир, она про всех сразу.
+  // Вставшие миры стоят НАД недоимкой: держава, с которой можно торговать
+  // сегодня, важнее общего счёта галактики.
+  parts.push(`<div id="pc-ris">${
+    (window.PrecursorRisen && PrecursorRisen.html()) || ''}</div>`);
+  parts.push(`<div id="pc-arr">${
+    (window.PrecursorDossier && PrecursorDossier.arrears(_pcArrears)) || ''}</div>`);
   if (!civs.length) {
     parts.push(`<div class="hp-vn-col-empty" style="padding:8px">Ни одного дозвёздного мира рядом. Их видно только там, где у державы есть колония в системе.</div></div>`);
     return parts.join('');
   }
   const now = _pcState && _pcState.now;
-  const live = civs.filter(c => c.status !== 'dead' && c.status !== 'spacefaring');
   const risen = civs.filter(c => c.status === 'spacefaring');
   const gone = civs.filter(c => c.status === 'dead');
   const row = c => {
@@ -355,14 +386,27 @@ function _pcList(civs) {
     const clock = c.status === 'spacefaring' || c.status === 'dead' ? ''
       : ` · шаг ${pcWhen(c.next_step_at, now)}`;
     const needFlag = pcActiveNeed(c) ? ' · <b style="color:#e0b45f">взывают о помощи</b>' : '';
-    return `<div class="sn-row">
+    // Чего мир ждёт от игрока по своей линии. Это единственное, ради чего
+    // список вообще читают: открывать миры по очереди наугад — не работа.
+    const saga = window.PrecursorSaga ? PrecursorSaga.mark(c) : '';
+    const ждёт = window.PrecursorSaga && PrecursorSaga.pending(c);
+    return `<div class="sn-row${ждёт ? ' pc-row-ask' : ''}"
+      onclick="heroVNTamaShow('${jsq(c.system_id)}',${+c.pid})">
       <span class="sn-row-nm" style="color:${mood}">${pcIco(c.status === 'spacefaring' ? 'star' : 'world', 'pc-ico-sm')} ${esc(c.status === 'spacefaring' ? (c.state_name || c.self_name) : c.self_name)}
-        <i>${esc(c.planet_name || '?')} · ${esc(PC_TIER[c.visible_tier] || '?')} · ${esc((c.races || [])[0] || '')} · ${esc(st)}${clock}${needFlag}</i></span>
-      <button class="hp-vn-btn" type="button" onclick="event.stopPropagation();heroVNTamaShow('${jsq(c.system_id)}',${+c.pid})">Досье</button>
+        <i>${esc(c.planet_name || '?')} · ${esc(PC_TIER[c.visible_tier] || '?')} · ${esc((c.races || [])[0] || '')} · ${esc(st)}${clock}${needFlag}${
+          saga ? ` · <b${ждёт ? ' style="color:#7fb2ff"' : ''}>${esc(saga)}</b>` : ''}</i></span>
     </div>`;
   };
-  parts.push(`<div class="sn-sec">Наблюдаемые миры · ${live.length}</div>`);
-  parts.push(live.map(row).join('') || `<div class="hp-vn-col-empty" style="padding:8px">Живых не осталось.</div>`);
+  // Живые миры — то, с чем работают: они стоят первыми и открываются карточкой.
+  // Ждущие решения подняты наверх: список — очередь дел, а не каталог.
+  const live = civs.filter(c => c.status !== 'spacefaring' && c.status !== 'dead');
+  if (live.length) {
+    const ask = window.PrecursorSaga ? live.filter(c => PrecursorSaga.pending(c)) : [];
+    const rest = live.filter(c => ask.indexOf(c) < 0);
+    parts.push(`<div class="sn-sec">Найденные миры · ${live.length}${
+      ask.length ? ` · ждут решения: ${ask.length}` : ''}</div>`);
+    parts.push(ask.concat(rest).map(row).join(''));
+  }
   if (risen.length) {
     parts.push(`<div class="sn-sec">Вышли к звёздам · ${risen.length}</div>`);
     parts.push(risen.map(row).join(''));
@@ -376,6 +420,34 @@ function _pcList(civs) {
 }
 
 function _pcCard(c) {
+  // ══════════════════════════════════════════════════════════
+  // ЭКРАН ПАРТИИ (lore/precursor_run.md)
+  //
+  // Живой мир открывается ИГРОЙ, а не досье. Ниже по файлу лежат пять вкладок
+  // (Мир · Донесение · Ступени · Держава · Летопись) — десять панелей, два
+  // списка решений и ни одного вопроса игроку. Они остались ровно для тех, у
+  // кого партии нет: мёртвых, вышедших к звёздам и миров без якоря.
+  //
+  // Приборы и летопись не потеряны — они свёрнуты под «?» в шапке партии.
+  // ══════════════════════════════════════════════════════════
+  // ⚠ Здесь стояло `&& !!c.anchor`, и оттого партия открывалась ТОЛЬКО у миров,
+  // пересозданных после якоря, а все найденные раньше оставались на старой
+  // карточке с пятью вкладками. Якорь нужен ровно для одного — насколько мир
+  // надломлен на старте; без него партия начинается с чистого счёта, а не
+  // отказывается начинаться.
+  const живой = c.status !== 'dead' && c.status !== 'spacefaring';
+  // ⚠ Здесь стояло голое `живой`, и оттого ОБРЯД выбрасывал игрока из партии в
+  // старое досье на пять вкладок: мир после обряда мёртв, а исход «обмен» —
+  // это финал ЕГО ПАРТИИ и показывать его должен экран партии. Мёртвый мир
+  // держим на экране партии ровно тогда, когда партия по нему закрыта.
+  // Вышедшие к звёздам (spacefaring) сюда не идут: у них своя карточка NPC.
+  if (window.PrecursorRunUI && (живой || (c.status === 'dead' && PrecursorRunUI.конченная(c)))) {
+    try {
+      const scr = PrecursorRunUI.экран(c);
+      if (scr) return scr;
+    } catch (e) { console.warn('партия:', e); }
+  }
+
   const gc = _pcState ? (+_pcState.gc || 0) : 0;
   const now = _pcState && _pcState.now;
   const scars = (c.scars || []).map(pcScarName);
@@ -415,29 +487,49 @@ function _pcCard(c) {
   const gifts = +((c.flags || {}).gifts) || 0;
   const need = pcActiveNeed(c);
   const mood = pcMood(c, need);
+  // Судит сервер, а не карточка. С этапа 9 все решения ходят одной дверью
+  // (precursor_commit), и запрет у них один — `precursor_can`. Клиентский
+  // расчёт остался ровно для миров БЕЗ якоря: там досье не рисуется, запреты
+  // никто не спрашивает, и до пересева мир живёт по старой карточке целиком.
+  const gated = !!(window.PrecursorDossier && PrecursorDossier.gateOf && c.anchor);
+  // Спрашиваем один раз на мир. Заход отдельный от отрисовки: досье может и не
+  // собраться, а кнопкам ответ нужен всё равно — иначе они замрут на «…».
+  if (gated && !PrecursorDossier.hasGates(c)) setTimeout(() => PrecursorDossier.loadGates(c).then(() => {
+    if (_pcOpenCiv && _pcOpenCiv.s === c.system_id && _pcOpenCiv.p === +c.pid) heroVNTamaRefresh();
+  }), 0);
   const act = (id, label, hint) => {
     const good = PC_GOODWILL.indexOf(id) >= 0;
-    const cost = id === 'answer' ? (need ? +need.ask || 0 : 0)
+    // «Дар с неба» на сервере зовётся boon: имя gift занято даром ритма (§8.2)
+    const sid = id === 'gift' ? 'boon' : id;
+    const g = gated ? PrecursorDossier.gateOf(c, sid) : null;
+    const wait = gated && !g;      // ответа ещё нет — это не «нельзя»
+
+    const guess = id === 'answer' ? (need ? +need.ask || 0 : 0)
       : id === 'covenant' ? pcCovenantCost(c.tier)
       : good ? pcGiftCost(id, c.tier, gifts) : pcCost(id, c.tier);
-    const ban = pcForbidden(id);
-    // Помощь в беде и Завет своих часов не занимают: беда не ждёт кулдауна.
-    const cd = id === 'study' ? cdStudy : (id === 'answer' || id === 'covenant') ? 0 : good ? cdGift : cdAct;
-    const poor = !ban && cost > gc;
-    // «Урок» — единственное решение, которому мало колонии: нужен флот на месте
-    const noFleet = id === 'lesson' && !c.fleet;
-    // Завет: то, что не покупается — сначала лояльность, потом деньги
-    const covBlock = id !== 'covenant' ? '' :
-        (pcLoy(c) < 90 ? `лояльность ${pcLoy(c)} из 90 (потолок ${pcCap(c)})`
-       : (+c.phase || 0) < 8 ? 'слишком рано: Завет заключают не с дикарями, а с народом, который умеет договариваться'
-       : (+c.grudge || 0) > 10 ? `они помнят слишком много: память обид ${+c.grudge} при допустимых 10`
-       : (+c.dependency || 0) > 45 ? `они не партнёры, а просители: зависимость ${+c.dependency} при допустимых 45` : '');
-    const off = ban || poor || cd > 0 || noFleet || !!covBlock;
-    const why = ban ? 'закрыто укладом державы'
-      : covBlock ? covBlock
-      : noFleet ? 'в системе нет вашего флота — подведите корабли к их звезде'
-      : cd > 0 ? `${good ? 'корабль с дарами вернётся' : id === 'study' ? 'пост занят наблюдением' : 'руки заняты'} — ещё ${pcCdTxt(cd)}`
-      : poor ? `не хватает ${pcNum(cost - gc)} ГС из ${pcNum(cost)}` : '';
+    const cost = g && g.gc != null ? +g.gc : guess;
+    const poor = cost > gc;
+
+    let off, why, btn;
+    if (wait) {
+      off = true; why = ''; btn = '…';
+    } else if (g) {
+      off = !g.ok; why = g.ok ? '' : (g.why || '');
+      btn = g.ok ? (id === 'answer' ? 'Помочь' : id === 'covenant' ? 'Заключить' : 'Решить') : 'нельзя';
+    } else {
+      const ban = pcForbidden(id);
+      // Помощь в беде и Завет своих часов не занимают: беда не ждёт кулдауна.
+      const cd = id === 'study' ? cdStudy : (id === 'answer' || id === 'covenant') ? 0 : good ? cdGift : cdAct;
+      // «Урок» — единственное решение, которому мало колонии: нужен флот на месте
+      const noFleet = id === 'lesson' && !c.fleet;
+      off = ban || (!ban && poor) || cd > 0 || noFleet;
+      why = ban ? 'закрыто укладом державы'
+        : noFleet ? 'в системе нет вашего флота — подведите корабли к их звезде'
+        : cd > 0 ? `${good ? 'корабль с дарами вернётся' : id === 'study' ? 'пост занят наблюдением' : 'руки заняты'} — ещё ${pcCdTxt(cd)}`
+        : poor ? `не хватает ${pcNum(cost - gc)} ГС из ${pcNum(cost)}` : '';
+      btn = ban ? '—' : noFleet ? 'нет флота' : cd > 0 ? 'ждать'
+        : id === 'answer' ? 'Помочь' : id === 'covenant' ? 'Заключить' : 'Решить';
+    }
     // Тон и арт живут на всей строке: подложка справа и цвет полосы слева —
     // это то же решение, что и в иконке, только читается периферийным зрением.
     return `<div class="pc-act pc-t-${PC_TONE[id] || 'ok'}${off ? ' pc-act-off' : ''}${good ? ' pc-act-good' : ''}">
@@ -448,13 +540,37 @@ function _pcCard(c) {
       <span class="pc-act-r">
         ${cost ? `<span class="pc-act-cost${poor ? ' pc-act-poor' : ''}">${pcNum(cost)} ГС</span>` : ''}
         <button class="hp-vn-btn${off ? ' hp-vn-back' : ''}" type="button" ${off ? 'disabled' : ''}
-          onclick="event.stopPropagation();heroVNTamaAct('${jsq(c.system_id)}',${+c.pid},'${id}')">${
-            ban ? '—' : covBlock ? 'рано' : noFleet ? 'нет флота' : cd > 0 ? 'ждать'
-            : id === 'answer' ? 'Помочь' : id === 'covenant' ? 'Заключить' : 'Решить'}</button>
+          onclick="event.stopPropagation();heroVNTamaAct('${jsq(c.system_id)}',${+c.pid},'${id}')">${btn}</button>
       </span>
     </div>`;
   };
-  const parts = ['<div class="sn-col">'];
+  // ══════════════════════════════════════════════════════════
+  // КАРТОЧКА СОБИРАЕТСЯ ВКЛАДКАМИ, А НЕ ЛЕНТОЙ
+  //
+  // Было: паспорт, узы, беда, эпоха, семь блоков досье, лестница, все решения
+  // и летопись — подряд, в один столбец. Десять разных панелей на одном экране,
+  // причём «беда» и «летопись» встречались дважды (своя и из досье). Найти в
+  // этом то, ради чего открыли мир, было нельзя.
+  //
+  // Теперь у мира ЧЕТЫРЕ вкладки, и на экране всегда одна:
+  //   Мир — кто это: паспорт, узы, эпоха, приборы досье;
+  //   Донесение — линия мира и решения по ней;
+  //   Решения — беда, лестница и всё, что держава может сделать;
+  //   Летопись — их прошлое и чужой след.
+  // Шапка (имя, статус, наблюдатель) стоит над вкладками: она нужна всегда.
+  //
+  // Куски кладутся в тот карман, который открыт сейчас; `bucket()` его меняет.
+  // Так вся разметка ниже осталась на месте — переехало только расположение.
+  // ══════════════════════════════════════════════════════════
+  // ⚠ Двух списков решений на одном экране быть не должно. Их и было два, с
+  // одинаковым заголовком «Решения»: ступени досье (покой → ритм → слово →
+  // тёмное) и старые решения державы (дары, Завет, возвышение, урок). Это
+  // РАЗНЫЕ вещи — первое лечит их надлом, второе распоряжается их судьбой, —
+  // и теперь у каждого своя вкладка и своё имя.
+  const BK = { шапка: [], 'мир': [], 'донесение': [], 'ступени': [], 'держава': [], 'летопись': [] };
+  let _b = 'шапка';
+  const bucket = n => { _b = n; };
+  const parts = { push: h => { if (h) BK[_b].push(h); } };
   parts.push(`<button class="hp-vn-btn hp-vn-back" type="button" style="align-self:flex-start;margin-bottom:10px"
     onclick="event.stopPropagation();heroVNTamaBack()">← к списку</button>`);
   parts.push(pcBanner(c, need, mood));
@@ -477,11 +593,22 @@ function _pcCard(c) {
       <span class="pc-chip${chipCls}">${pcIco(stKey, 'pc-ico-sm')} ${esc(statusTxt)}</span></div>
     <div class="pc-hero-sub">${esc(c.planet_name || '?')} · система ${esc(c.system_name || c.system_id)}${
       c.env ? ' · ' + esc(c.env) : ''}</div>
-    <button class="pc-ask${_pcAsk ? ' on' : ''}" type="button"
-      onclick="event.stopPropagation();heroVNTamaAsk()">${_pcAsk ? '× Свернуть сводку' : '? У вас всё хорошо'}</button>
+    ${gated ? '' : `<button class="pc-ask${_pcAsk ? ' on' : ''}" type="button"
+      onclick="event.stopPropagation();heroVNTamaAsk()">${_pcAsk ? '× Свернуть сводку' : '? У вас всё хорошо'}</button>`}
   </div>`);
-  parts.push(_pcObserver(c));
+  // Наблюдательный пост читает вслух июльские цифры (доверие, зависимость,
+  // обиды, потолок, «до Завета») — у мира с якорем этих цифр больше нет.
+  if (!gated) parts.push(_pcObserver(c));
 
+  // ── ДОНЕСЕНИЕ ────────────────────────────────────────────
+  // Линия этого мира (precursor_saga.js). Своего экрана у неё нет — вкладка.
+  bucket('донесение');
+  if (window.PrecursorSaga && PrecursorSaga.block) {
+    try { parts.push(PrecursorSaga.block(c) || ''); } catch (e) {}
+  }
+
+  // ── МИР ──────────────────────────────────────────────────
+  bucket('мир');
   parts.push(`<div class="pc-grid">
     ${pcFact('Народ', esc((c.races || []).join(' + ')) + (c.synergy ? ` <i>«${esc(c.synergy)}»</i>` : ''),
       'Раса задаёт темп истории и то, какие эпохи им вообще доступны.')}
@@ -500,9 +627,11 @@ function _pcCard(c) {
   </div>`);
 
   // ── УЗЫ ──────────────────────────────────────────────────
-  // Одна цифра «отношение» врала: её покупали. Здесь видно, из чего она
-  // складывается и во что упирается — и почему деньгами это не чинится.
-  if (!dead && !risen) {
+  // Июльская модель отношений: лояльность из доверия и мнения, потолок,
+  // зависимость, память обид. Книга её заменила — мир держат надлом, русло и
+  // умолчания, и читаются они в «Донесении», а не в шести шкалах паспорта.
+  // Оставлено только мирам без якоря: им книжного досье ещё не завели.
+  if (!dead && !risen && !gated) {
     const loy = pcLoy(c), cap = pcCap(c), why = pcCapWhy(c);
     parts.push(`<div class="sn-sec">Узы</div>`);
     parts.push(`<div class="pc-grid">
@@ -523,7 +652,11 @@ function _pcCard(c) {
   }
 
   // ── БЕДА ─────────────────────────────────────────────────
-  if (need) {
+  // У мира с досье нужда своя, двухслойная (§9.1): там видно не только то, о чём
+  // просят вслух, и ответ там же, на ступени ритма. Второй раз не спрашиваем.
+  // Беда — не паспорт мира, а дело: она открывается там же, где ступени.
+  bucket('ступени');
+  if (need && !gated) {
     const left = Math.max(0, Math.ceil((Date.parse(need.until) - Date.now()) / 3600000));
     parts.push(`<div class="sn-sec">У них беда · ${esc(PC_NEED_NM[need.kind] || '—')}</div>`);
     parts.push(`<div class="fc-rule"><b>Осталось ${left} ч.</b> Это единственный быстрый путь к доверию — и единственное, что снимает память обид. Промолчите — они это тоже запишут.</div>`);
@@ -531,6 +664,7 @@ function _pcCard(c) {
     parts.push(`<button class="hp-vn-btn hp-vn-back" type="button" style="margin-top:2px"
       onclick="event.stopPropagation();heroVNTamaBack()">Оставить без ответа</button>`);
   }
+  bucket('мир');
   parts.push(`<div class="fc-rule">${esc(ru.hint)}${
     scars.length ? '<br>Шрамы истории: <b>' + esc(scars.join(', ')) + '</b> — следы того, что уже случилось с ними и осталось в характере.' : ''}${
     c.race_scar ? '<br><i>' + esc(c.race_scar) + '</i>' : ''}</div>`);
@@ -550,21 +684,31 @@ function _pcCard(c) {
     </div>`);
   }
 
+  // ── ДОСЬЕ ДЕРЖАВЫ (этап 5) ───────────────────────────────
+  // Рисуется из якоря и журнала (precursor_sim.js). Раньше все семь его блоков
+  // валились сюда одним полотном, поверх и без того длинной карточки. Теперь
+  // они разложены по вкладкам: приборы к паспорту, беда и лестница к решениям,
+  // летопись к летописи. Пока якоря нет — миру достаётся старая карточка.
+  const dos = gated && PrecursorDossier.parts ? PrecursorDossier.parts(c) : null;
+  if (dos) {
+    bucket('мир');      parts.push(dos['приборы']);
+    bucket('ступени');  parts.push(dos['беда']); parts.push(dos['лестница']);
+    bucket('летопись'); parts.push(dos['летопись']);
+  }
+
+  bucket('держава');
   if (dead) {
     parts.push(`<div class="hp-vn-col-empty" style="padding:8px">Решать больше нечего.</div>`);
   } else if (risen) {
-    parts.push(_pcActsHead(cdStudy, cdAct, cdGift));
-    parts.push(act('study', 'Изучать', 'наблюдение за равными; Фонд не возражает'));
-    parts.push(`<div class="hp-vn-col-empty" style="padding:8px">Остальное — уже не «решения по примитивам», а внешняя политика.</div>`);
+    parts.push(`<div class="hp-vn-col-empty" style="padding:8px">Они вышли к звёздам. Чем это кончилось для галактики — соседом с караванами или кризисом — записано в летописи; дальше с ними говорят как с державой, а не как с находкой.</div>`);
   } else {
+    // ⚠ Здесь стоял июльский слой: «Изучать», три дара, возвышение, протекторат,
+    // выкачивание, проповедь, рабство, урок и истребление — четырнадцать кнопок
+    // «нажми — сработает», написанных ДО того, как механику переделали по книге.
+    // Мир теперь живёт надломом, руслом и умолчаниями (precursor_sim.js), а его
+    // судьбу решают ступени в «Донесении». Держава над ним может ровно две вещи,
+    // и обе впадают в ихор: Завет — по капле и годами, Обряд — разом и насухо.
     parts.push(_pcActsHead(cdStudy, cdAct, cdGift));
-    parts.push(act('study', 'Изучать', 'наука с их истории; Фонд не возражает'));
-    // Добрая воля — единственный рычаг отношения, а от него зависят протекторат
-    // и проповедь. Свои часы (last_gift_at), отдача падает с каждым разом.
-    parts.push(`<div class="pc-sub">Добрая воля${gifts ? ` · знаков внимания: ${gifts}` : ''}</div>`);
-    parts.push(act('gift', 'Дар с неба', 'зерно, лекарства и металл, каких они не куют: отношение и благополучие вверх; −5 к досье Фонда'));
-    parts.push(act('envoy', 'Тихая миссия', 'без чудес: чинить колодцы, оставлять карты, слушать песни; дёшево и понемногу; −2'));
-    parts.push(act('miracle', 'Знамение', 'ночь горящего неба: отношение прыгает разом, но мир уходит в спиритуализм; −10'));
     // Завет — вершина мирного пути и единственный источник ихора в игре.
     if (c.status !== 'covenant') {
       parts.push(`<div class="pc-sub">Завет</div>`);
@@ -579,37 +723,50 @@ function _pcCard(c) {
         ? `Святилища вскрыты: ихор идёт на ваш склад каждые сутки, всего отдано <b>${(+c.ichor_total || 0).toFixed(1)}</b>. Ставка падает до нуля, если лояльность просядет ниже 85, и Завет рвётся в тот день, когда вы возьмётесь за выкачивание, рабство или орудия.`
         : 'Руин предтеч под ними нет: Завет держит их дома и даёт верность, но ихора отсюда не будет.'}</div>`);
     }
-    parts.push(`<div class="pc-sub">Вмешательство</div>`);
-    parts.push(c.phase < 11
-      ? act('uplift', 'Возвысить', 'эпоха вперёд — на шаг ближе к звёздам; они запомнят покровителя; −15 к досье Фонда')
-      : act('uplift', 'Дать им звёзды', 'вытолкнуть с порога в космос: держава родится сегодня и под вашей рукой; −15 к досье Фонда'));
-    if (c.status !== 'protectorate') parts.push(act('protect', 'Протекторат', 'может не выйти — у них бывает мнение; −35'));
-    if (c.status !== 'drained') parts.push(act('harvest', 'Выкачивать', 'деньги в обмен на их благополучие; −20'));
-    parts.push(c.faith_fid
-      ? `<div class="pc-act pc-t-take pc-act-off">
-          <img class="pc-act-bg" src="${PC_ART_DIR}/convert.webp" alt="" loading="lazy" onerror="this.remove()">
-          <span class="pc-act-nm">Обратить в веру
-          <i>${c.faith_fid === (_pcState && _pcState.fid) ? 'этот мир уже поёт ваше имя' : 'мир уже принял чужую веру'}</i></span></div>`
-      : act('convert', 'Обратить в веру', (_pcState && _pcState.faith
-          ? 'целая планета адептов «' + _pcState.faith + '»: +25% к ставке ваших храмов (потолок ×2); может не выйти; −25'
-          : 'нужна своя религия — без неё проповедовать нечего') + ''));
-    parts.push(act('enslave', 'Увести в рабство', 'не убить, а вывезти: невольники вливаются в пул рабочих; −45'));
-    // Обряд — изнанка проповеди: та же вера, но мир идёт не в паству, а в сырьё.
-    // Второй и последний источник ихора помимо Завета, и единственный разовый.
+    // Обряд — изнанка проповеди: мир идёт не в паству, а в сырьё. Вторая и
+    // последняя дорога ихора помимо Завета, и единственная разовая.
     parts.push(_pcRiteBlock(c, act));
-    parts.push(act('lesson', 'Урок будет усвоен', ph > 0
-      ? `удар с орбиты, платить не за что: эпоху назад (E${ph} → E${ph - 1}), благополучие −35, население −четверть; ${
-          c.fleet ? 'флот на месте' : 'нужен флот в системе'}; об этом узнает вся галактика; −50`
-      : `откатывать некуда: ниже E0 эпох нет, и урок станет истреблением; ${
-          c.fleet ? 'флот на месте' : 'нужен флот в системе'}; узнает вся галактика; −75`));
-    parts.push(act('purge', 'Истребить', 'необратимо, планета освобождается; −60'));
   }
-  parts.push(`<div class="sn-sec">Летопись · новое сверху</div>`);
-  parts.push(chron
-    ? `<div class="pc-chron">${chron}</div>`
-    : `<div class="hp-vn-col-empty" style="padding:8px">Летопись не сохранилась.</div>`);
-  parts.push('</div>');
-  return parts.join('');
+  // Летопись показываем ОДНУ. У мира с якорем она своя — вычисляемая, с
+  // умолчаниями (§10, блок досье выше); хранимый `chronicle` с этапа 9 никто
+  // больше не пишет, и рисовать его второй раз значит показывать два разных
+  // прошлых одного народа.
+  // Мир помнит не только вас: кто держал его до вас и что он записал про
+  // пришедших сверху. Стоит у летописи — это тоже прошлое, только чужое.
+  bucket('летопись');
+  if (window.PrecursorSaga && PrecursorSaga.past) {
+    try { parts.push(PrecursorSaga.past(c) || ''); } catch (e) {}
+  }
+  if (!gated) {
+    parts.push(`<div class="sn-sec">Летопись · новое сверху</div>`);
+    parts.push(chron
+      ? `<div class="pc-chron">${chron}</div>`
+      : `<div class="hp-vn-col-empty" style="padding:8px">Летопись не сохранилась.</div>`);
+  }
+
+  // ── ВКЛАДКИ ──────────────────────────────────────────────
+  // Точка у вкладки — не украшение: она значит «здесь ждут вас». У донесения
+  // это решение линии, у решений — беда со сроком. Пустая вкладка не рисуется
+  // вовсе: у мёртвого мира нет ни донесения, ни решений.
+  const ждётЛиния = !!(window.PrecursorSaga && PrecursorSaga.pending && PrecursorSaga.pending(c));
+  const TABS = [
+    ['мир', 'Мир', false],
+    ['донесение', 'Донесение', ждётЛиния],
+    ['ступени', 'Ступени', !!need],
+    ['держава', 'Держава', false],
+    ['летопись', 'Летопись', false],
+  ].filter(t => BK[t[0]].join('').trim());
+  // Открытая вкладка могла исчезнуть вместе с содержимым (линия кончилась,
+  // мир умер) — тогда открываем первую, а не пустоту.
+  const откр = TABS.some(t => t[0] === _pcTab) ? _pcTab : (TABS[0] && TABS[0][0]);
+  const полоса = TABS.length > 1 ? `<div class="pc-tabs">${TABS.map(([id, nm, dot]) =>
+    `<button class="pc-tab${id === откр ? ' on' : ''}" type="button"
+      onclick="event.stopPropagation();heroVNTamaTab('${id}')">${esc(nm)}${
+        dot ? '<i class="pc-tab-dot"></i>' : ''}</button>`).join('')}</div>` : '';
+
+  return `<div class="sn-col">${BK['шапка'].join('')}${полоса}
+    <div class="pc-tabbody">${(BK[откр] || []).join('')}</div>
+  </div>`;
 }
 
 // ── НАБЛЮДАТЕЛЬ ──────────────────────────────────────────
@@ -753,7 +910,31 @@ function _pcRiteBlock(c, act) {
     + act('rite', 'Оккультный обряд', `мир не восстановится; клеймо на вере навсегда; −80 к досье Фонда`);
 }
 
-function heroVNTamaShow(sysId, pid) { _pcOpenCiv = { s: sysId, p: +pid }; heroVNTamaRefresh(); }
+// Открытая вкладка карточки. Живёт между перерисовками: решение не должно
+// выбрасывать игрока обратно на паспорт мира.
+let _pcTab = 'мир';
+// Переключение вкладки — БЕЗ похода на сервер: данные уже пришли, а лишний
+// precursor_get на каждый клик по вкладке — это лаг на ровном месте.
+function _pcRepaintCard() {
+  const el = document.getElementById('hp-vn-tama');
+  if (!el || !el.classList.contains('show') || !_pcOpenCiv || !_pcState) return false;
+  const c = (_pcState.civs || []).find(x => x.system_id === _pcOpenCiv.s && x.pid === _pcOpenCiv.p);
+  if (!c) return false;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  el.innerHTML = _pcHead(en) + `<div class="hp-vn-col-body hp-vn-sinli-body">${_pcCard(c)}</div>`;
+  return true;
+}
+function heroVNTamaTab(t) { _pcTab = t; _pcRepaintCard(); }
+
+function heroVNTamaShow(sysId, pid) {
+  _pcOpenCiv = { s: sysId, p: +pid };
+  // Открываем на том, ради чего мир и открыли: ждёт решения линия — на
+  // донесении, иначе — на паспорте мира.
+  const c = _pcState && (_pcState.civs || []).find(x => x.system_id === sysId && x.pid === +pid);
+  _pcTab = (c && window.PrecursorSaga && PrecursorSaga.pending && PrecursorSaga.pending(c))
+    ? 'донесение' : 'мир';
+  heroVNTamaRefresh();
+}
 function heroVNTamaBack() { _pcOpenCiv = null; heroVNTamaRefresh(); }
 
 const PC_CONFIRM = {
@@ -772,7 +953,14 @@ async function heroVNTamaAct(sysId, pid, action) {
   const en = (typeof lang !== 'undefined' && lang === 'en');
   if (PC_CONFIRM[action] && !confirm(PC_CONFIRM[action])) return;
   try {
-    const r = await ecRpc('precursor_act', { p_system_id: sysId, p_pid: +pid, p_action: action });
+    // Все решения ходят одной дверью (precursor_commit). Единственный перевод:
+    // «Дар с неба» на сервере зовётся boon — имя gift занято даром ритма (§8.2).
+    const r = await ecRpc('precursor_commit', {
+      p_system_id: sysId, p_pid: +pid,
+      p_act: action === 'gift' ? 'boon' : action, p_reg: 'их словом', p_wound: null });
+    // Отказ теперь приходит человеческой строкой, а не кодом: в `why` написано,
+    // почему именно нельзя (§8), и переводить это уже не нужно.
+    if (r && r.why) { if (typeof toast === 'function') toast(r.why, 'err'); return; }
     if (typeof toast === 'function') toast((r && r.txt) || 'Готово', r && r.ok === false ? 'err' : 'ok');
   } catch (e) {
     const m = ((e && e.message) || e) + '';
@@ -799,6 +987,11 @@ async function heroVNTamaAct(sysId, pid, action) {
       : m.includes('already converted') ? 'Этот мир уже нашёл себе небо.'
       : 'Ошибка: ' + m;
     if (typeof toast === 'function') toast(nice, 'err');
+  }
+  // Решение меняет и деньги, и часы, и покой — старые ответы `precursor_can`
+  // после него врут. Сбрасываем их, чтобы карточка спросила заново.
+  if (window.PrecursorDossier && PrecursorDossier.dropGates) {
+    try { PrecursorDossier.dropGates({ system_id: sysId, pid: +pid }); } catch (e) {}
   }
   if (typeof ecReloadPaint === 'function') { try { await ecReloadPaint(); } catch (e) {} }
   await heroVNTamaRefresh();

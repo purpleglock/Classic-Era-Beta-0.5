@@ -585,6 +585,49 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 .gm-legion-row .gm-col-nm{color:#ffb59b}
 .gm-ctl.gm-ctl-roster.gm-active{border-color:var(--gdl);color:var(--gdl)}
 
+/* ════════ ☠ ТЕАТР ЛЕГИОНА — отдельный РЕЖИМ карты ════════
+   Не слой, а смена оптики: мирная карта гаснет, остаётся чужой ход. Поэтому
+   и кнопка живёт своим блоком «Режим» над списком слоёв и красится не в
+   штатный циан интерфейса, а в ржавую краску Легиона — включённый режим
+   должен быть виден на панели с одного взгляда. */
+.gm-ctl.gm-ctl-theatre{border-color:hsl(14 60% 40% / .5);color:#ffb59b}
+.gm-ctl.gm-ctl-theatre.gm-active{border-color:#e05c38;color:#ff9270;
+  background:hsl(14 60% 24% / .35);box-shadow:0 0 0 1px hsl(14 70% 45% / .35) inset}
+/* Пока режим включён, карта уходит в тёмно-багровый — глазу сразу видно, что
+   он смотрит не обычную карту, и мирные подписи не спорят с метками ватаг. */
+#gm-wrap.gm-theatre #gm-viewport{filter:saturate(.55) contrast(1.06)}
+#gm-wrap.gm-theatre #gm-viewport::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 50%, hsl(14 70% 30% / .10), hsl(220 40% 4% / .55));z-index:2}
+#gm-theatre{position:absolute;top:12px;left:12px;width:300px;max-width:calc(100% - 24px);
+  max-height:calc(100% - 24px);overflow-y:auto;z-index:33;
+  background:hsl(216 22% 7% / .96);backdrop-filter:blur(10px);
+  border: var(--deco-frame-w, 1px) solid hsl(14 60% 40% / .45);border-radius:var(--radius-lg);
+  padding:12px 12px 14px;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+#gm-theatre.gm-hidden{display:none!important}
+#gm-theatre .gm-r-title{color:#ff9270}
+#gm-theatre .gm-r-row.gm-r-sel{border-color:#e05c38;background:hsl(14 40% 16% / .9)}
+/* Гнев — не абстрактное число, а строка «за что»: ступень словом, величина цифрой. */
+.gm-th-wrath{display:flex;flex-direction:column;gap:2px;padding:8px 10px;margin-bottom:10px;
+  border: var(--deco-frame-w, 1px) solid var(--w1);border-radius:var(--radius-md);background:hsl(216 18% 11% / .7)}
+.gm-th-wrath.gm-th-w-hot{border-color:hsl(14 70% 50% / .6);background:hsl(14 45% 14% / .8)}
+.gm-th-wl{font-family: var(--font-mono);font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--t3)}
+.gm-th-wv{font-family: var(--font-display);font-weight:700;font-size:14px;color:#ff9270}
+.gm-th-w-calm .gm-th-wv{color:var(--t2)}
+.gm-th-wr{font-size:10.5px;color:var(--t3);line-height:1.4}
+/* Копилка сектора: полоска «сколько до удара» — потенциальный ход, ещё не ватага. */
+.gm-th-sec{display:flex;align-items:center;gap:8px;padding:3px 2px}
+.gm-th-sn{flex:1;min-width:0;font-size:11.5px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gm-th-bar{position:relative;width:84px;height:5px;flex-shrink:0;border-radius:3px;background:hsl(216 18% 16% / .9);overflow:hidden}
+.gm-th-bar > i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,hsl(14 60% 42%),#ff8a5c)}
+.gm-th-sv{width:34px;text-align:right;font-family: var(--font-mono);font-size:10px;color:var(--t3)}
+.gm-th-leg{display:flex;flex-wrap:wrap;gap:8px 12px;padding:8px 2px 0;border-top: var(--deco-frame-w, 1px) solid var(--w1)}
+.gm-th-leg span{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--t3)}
+.gm-th-leg i{width:9px;height:9px;flex-shrink:0}
+.gm-th-leg .gm-th-k1{background:#e05c38;clip-path:polygon(100% 50%,0 100%,30% 50%,0 0)}
+.gm-th-leg .gm-th-k2{background:#ff8046;border-radius:50%}
+.gm-th-leg .gm-th-k3{border:1px solid #e05c38;transform:rotate(45deg)}
+.gm-th-leg .gm-th-k4{border:1px dashed hsl(38 90% 65% / .8);border-radius:50%}
+
 /* ════════ РЕДАКТОР СЕКТОРА (панель справа, живёт пока режим «Сектора») ════════ */
 #gm-sector{
   position:absolute;top:12px;right:12px;width:300px;max-width:calc(100% - 24px);max-height:calc(100% - 24px);

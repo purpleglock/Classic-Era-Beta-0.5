@@ -1,0 +1,277 @@
+/* ════════════════════════════════════════════════════════════
+   ДОЗВЁЗДНЫЕ · ДОСЬЕ ДЕРЖАВЫ   (lore/precursor_memory.md, этап 5 §20)
+
+   Досье — не таблица цифр, а разворот книги: русло, крючки, силы, календарь.
+   Правил здесь нет ни строки: всё «как это работает» живёт в руководстве и
+   открывается окном по значку «?» (gbHelpOpen).
+
+   Акцент один — электрик-блю из токенов. Второй цвет (красный) допущен ровно
+   там, где речь о вскрытом надломе и чрезвычайщине: это тревога, а не украшение.
+   ════════════════════════════════════════════════════════════ */
+
+.pcs {
+  --pcs-line: var(--color-border-medium);
+  --pcs-hot:  hsl(var(--hue-red) var(--sat-red) 58%);
+  --pcs-cold: hsl(var(--hue-space) var(--sat-space) 46%);
+  --pcs-acc:  var(--color-accent);
+  display: flex; flex-direction: column; gap: 14px;
+  margin: 10px 0 4px;
+}
+
+/* ── общий заголовок раздела досье со значком справки ── */
+.pcs-hd {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: var(--text-xs); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--color-text-faint); border-bottom: 1px solid var(--color-border-subtle);
+  padding-bottom: 5px;
+}
+.pcs-hd b { color: var(--color-text-muted); font-weight: 600; letter-spacing: .1em; }
+.pcs-hd-sp { flex: 1; }
+.pcs-q {
+  flex: none; width: 17px; height: 17px; padding: 0; cursor: pointer;
+  border: 1px solid var(--color-border-medium); border-radius: 50%;
+  background: transparent; color: var(--color-text-faint);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color .16s, border-color .16s, transform .16s;
+}
+.pcs-q:hover { color: var(--color-accent); border-color: var(--color-accent); transform: scale(1.08); }
+.pcs-q svg { width: 11px; height: 11px; }
+
+/* ══ РУСЛО ══════════════════════════════════════════════════
+   Три полосы по вертикали: чрезвычайщина сверху, застой снизу.
+   Ширина русла = прочность, и это видно глазом. */
+.pcs-flow { position: relative; border: 1px solid var(--pcs-line); border-radius: var(--radius-md); overflow: hidden; }
+.pcs-band { position: relative; padding: 9px 12px; font-size: var(--text-xs); color: var(--color-text-faint); }
+.pcs-band + .pcs-band { border-top: 1px solid var(--color-border-subtle); }
+.pcs-band-emerg { background: linear-gradient(180deg, hsl(var(--hue-red) 40% 12%), transparent); }
+.pcs-band-stall { background: linear-gradient(0deg, hsl(var(--hue-space) 14% 12%), transparent); }
+.pcs-band-flow  { background: hsl(var(--hue-gold) 30% 11% / .5); }
+.pcs-band-nm { font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+.pcs-band.on .pcs-band-nm { color: var(--color-text); }
+.pcs-band.on.pcs-band-emerg .pcs-band-nm { color: var(--pcs-hot); }
+.pcs-band.on.pcs-band-flow  .pcs-band-nm { color: var(--color-accent); }
+.pcs-band-txt { margin-top: 2px; line-height: 1.35; }
+/* метка «они здесь» */
+.pcs-here {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--text-xs); color: var(--color-text-muted);
+}
+.pcs-here i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--color-accent);
+  box-shadow: 0 0 0 4px hsl(var(--hue-gold) var(--sat-gold) 52% / .16);
+}
+.pcs-band-emerg .pcs-here i { background: var(--pcs-hot); box-shadow: 0 0 0 4px hsl(var(--hue-red) var(--sat-red) 58% / .16); }
+
+/* три величины державы */
+.pcs-vals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pcs-val { display: flex; flex-direction: column; gap: 4px; }
+.pcs-val-k { font-size: var(--text-xs); color: var(--color-text-faint); letter-spacing: .06em; }
+.pcs-val-n { font-size: var(--text-lg); font-weight: 600; color: var(--color-text); line-height: 1; font-variant-numeric: tabular-nums; }
+.pcs-bar { height: 3px; border-radius: 2px; background: var(--color-border); overflow: hidden; }
+.pcs-bar i { display: block; height: 100%; background: var(--color-accent); transition: width .5s cubic-bezier(.2,.7,.2,1); }
+.pcs-bar.hot i { background: var(--pcs-hot); }
+.pcs-bar.grit i { background: hsl(var(--hue-cyan) var(--sat-cyan) 48%); }
+
+/* ══ КРЮЧКИ — интерфейс осторожности ═══════════════════════ */
+.pcs-hooks { display: flex; flex-wrap: wrap; gap: 6px; }
+.pcs-hook {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 9px 5px 7px; border-radius: 999px;
+  border: 1px solid var(--color-border); background: var(--color-surface-raised);
+  font-size: var(--text-xs); color: var(--color-text-faint);
+  cursor: default; transition: border-color .16s, color .16s, background .16s;
+}
+.pcs-hook svg { width: 13px; height: 13px; flex: none; opacity: .75; }
+.pcs-hook.on { color: var(--color-text); border-color: var(--color-border-strong); }
+.pcs-hook.on svg { opacity: 1; }
+.pcs-hook.open {
+  color: var(--pcs-hot); border-color: hsl(var(--hue-red) var(--sat-red) 58% / .5);
+  background: hsl(var(--hue-red) 40% 12%);
+}
+.pcs-hook.lived { color: var(--color-accent); border-color: hsl(var(--hue-gold) var(--sat-gold) 52% / .4); }
+.pcs-hook-w { opacity: .6; font-variant-numeric: tabular-nums; }
+
+/* ══ СИЛЫ ДЕРЖАВЫ ══════════════════════════════════════════ */
+.pcs-forces { display: flex; flex-direction: column; gap: 7px; }
+.pcs-force { display: grid; grid-template-columns: 92px 1fr 30px; align-items: center; gap: 9px; font-size: var(--text-xs); }
+.pcs-force-k { color: var(--color-text-muted); }
+.pcs-force-n { text-align: right; color: var(--color-text-faint); font-variant-numeric: tabular-nums; }
+.pcs-force .pcs-bar { height: 5px; }
+.pcs-force-keep .pcs-bar i { background: hsl(var(--hue-cyan) 45% 44%); }
+.pcs-force-cast .pcs-bar i { background: hsl(var(--hue-purple) 45% 52%); }
+.pcs-force-riot .pcs-bar i { background: var(--pcs-hot); }
+.pcs-accord { margin-top: 2px; font-size: var(--text-xs); color: var(--color-accent); }
+
+/* ══ КАЛЕНДАРЬ: год в 52 неделях, чёрные седмицы отмечены ══ */
+.pcs-year { display: flex; align-items: center; gap: 10px; }
+.pcs-weeks { display: grid; grid-template-columns: repeat(26, 1fr); gap: 2px; flex: 1; }
+.pcs-week { height: 12px; border-radius: 1px; background: var(--color-border-subtle); }
+.pcs-week.now { background: var(--color-accent); }
+.pcs-week.black { background: var(--pcs-hot); }
+.pcs-week.hidden { background: repeating-linear-gradient(45deg, var(--color-border-subtle) 0 2px, transparent 2px 4px); }
+.pcs-year-txt { font-size: var(--text-xs); color: var(--color-text-faint); max-width: 40%; line-height: 1.35; }
+
+/* ══ НУЖДА В ДВУХ СЛОЯХ ════════════════════════════════════ */
+.pcs-need { border: 1px solid var(--pcs-line); border-radius: var(--radius-md); padding: 11px 13px; }
+.pcs-need-said { font-size: var(--text-md); color: var(--color-text); }
+.pcs-need-said b { color: var(--color-accent); font-weight: 600; }
+.pcs-need-real { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--color-border); font-size: var(--text-sm); }
+.pcs-need-real.locked { color: var(--color-text-disabled); display: flex; align-items: center; gap: 7px; }
+.pcs-need-real.locked svg { width: 12px; height: 12px; flex: none; }
+.pcs-need-real b { color: hsl(var(--hue-purple) 50% 66%); }
+
+/* ══ ЛЕСТНИЦА ══════════════════════════════════════════════ */
+.pcs-steps { display: flex; flex-direction: column; gap: 12px; }
+.pcs-step-hd { display: flex; align-items: center; gap: 9px; }
+.pcs-step-n {
+  width: 20px; height: 20px; flex: none; border-radius: 50%;
+  border: 1px solid var(--color-border-medium); color: var(--color-text-faint);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-variant-numeric: tabular-nums;
+}
+.pcs-step.open .pcs-step-n { border-color: var(--color-accent); color: var(--color-accent); }
+.pcs-step-nm { font-size: var(--text-sm); letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-muted); }
+.pcs-step.open .pcs-step-nm { color: var(--color-text); }
+.pcs-step-why { font-size: var(--text-xs); color: var(--color-text-faint); margin-left: auto; text-align: right; max-width: 55%; }
+.pcs-acts { display: flex; flex-direction: column; gap: 5px; margin-top: 7px; }
+
+/* решение = строка, а не кнопка: имя, короткая суть, цена, действие */
+.pcs-act {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px;
+  padding: 9px 11px; border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  transition: border-color .16s, background .16s, transform .16s;
+}
+.pcs-act:not(.off):hover { border-color: var(--color-border-strong); transform: translateX(2px); }
+.pcs-act.off { opacity: .48; }
+.pcs-act-nm { font-size: var(--text-sm); color: var(--color-text); display: flex; flex-direction: column; gap: 2px; }
+.pcs-act-nm i { font-style: normal; font-size: var(--text-xs); color: var(--color-text-faint); line-height: 1.35; }
+/* причина отказа — не ошибка, а часть правил: её читают, а не ловят */
+.pcs-act-why { font-size: var(--text-xs); color: hsl(var(--hue-red) 45% 62%); line-height: 1.35; }
+.pcs-act-r { display: flex; align-items: center; gap: 9px; }
+.pcs-act-cost { font-size: var(--text-xs); color: var(--color-text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pcs-act-cost.poor { color: hsl(var(--hue-red) 45% 62%); }
+.pcs-act-dark { border-color: hsl(var(--hue-red) 40% 26%); }
+.pcs-act-dark .pcs-act-nm { color: hsl(var(--hue-red) 30% 78%); }
+
+/* ── образ появления: три вкладки над лестницей (§7.1) ── */
+.pcs-regs { display: flex; gap: 0; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.pcs-reg {
+  flex: 1; padding: 8px 6px; background: transparent; border: 0; cursor: pointer;
+  color: var(--color-text-faint); font-size: var(--text-xs); font-family: inherit;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  transition: background .16s, color .16s;
+}
+.pcs-reg + .pcs-reg { border-left: 1px solid var(--color-border); }
+.pcs-reg svg { width: 15px; height: 15px; opacity: .7; }
+.pcs-reg:hover { background: var(--color-surface-hover); color: var(--color-text-muted); }
+.pcs-reg.on { background: hsl(var(--hue-gold) 40% 14%); color: var(--color-accent); }
+.pcs-reg.on svg { opacity: 1; }
+.pcs-reg b { font-weight: 500; letter-spacing: .04em; }
+
+/* ══ ЛЕТОПИСЬ ══════════════════════════════════════════════ */
+.pcs-chron { display: flex; flex-direction: column; }
+.pcs-rec { display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 7px 0; border-top: 1px solid var(--color-border-subtle); }
+.pcs-rec:first-child { border-top: 0; }
+.pcs-rec-ph { font-size: var(--text-xs); color: var(--color-text-disabled); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.pcs-rec-tx { font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.5; }
+/* умолчание — обломок: курсив, сдвиг, обрезанный левый край */
+.pcs-rec-mute .pcs-rec-tx { font-style: italic; color: var(--color-text-disabled); padding-left: 12px; border-left: 2px solid var(--color-border); }
+/* запись-надлом стоит в настоящем времени и обязана выбиваться глазом */
+.pcs-rec-open { background: hsl(var(--hue-red) 40% 10% / .55); }
+.pcs-rec-open .pcs-rec-tx { color: hsl(var(--hue-red) 35% 76%); }
+.pcs-rec-open .pcs-rec-ph { color: var(--pcs-hot); }
+.pcs-rec-filled .pcs-rec-tx { color: var(--color-accent); }
+
+@media (max-width: 620px) {
+  .pcs-vals { grid-template-columns: 1fr 1fr; }
+  .pcs-force { grid-template-columns: 74px 1fr 28px; }
+  .pcs-weeks { grid-template-columns: repeat(13, 1fr); }
+  .pcs-year-txt { max-width: none; }
+  .pcs-act { grid-template-columns: 1fr; }
+  .pcs-act-r { justify-content: flex-end; }
+}
+
+/* ── недоимка: публичный реестр (§18) ─────────────────────── */
+/* Читается как ведомость, а не как шкала: имя, полоса, число, доля. */
+.pcs-arr { margin: 0 0 8px; }
+.pcs-arr.hot { border-color: hsl(var(--hue-red) var(--sat-red) 48% / .45); }
+.pcs-arr.hot .pcs-hd b { color: var(--pcs-hot); }
+.pcs-arr-lead { font-size: var(--text-xs); color: var(--color-text-faint); line-height: 1.45; }
+.pcs-arr-list { display: flex; flex-direction: column; gap: 5px; margin-top: 9px; }
+.pcs-arr-row { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr auto 34px;
+  align-items: center; gap: 9px; font-size: var(--text-xs); }
+.pcs-arr-row.me .pcs-arr-nm { color: var(--color-text); }
+.pcs-arr-nm { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcs-arr-nm i { color: var(--color-accent); font-style: normal; opacity: .8; }
+.pcs-arr-n { color: var(--color-text-faint); font-variant-numeric: tabular-nums; }
+.pcs-arr-sh { text-align: right; color: var(--color-text-disabled); font-variant-numeric: tabular-nums; }
+.pcs-arr-mine { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--text-xs); color: var(--color-text-faint); }
+.pcs-arr-mine b { color: var(--color-text); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 620px) {
+  .pcs-arr-row { grid-template-columns: minmax(70px, 1fr) 1fr auto 30px; gap: 6px; }
+}
+
+/* ── вставшие миры: держава или кризис (этап 12) ───────────── */
+/* Ведомость, а не витрина: имя, чем стал, что назначено ценой, что можно
+   сделать. Кризис отличается только цветом кромки — не иконкой тревоги. */
+.pcs-ris { margin: 0 0 8px; }
+.pcs-ris-list { display: flex; flex-direction: column; gap: 8px; margin-top: 9px; }
+.pcs-ris-row { padding: 8px 9px; border: 1px solid var(--color-border-subtle);
+  border-radius: 6px; background: var(--color-bg-subtle); }
+.pcs-ris-row.hot { border-color: hsl(var(--hue-red) var(--sat-red) 48% / .45); }
+.pcs-ris-top { display: flex; align-items: baseline; gap: 8px; }
+.pcs-ris-nm { color: var(--color-text); font-size: var(--text-sm); }
+.pcs-ris-nm i { color: var(--color-accent); font-style: normal; opacity: .8;
+  font-size: var(--text-xs); }
+.pcs-ris-fate { margin-left: auto; color: var(--color-text-muted);
+  font-size: var(--text-xs); letter-spacing: .06em; }
+.pcs-ris-lead { margin-top: 3px; font-size: var(--text-xs);
+  color: var(--color-text-faint); line-height: 1.45; }
+.pcs-ris-bar { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
+.pcs-ris-t { font-size: var(--text-xs); color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums; }
+.pcs-ris-t.hot { color: var(--pcs-hot); }
+.pcs-ris-t.ok { color: var(--color-accent); }
+.pcs-ris-act { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pcs-ris-act:empty { display: none; }
+
+/* ── ВКЛАДКИ КАРТОЧКИ МИРА ──────────────────────────────────
+   Карточка была лентой из десяти панелей подряд: паспорт, узы, беда, эпоха,
+   семь блоков досье, все решения и летопись — в один столбец, причём беда и
+   летопись по два раза. Теперь на экране всегда ОДНА вкладка.
+
+   Полоса вкладок прилипает к верху списка: игрок не должен листать обратно,
+   чтобы сменить раздел. Точка у вкладки значит «здесь ждут вас» — решение
+   линии или беда со сроком; ничего другого точкой не помечается. */
+.pc-tabs {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; gap: 2px; margin: 2px 0 12px;
+  border-bottom: 1px solid var(--color-border-medium);
+  /* Полоса ЛИПКАЯ, поэтому фон обязателен и обязательно из токенов: под
+     прозрачной полосой едет содержимое вкладки, и читаются оба слоя сразу. */
+  background: var(--color-bg);
+}
+.pc-tab {
+  position: relative; padding: 9px 14px; cursor: pointer;
+  font: inherit; font-size: var(--text-xs); letter-spacing: .12em;
+  text-transform: uppercase; white-space: nowrap;
+  background: transparent; color: var(--color-text-faint);
+  border: none; border-bottom: 2px solid transparent;
+}
+.pc-tab:hover { color: var(--color-text-muted); }
+.pc-tab.on { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+.pc-tab-dot {
+  display: inline-block; width: 5px; height: 5px; margin-left: 6px;
+  vertical-align: middle; border-radius: 50%;
+  background: hsl(var(--hue-red) var(--sat-red) 60%);
+}
+.pc-tabbody { display: flex; flex-direction: column; }
+
+@media (max-width: 760px) {
+  .pc-tabs { overflow-x: auto; }
+  .pc-tab { padding: 9px 10px; letter-spacing: .06em; }
+}

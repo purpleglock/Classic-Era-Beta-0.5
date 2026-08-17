@@ -45,6 +45,10 @@ const GM_ICO = {
   civs: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4L20 18H4z"/><path d="M7.6 13.2h8.8"/></svg>',
   nebula: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 14.6a3.2 3.2 0 011.1-5.4 4.4 4.4 0 018.2-2.1 3.6 3.6 0 014.9 2.2 3.3 3.3 0 01.4 6.4"/><circle cx="9" cy="12.4" r="0.9"/><circle cx="14.6" cy="10.4" r="0.7"/><path d="M6 18.4h12"/></svg>',
   march: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-14M12 20l4-14M20 20l-2-7"/><path d="M3 13h18"/></svg>',
+  // мегасооружение = три лепестка вокруг ядра (та же пластика, что у OG.guard)
+  mega: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.6"/><path d="M12 9.4V3.6M14.3 13.3l5 2.9M9.7 13.3l-5 2.9"/><path d="M9.4 4.6h5.2M17.6 14.4l2.6 4.5M6.4 14.4l-2.6 4.5"/></svg>',
+  // театр Легиона = клин ватаги на трассе (значок читается буквально: ход по маршруту)
+  theatre: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18.5c4-1 6.5-4 9-8"/><path d="M12.4 10.2l7.2-4.4-2.1 7.9-2.6-2.1z"/><circle cx="4.2" cy="19.3" r="1.2"/></svg>',
 };
 function gmCtlBtns(opts) {
   // Панель режимов карты: карточка со списком слоёв (иконка + подпись, чтобы было
@@ -63,6 +67,10 @@ function gmCtlBtns(opts) {
           <button class="gm-ctl gm-ctl-toggle${GM.ctlCollapsed ? ' gm-on' : ''}" id="gm-ctl-toggle" title="${GM.ctlCollapsed ? 'Показать панель' : 'Свернуть панель'}" onclick="gmToggleControls()">${GM_ICO.collapse}</button>
         </div>
         <div class="gm-ctl-group${GM.ctlCollapsed ? ' gm-collapsed' : ''}" id="gm-ctl-group">
+        <div class="gm-ctl-sec">Режим</div>
+        <button class="gm-ctl gm-ctl-row gm-ctl-theatre${GM.showTheatre ? ' gm-active' : ''}" id="gm-ctl-theatre"
+                title="Театр Легиона: гасит мирные слои и показывает ходы и манёвры пиратов" onclick="gmToggleTheatre()">
+          <span class="gm-ctl-ic">${GM_ICO.theatre}</span><span class="gm-ctl-lb">Театр Легиона</span></button>
         <div class="gm-ctl-sec">Слои</div>
         ${row('neb', GM.showNeb, GM_ICO.nebula, 'Туманности', 'gmToggleNebula()')}
         ${row('borders', GM.showBorders, GM_ICO.borders, 'Границы фракций', 'gmToggleBorders()')}
@@ -79,6 +87,7 @@ function gmCtlBtns(opts) {
         ${row('fleets', GM.showFleets, GM_ICO.fleeticon, 'Флоты', 'gmToggleFleets()')}
         ${row('armies', GM.showArmies, GM_ICO.march, 'Звёздный марш', 'gmToggleArmies()')}
         ${row('mines', GM.showMines, GM_ICO.mines, 'Заграждения', 'gmToggleMines()')}
+        ${row('mega', GM.showMega, GM_ICO.mega, 'Мегасооружения', 'gmToggleMega()')}
         ${row('civs', GM.showCivs, GM_ICO.civs, 'Дозвёздные миры', 'gmToggleCivs()')}
         ${tools.length ? `<div class="gm-ctl-sec">Инструменты</div>${tools.join('')}` : ''}
         <div class="gm-ctl-sec">Вид</div>
@@ -102,6 +111,7 @@ function gmToggleControls() {
 
 const GM = {
   systems: [], lanes: [], factions: [], sectors: [],
+  guardians: [],                 // МЕГАСООРУЖЕНИЯ: Посты Древних Стражей (guardian_posts, ихор)
   minefields: [], outposts: [], opShips: [], mzaShips: [], fleets: [], fleetsVis: [], mzaVis: [], armies: [],  // оборона: видимые поля/аванпосты + мои носители аванпостов + мои Факельщик + мои флоты + видимость чужих флотов/вскрытых факельщиков (через RPC)
   scale: 1, tx: 0, ty: 0,
   edit: false, mode: 'select',   // select | link | unlink | add | sector
@@ -114,7 +124,11 @@ const GM = {
   showBorders: true, showFlags: true, showSectors: true, fullscreen: false, ctlCollapsed: false,
   showOutposts: true, showFleets: true, // видимость аванпостов / флотов на карте
   showArmies: false,             // МАРШ: режим «Звёздный марш» — армии на колониях (по умолчанию ВЫКЛ)
-  showMines: false,              // режим отображения/управления минами (по умолчанию ВЫКЛ)
+  // Заграждения и мегасооружения: ДАННЫЕ видны всем державам (_defense_seeall.sql),
+  // но сами слои в «Режимах карты» по умолчанию ВЫКЛ — на обзоре это шум, включают,
+  // когда именно их и смотрят.
+  showMines: false,
+  showMega: false,
   showCivs: false,               // слой «Дозвёздные миры»: 🜃 над системами (по умолчанию ВЫКЛ)
   showUnions: false,             // режим отображения союзов (федерации/конфедерации)
   unions: null,                  // ленивая загрузка союзов: [{id,name,color,kind,fids:[]}] (null=не грузили)
@@ -123,6 +137,9 @@ const GM = {
   showOccup: false,              // ВОЙНА: слой «Оккупация» — флаги оккупантов над занятыми системами
   occup: null,                   // [{system_id,occupier,occupier_name,occupier_color,owner,...}] (RPC occupations_all; null=не грузили)
   blockedFids: null,             // fid фракций, закрывших границы для нас (RPC borders_blocked_fids)
+  showTheatre: false,            // ☠ РЕЖИМ «Театр Легиона» (гасит мирные слои, см. gmToggleTheatre)
+  theatre: null,                 // данные RPC legion_theatre() (null = не грузили)
+  thSel: null,                   // выбранная ватага (подсветка маршрута + строка в панели)
   showRes: false,                // режим «ресурсы систем»
   showEcon: false,               // режим «бедность» (просперити систем)
   resRarities: ['rare', 'epic', 'legendary'], // какие редкости показывать на карте
@@ -130,6 +147,7 @@ const GM = {
   myFid: null,                   // фракция игрока (для «развитости» СВОИХ колоний)
   devByCol: {},                  // colony_id -> сумма открытых слотов построек (только свои)
   bldByCol: {},                  // colony_id -> {btype: слоты} (только свои; для постройко-эффектов)
+  doomByCol: {},                 // colony_id -> Длань Неотвратимости (ВСЕХ держав: doom_guns публична)
 };
 
 function gmCanEdit() { return !!(user && ['superadmin', 'editor'].includes(user.role)); }
@@ -176,7 +194,7 @@ function gmExitEdit() {
 // ── Загрузка данных ─────────────────────────────────────────
 async function loadGalaxyData() {
   try {
-    const [sys, lanes, facs, secs, routes, econ, salvos, mines, drones, outposts, opShips, mzaShips, fleets, fleetsVis, mzaVis, armies] = await Promise.all([
+    const [sys, lanes, facs, secs, routes, econ, salvos, mines, drones, outposts, opShips, mzaShips, fleets, fleetsVis, mzaVis, armies, guards] = await Promise.all([
       dbGet('map_systems', 'select=*'),
       dbGet('map_hyperlanes', 'select=*'),
       dbGet('map_factions', 'select=*&order=sort.asc'),
@@ -203,6 +221,11 @@ async function loadGalaxyData() {
       user ? apiFetch('rpc/mza_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       // МАРШ: мои армии на колониях (таблицы может не быть — _wellbeing_armies.sql)
       user ? apiFetch('rpc/armies_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      // ПОСТЫ ДРЕВНИХ СТРАЖЕЙ (guardian_posts) — даллерианские мегасооружения из ихора.
+      // RPC существовала с самого _ichor_megastructures.sql, но её НЕ ЗВАЛА ни одна
+      // строка JS: на карте Стражей не было вообще. Видны всем (политика select true),
+      // поэтому грузим и гостям — угроза на трассе публична, как и залпы артиллерии.
+      apiFetch('rpc/guardian_posts_visible', { method: 'POST', body: '{}' }).catch(() => []),
     ]);
     GM.systems = (sys || []).map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
     GM._cbox = null; // сброс кэша области звёзд
@@ -219,6 +242,7 @@ async function loadGalaxyData() {
     GM.fleetsVis = Array.isArray(fleetsVis) ? fleetsVis : [];// флоты ВСЕХ держав (видимость; состав скрыт без разведки)
     GM.mzaVis = Array.isArray(mzaVis) ? mzaVis : [];      // ВСКРЫТЫЕ чужие факельщики
     GM.armies = Array.isArray(armies) ? armies : [];      // МАРШ: мои армии (гарнизоны/на марше)
+    GM.guardians = Array.isArray(guards) ? guards : [];   // МЕГАСООРУЖЕНИЯ: Посты Древних Стражей (ихор, видны всем)
     GM.sectors = (secs || []).map(s => ({ ...s, system_ids: s.system_ids || [] }));
     GM.econ = {};   // system_id → { status, prosperity } для режима «бедность»
     (econ || []).forEach(e => { if (e && e.system_id) GM.econ[e.system_id] = { status: e.status, prosperity: +e.prosperity }; });
@@ -255,6 +279,14 @@ async function loadGalaxyData() {
           (GM.civsBySys[c.system_id] = GM.civsBySys[c.system_id] || []).push(c);
         });
       } catch (e) { /* таблицы ещё нет — не мешаем карте */ }
+      // ДЛАНЬ НЕОТВРАТИМОСТИ: стоит на колонии и видна ВСЕМ — doom_guns читается
+      // публично намеренно («видна угроза», RLS в _interstellar_artillery.sql).
+      // Поэтому это единственная структура, которую рисуем и чужую тоже.
+      GM.doomByCol = {};
+      try {
+        const guns = await dbGetAll('doom_guns', 'select=colony_id,faction_id,system_id,integrity');
+        (guns || []).forEach(g => { if (g.colony_id) GM.doomByCol[g.colony_id] = g; });
+      } catch (e) { /* _interstellar_artillery.sql не накачен — Дланей нет */ }
       // МАРШ: тела систем (sys._bodies) могли закэшироваться ДО прихода колоний —
       // тогда у планет нет colId/isColony и армии не магнитятся к планетам. Сбрасываем.
       GM.systems.forEach(s => { s._bodies = null; });
@@ -692,11 +724,20 @@ function gmToggleArmies() {
   if (GM.showArmies && !(GM.armies || []).length) toast('Армий нет — сформируйте их в кабинете, вкладка «Военпром»', '');
   if (GMM.active) { GMM.dirty = true; gmmKick(); }
 }
-// Режим МИН: по умолчанию выключен. Мины (гексы у планет на глубоком зуме +
-// компактное кольцо на обзоре) рисуются и КЛИКАБЕЛЬНЫ только когда режим включён.
+// Режим МИН: по умолчанию ВЫКЛ. Заграждения всех держав теперь ВИДНЫ всем (сервер
+// больше не прячет чужие), но на обзоре это шум — слой включают, когда смотрят
+// именно оборону. В раскрытой системе заряды стоят своим кольцом за внешней орбитой.
 function gmToggleMines() {
   GM.showMines = !GM.showMines;
   document.getElementById('gm-ctl-mines')?.classList.toggle('gm-active', GM.showMines);
+  if (GMM.active) { GMM.dirty = true; gmmKick(); }
+}
+// Слой МЕГАСООРУЖЕНИЙ (Пост Древних Стражей). Раньше жил под тоглом мин: два
+// разных объекта на одном выключателе — погасив заграждения, игрок терял с карты
+// и мегасооружения, ничего об этом не зная. Теперь свой слой, тоже ВЫКЛ по умолчанию.
+function gmToggleMega() {
+  GM.showMega = !GM.showMega;
+  document.getElementById('gm-ctl-mega')?.classList.toggle('gm-active', GM.showMega);
   if (GMM.active) { GMM.dirty = true; gmmKick(); }
 }
 // Слой ДОЗВЁЗДНЫХ МИРОВ: по умолчанию ВЫКЛ — на общей карте это лишний шум,
@@ -2124,7 +2165,7 @@ function gmDefRpc(fn, body) {
 async function gmReloadDefense(reopenSysId) {
   if (!user) return;
   try {
-    const [mines, drones, outposts, ships, mzas, fleets, salvos, fleetsVis, mzaVis, armies, legion] = await Promise.all([
+    const [mines, drones, outposts, ships, mzas, fleets, salvos, fleetsVis, mzaVis, armies, legion, guards] = await Promise.all([
       gmDefRpc('minefields_visible').catch(() => GM.minefields || []),
       gmDefRpc('droneposts_visible').catch(() => GM.droneposts || []),
       gmDefRpc('outposts_visible').catch(() => GM.outposts || []),
@@ -2140,6 +2181,7 @@ async function gmReloadDefense(reopenSysId) {
       // Ступень (ghost/signature/resolved) считает сервер по моей сети застав —
       // клиент только рисует то, что ему выдали, и не знает большего.
       gmDefRpc('legion_contacts_visible').catch(() => GM.legion || []),
+      gmDefRpc('guardian_posts_visible').catch(() => GM.guardians || []),   // МЕГАСООРУЖЕНИЯ: Посты Стражей
     ]);
     GM.minefields = Array.isArray(mines) ? mines : [];
     GM.droneposts = Array.isArray(drones) ? drones : [];
@@ -2151,6 +2193,7 @@ async function gmReloadDefense(reopenSysId) {
     GM.mzaVis = Array.isArray(mzaVis) ? mzaVis : [];
     GM.armies = Array.isArray(armies) ? armies : (GM.armies || []);   // МАРШ
     GM.legion = Array.isArray(legion) ? legion : (GM.legion || []);   // ЛЕГИОН: сигнатуры
+    GM.guardians = Array.isArray(guards) ? guards : (GM.guardians || []);   // Посты Древних Стражей
     GM.salvos = Array.isArray(salvos) ? salvos : (GM.salvos || []);
     if (GMM.active) { gmmBuildDefense(); gmmBuildSalvos(); GMM.dirty = true; gmmKick(); }
     if (GM._rosterOn) gmRosterRender();   // живой список юнитов
@@ -2282,7 +2325,7 @@ function gmLegionSummary() {
     .sort((a, b) => new Date(a.eta || 0) - new Date(b.eta || 0));
 
   const rows = known.map(t => {
-    const sysName = (GM.systems.find(s => s.id === t.sys) || {}).name || t.sys || '?';
+    const sysName = t.sys_name || (GM.systems.find(s => s.id === t.sys) || {}).name || t.sys || '?';
     const name = t.grade === 'resolved'
       ? `${GM_LEGION_KIND[t.kind] || 'налёт'}${t.mine ? ' · по вам' : ''}`
       : 'Неопознанная сигнатура';
@@ -2315,6 +2358,400 @@ function gmHelp(key) { return (typeof gbHelpBtn === 'function') ? gbHelpBtn(key)
 function gmLegionGo(sysId) {
   if (!sysId) { toast('Направление неизвестно: сигнатура вскрыта только до сектора', 'info'); return; }
   gmmCenterSystem(sysId);
+}
+
+// ════════════════════════════════════════════════════════════
+//  ☠ ТЕАТР ЛЕГИОНА — отдельный РЕЖИМ карты (не ещё один слой)
+// ════════════════════════════════════════════════════════════
+// Обычная карта отвечает на вопрос «чья это земля». Театр — на другой: «что
+// сейчас делают пираты и куда пойдут дальше». Поэтому он не досыпает значков
+// поверх границ, а ГАСИТ мирный слой целиком (границы, сектора, флаги, ресурсы,
+// туманности) и оставляет звёзды как фон для чужого хода.
+//
+// ⚠ Режим НЕ всеведущ: данные приходят из legion_theatre(), просеянные через
+// осведомлённость державы (_legion_grade). Весь маршрут виден только по
+// resolved — то есть там, где стоит разведзастава с полным экипажем. Иначе
+// экран стал бы читом на бота, а сеть застав — украшением.
+const GM_TH = {
+  col:   [224, 92, 56],    // краска Легиона: ржавый оранжево-красный
+  hot:   [255, 128, 70],   // то, что идёт по вашу душу
+  KIND:  { strike: 'Удар по колонии', blind: 'Налёт на аванпост', probe: 'Разбой на трассе', levy: 'Сбор дани' },
+};
+function gmThRgba(c, a) { return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+
+// Вход/выход. Снимок мирных слоёв делаем ОДИН раз при входе и возвращаем как
+// было: игрок настраивал карту под себя, режим не имеет права это затирать.
+async function gmToggleTheatre() {
+  GM.showTheatre = !GM.showTheatre;
+  const wrap = document.getElementById('gm-wrap');
+  if (GM.showTheatre) {
+    GM._thSnap = {
+      borders: GM.showBorders, sectors: GM.showSectors, flags: GM.showFlags,
+      res: GM.showRes, econ: GM.showEcon, civs: GM.showCivs, mines: GM.showMines,
+      mega: GM.showMega, unions: GM.showUnions, blocked: GM.showBlocked,
+      occup: GM.showOccup, outposts: GM.showOutposts, fleets: GM.showFleets,
+      armies: GM.showArmies, neb: GM.showNeb,
+    };
+    GM.showBorders = GM.showSectors = GM.showFlags = GM.showRes = GM.showEcon = false;
+    GM.showCivs = GM.showMines = GM.showMega = GM.showUnions = false;
+    GM.showBlocked = GM.showOccup = GM.showArmies = GM.showNeb = false;
+    GM.showOutposts = GM.showFleets = false;   // свои значки тоже уводим: смотрим ЧУЖОЙ ход
+    wrap?.classList.add('gm-theatre');
+    await gmLoadTheatre();
+    // раз в минуту подтягиваем: сроки идут, ватаги садятся и встают
+    clearInterval(GM._thTimer);
+    GM._thTimer = setInterval(() => { if (GM.showTheatre) gmLoadTheatre(true); }, 60000);
+  } else {
+    const s = GM._thSnap || {};
+    GM.showBorders = s.borders !== false; GM.showSectors = s.sectors !== false;
+    GM.showFlags = s.flags !== false; GM.showRes = !!s.res; GM.showEcon = !!s.econ;
+    GM.showCivs = !!s.civs; GM.showMines = !!s.mines; GM.showMega = !!s.mega;
+    GM.showUnions = !!s.unions; GM.showBlocked = !!s.blocked; GM.showOccup = !!s.occup;
+    GM.showOutposts = s.outposts !== false; GM.showFleets = s.fleets !== false;
+    GM.showArmies = !!s.armies; GM.showNeb = s.neb !== false;
+    wrap?.classList.remove('gm-theatre');
+    clearInterval(GM._thTimer); GM._thTimer = null;
+    GM.thSel = null;
+  }
+  document.getElementById('gm-ctl-theatre')?.classList.toggle('gm-active', GM.showTheatre);
+  // Кнопки слоёв должны показывать ПРАВДУ: в режиме они погашены, при выходе
+  // возвращаются в то состояние, в котором игрок их оставил.
+  [['borders', 'showBorders'], ['sectors', 'showSectors'], ['flags', 'showFlags'],
+   ['res', 'showRes'], ['econ', 'showEcon'], ['civs', 'showCivs'], ['mines', 'showMines'],
+   ['mega', 'showMega'], ['unions', 'showUnions'], ['blocked', 'showBlocked'],
+   ['occup', 'showOccup'], ['outposts', 'showOutposts'], ['fleets', 'showFleets'],
+   ['armies', 'showArmies'], ['neb', 'showNeb']].forEach(([id, key]) => {
+    document.getElementById('gm-ctl-' + id)?.classList.toggle('gm-active', !!GM[key]);
+  });
+  document.getElementById('gm-wrap')?.classList.toggle('gm-show-res', GM.showRes);
+  document.getElementById('gm-wrap')?.classList.toggle('gm-show-econ', GM.showEcon);
+  document.getElementById('gm-svg')?.classList.toggle('gm-noborders', !GM.showBorders);
+  gmTheatreRender();
+  if (GMM.active) { gmmBuildTheatre(); gmmRaster(); }
+}
+
+async function gmLoadTheatre(silent) {
+  try {
+    const r = await gmDefRpc('legion_theatre');
+    GM.theatre = (r && r.ok) ? r : null;
+    if (!silent && GM.theatre && !(GM.theatre.moves || []).length)
+      toast('Легион затаился: ни одной вскрытой ватаги. Видно только напряжённость секторов', 'info');
+  } catch (e) {
+    GM.theatre = null;
+    if (!silent) toast('Театр Легиона недоступен: ' + e.message, 'err');
+  }
+  gmmBuildTheatre();
+  gmTheatreRender();
+  if (GMM.active) { GMM.dirty = true; gmmKick(); }
+}
+
+// Геометрия: маршруты в мировых координатах + позиция ватаги по расписанию узлов.
+// Считаем ОДИН раз на загрузку; в кадре двигается только метка (по времени).
+function gmmBuildTheatre() {
+  GMM.theatre = null;
+  if (!GM.showTheatre || !GM.theatre) return;
+  const byId = Object.fromEntries((GM.systems || []).map(s => [s.id, s]));
+  const moves = (GM.theatre.moves || []).map(m => {
+    const pts = (m.route || []).map(id => byId[id]).filter(Boolean);
+    const at = (m.route_at || []).map(x => Date.parse(x));
+    const tgt = byId[m.target_sys] || byId[m.sys] || null;
+    const here = byId[m.sys] || null;
+    // signature: полного пути нет, есть отрезок «где сейчас → куда следом»
+    const legA = m.leg && m.leg.at ? byId[m.leg.at] : null;
+    const legB = m.leg && m.leg.next ? byId[m.leg.next] : null;
+    return { ...m, pts, at, tgt, here, legA, legB };
+  }).filter(m => m.pts.length > 1 || m.here || m.legA);
+  const heat = [];
+  (GM.theatre.sectors || []).forEach(sec => {
+    (sec.systems || []).forEach(id => {
+      const s = byId[id]; if (s) heat.push({ x: s.x, y: s.y, h: +sec.heat || 0, name: sec.name });
+    });
+  });
+  GMM.theatre = {
+    moves, heat,
+    bands: (GM.theatre.bands || []).map(b => ({ ...b, s: byId[b.sys] })).filter(b => b.s),
+    lairs: (GM.theatre.lairs || []).map(l => ({ ...l, s: byId[l.sys] })).filter(l => l.s),
+    grudges: (GM.theatre.grudges || []).map(g => ({ ...g, s: byId[g.sys] })).filter(g => g.s),
+  };
+}
+
+// Доля пути, пройденная ватагой: по расписанию узлов, а не по «в среднем».
+function gmThProgress(m, now) {
+  if (!m.at || m.at.length < 2) return 0;
+  const a = m.at[0], b = m.at[m.at.length - 1];
+  if (!(b > a)) return 1;
+  return Math.max(0, Math.min(1, (now - a) / (b - a)));
+}
+// Точка на ломаной маршрута по доле u (равномерно по длине — глазу так ровнее).
+function gmThPointAt(pts, u) {
+  if (pts.length < 2) return pts[0] || { x: 0, y: 0 };
+  let total = 0; const seg = [];
+  for (let i = 1; i < pts.length; i++) {
+    const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    seg.push(d); total += d;
+  }
+  let want = u * total;
+  for (let i = 0; i < seg.length; i++) {
+    if (want <= seg[i] || i === seg.length - 1) {
+      const k = seg[i] ? want / seg[i] : 0;
+      return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * k,
+               y: pts[i].y + (pts[i + 1].y - pts[i].y) * k,
+               ang: Math.atan2(pts[i + 1].y - pts[i].y, pts[i + 1].x - pts[i].x) };
+    }
+    want -= seg[i];
+  }
+  return pts[pts.length - 1];
+}
+function gmThEta(iso) {
+  if (!iso) return '';
+  const ms = Date.parse(iso) - Date.now();
+  if (!(ms > 0)) return 'на месте';
+  const m = ms / 60000;
+  if (m < 60) return Math.max(1, Math.round(m)) + ' мин';
+  const h = m / 60;
+  return h < 48 ? ('~' + Math.round(h) + ' ч') : ('~' + Math.round(h / 24) + ' сут');
+}
+
+// ── Отрисовка театра. Живой слой, экранные координаты (как залпы артиллерии) ──
+function gmmPaintTheatre(ctx) {
+  const TH = GMM.theatre;
+  if (!GM.showTheatre || !TH) return;
+  const s = GMM.s, t = performance.now() / 1000, now = Date.now();
+  const SX = wx => wx * s + GMM.tx;
+  const SY = wy => gmmTY(wy * s + GMM.ty);
+  GMM.thHit = [];
+  ctx.save();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+  // 1) НАПРЯЖЁННОСТЬ: копилка сектора как багровая дымка над его системами.
+  // Не заливка полигона — режим намеренно без границ, а тепло должно читаться
+  // как «здесь зреет», а не как ещё одна нарезка карты.
+  TH.heat.forEach(p => {
+    if (p.h <= 0.02) return;
+    const x = SX(p.x), y = SY(p.y);
+    if (x < -200 || x > GMM.vw + 200 || y < -200 || y > GMM.vh + 200) return;
+    const R = 42 + 130 * Math.min(1, p.h) * Math.min(1.6, 0.5 + s * 0.35);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+    g.addColorStop(0, gmThRgba(GM_TH.col, 0.05 + 0.20 * p.h));
+    g.addColorStop(1, gmThRgba(GM_TH.col, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, R, 0, 6.2832); ctx.fill();
+  });
+
+  // 2) ЛОГОВА: откуда всё лезет. Ромб с шипами — статичный якорь режима.
+  TH.lairs.forEach(l => {
+    const x = SX(l.s.x), y = SY(l.s.y);
+    if (x < -40 || x > GMM.vw + 40 || y < -40 || y > GMM.vh + 40) return;
+    const r = 7;
+    ctx.strokeStyle = gmThRgba(GM_TH.col, 0.9); ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y - r - 4); ctx.lineTo(x, y - r);
+    ctx.moveTo(x - r - 4, y); ctx.lineTo(x - r, y);
+    ctx.moveTo(x + r + 4, y); ctx.lineTo(x + r, y);
+    ctx.stroke();
+  });
+
+  // 3) ОБИДЫ: за что Легион точит зуб именно на вас — тонкое кольцо на месте
+  // происшествия. Это ход ИГРОКА, ставший поводом для чужого хода.
+  TH.grudges.forEach(g => {
+    if (g.answered) return;
+    const x = SX(g.s.x), y = SY(g.s.y);
+    ctx.strokeStyle = 'rgba(255,196,96,0.5)'; ctx.lineWidth = 1;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath(); ctx.arc(x, y, 13, 0, 6.2832); ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // 4) ХОДЫ И МАНЁВРЫ — главное в режиме.
+  TH.moves.forEach(m => {
+    const mine = !!m.mine, col = mine ? GM_TH.hot : GM_TH.col;
+    const sel = GM.thSel === m.id;
+
+    if (m.pts.length > 1) {
+      // Пройденное — сплошной ржавый след, оставшееся — пунктир: ход виден
+      // насквозь, от логова до цели, вместе с тем, сколько ещё идти.
+      const u = gmThProgress(m, now);
+      const scr = m.pts.map(p => [SX(p.x), SY(p.y)]);
+      ctx.strokeStyle = gmThRgba(col, sel ? 0.5 : 0.3); ctx.lineWidth = sel ? 2 : 1.4;
+      ctx.setLineDash([6, 6]); ctx.lineDashOffset = -t * 12;
+      ctx.beginPath(); ctx.moveTo(scr[0][0], scr[0][1]);
+      for (let i = 1; i < scr.length; i++) ctx.lineTo(scr[i][0], scr[i][1]);
+      ctx.stroke(); ctx.setLineDash([]);
+
+      const head = gmThPointAt(m.pts, u), hx = SX(head.x), hy = SY(head.y);
+      ctx.strokeStyle = gmThRgba(col, sel ? 0.95 : 0.7); ctx.lineWidth = sel ? 2.4 : 1.8;
+      ctx.shadowColor = gmThRgba(col, 0.6); ctx.shadowBlur = sel ? 8 : 4;
+      ctx.beginPath(); ctx.moveTo(scr[0][0], scr[0][1]);
+      const passed = gmThPointAt(m.pts, u);
+      for (let i = 1; i < scr.length; i++) {
+        const d = Math.hypot(m.pts[i].x - m.pts[0].x, m.pts[i].y - m.pts[0].y);
+        const dh = Math.hypot(passed.x - m.pts[0].x, passed.y - m.pts[0].y);
+        if (d > dh) break;
+        ctx.lineTo(scr[i][0], scr[i][1]);
+      }
+      ctx.lineTo(hx, hy); ctx.stroke(); ctx.shadowBlur = 0;
+
+      // сама ватага — стрелка по ходу движения
+      gmThMarker(ctx, hx, hy, head.ang || 0, col, sel, m.stood);
+      GMM.thHit.push({ x: hx, y: hy, r: 14, id: m.id });
+
+      // ЦЕЛЬ: пунктирное кольцо + подпись срока. Пульс только у своей — чтобы
+      // «идут по вам» читалось раньше, чем игрок вчитается в подписи.
+      if (m.tgt) {
+        const tx = SX(m.tgt.x), ty = SY(m.tgt.y);
+        const pulse = mine ? (0.6 + 0.4 * Math.sin(t * 2.4)) : 0.75;
+        ctx.strokeStyle = gmThRgba(col, 0.9 * pulse); ctx.lineWidth = 1.6;
+        ctx.setLineDash([5, 4]); ctx.lineDashOffset = -t * 8;
+        ctx.beginPath(); ctx.arc(tx, ty, 16, 0, 6.2832); ctx.stroke();
+        ctx.setLineDash([]);
+        gmThLabel(ctx, tx, ty - 26,
+          (GM_TH.KIND[m.kind] || 'налёт') + ' · ' + gmThEta(m.eta), col, mine);
+      }
+    } else if (m.legA) {
+      // signature: известен только отрезок. Честно рисуем короткую стрелку —
+      // «идёт отсюда туда», без выдуманной цели.
+      const ax = SX(m.legA.x), ay = SY(m.legA.y);
+      const bx = m.legB ? SX(m.legB.x) : ax, by = m.legB ? SY(m.legB.y) : ay;
+      const ang = Math.atan2(by - ay, bx - ax);
+      ctx.strokeStyle = gmThRgba(col, 0.35); ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 5]); ctx.lineDashOffset = -t * 10;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.setLineDash([]);
+      gmThMarker(ctx, ax, ay, ang, col, GM.thSel === m.id, false);
+      GMM.thHit.push({ x: ax, y: ay, r: 14, id: m.id });
+      gmThLabel(ctx, ax, ay - 24, 'сигнатура · ' + gmThEta(m.eta), col, false);
+    } else if (m.here) {
+      const x = SX(m.here.x), y = SY(m.here.y);
+      gmThMarker(ctx, x, y, 0, col, GM.thSel === m.id, m.stood);
+      GMM.thHit.push({ x, y, r: 14, id: m.id });
+    }
+  });
+
+  // 5) ВСТАВШИЕ ВАТАГИ: то, что уже висит над системой и само не уйдёт.
+  TH.bands.forEach(b => {
+    const x = SX(b.s.x), y = SY(b.s.y);
+    const pulse = 0.55 + 0.45 * Math.sin(t * 1.8);
+    ctx.strokeStyle = gmThRgba(GM_TH.hot, 0.85 * pulse); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, 19, 0, 6.2832); ctx.stroke();
+    ctx.strokeStyle = gmThRgba(GM_TH.hot, 0.35); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, y, 24, 0, 6.2832); ctx.stroke();
+    gmThLabel(ctx, x, y - 34, 'ватага стоит · ' + (+b.ships || 1) + ' кор.', GM_TH.hot, true);
+  });
+
+  ctx.restore();
+}
+// Метка ватаги: клин по ходу движения (стоящая — квадрат в кольце).
+function gmThMarker(ctx, x, y, ang, col, sel, stood) {
+  ctx.save(); ctx.translate(x, y);
+  if (!stood) ctx.rotate(ang);
+  ctx.shadowColor = gmThRgba(col, 0.8); ctx.shadowBlur = sel ? 10 : 5;
+  ctx.fillStyle = gmThRgba(col, 0.95);
+  ctx.beginPath();
+  if (stood) { ctx.rect(-4.5, -4.5, 9, 9); }
+  else { ctx.moveTo(8, 0); ctx.lineTo(-5, 5); ctx.lineTo(-2.5, 0); ctx.lineTo(-5, -5); ctx.closePath(); }
+  ctx.fill(); ctx.shadowBlur = 0;
+  if (sel) {
+    ctx.strokeStyle = 'rgba(255,240,225,0.9)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, 0, 12, 0, 6.2832); ctx.stroke();
+  }
+  ctx.restore();
+}
+// Подпись у метки: без плашек-панелей, в языке карты — короткая строка с тенью.
+function gmThLabel(ctx, x, y, text, col, bold) {
+  ctx.save();
+  ctx.font = (bold ? '600 ' : '') + '11px Rajdhani, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 12;
+  ctx.fillStyle = 'rgba(8,10,16,0.72)';
+  ctx.beginPath(); ctx.rect(x - w / 2, y - 8, w, 16); ctx.fill();
+  ctx.strokeStyle = gmThRgba(col, 0.45); ctx.lineWidth = 1;
+  ctx.strokeRect(x - w / 2, y - 8, w, 16);
+  ctx.fillStyle = gmThRgba(col, 1);
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+// Клик по метке ватаги на карте (перехватывается в gmmTapAt, пока режим включён).
+function gmThHitAt(lx, ly) {
+  const hits = GMM.thHit || [];
+  for (let i = hits.length - 1; i >= 0; i--) {
+    if (Math.hypot(lx - hits[i].x, ly - hits[i].y) <= hits[i].r) return hits[i].id;
+  }
+  return null;
+}
+function gmTheatreSel(id) {
+  GM.thSel = (GM.thSel === id) ? null : id;
+  const m = (GMM.theatre?.moves || []).find(x => x.id === GM.thSel);
+  if (m && (m.tgt || m.here)) gmmCenterSystem((m.tgt || m.here).id);
+  GMM.dirty = true; gmmKick();
+  gmTheatreRender();
+}
+
+// ── Боковая панель режима: расклад словами + легенда ──
+function gmTheatreRender() {
+  const el = document.getElementById('gm-theatre'); if (!el) return;
+  if (!GM.showTheatre) { el.classList.add('gm-hidden'); return; }
+  const d = GM.theatre;
+  if (!d) {
+    el.innerHTML = `<div class="gm-r-bar"><span class="gm-r-title">☠ Театр Легиона</span>
+        <button class="gm-close" onclick="gmToggleTheatre()">✕</button></div>
+      <div class="gm-roster-empty">Нет данных. Режим доступен державе с одобренной анкетой.</div>`;
+    el.classList.remove('gm-hidden'); return;
+  }
+  const w = d.wrath;
+  const wrath = w ? `<div class="gm-th-wrath gm-th-w-${(+w.aggro >= 25) ? 'hot' : 'calm'}">
+      <span class="gm-th-wl">Гнев Легиона на вас</span>
+      <span class="gm-th-wv">${esc(w.band)} · ${+w.aggro}</span>
+      ${w.reason ? `<span class="gm-th-wr">${esc(w.reason)}</span>` : ''}</div>`
+    : `<div class="gm-th-wrath gm-th-w-calm"><span class="gm-th-wl">Гнев Легиона на вас</span>
+      <span class="gm-th-wv">тихо · 0</span></div>`;
+
+  const moves = (d.moves || []).slice().sort((a, b) => new Date(a.eta || 0) - new Date(b.eta || 0));
+  const rows = moves.map(m => {
+    const known = m.grade === 'resolved';
+    const name = known ? (GM_TH.KIND[m.kind] || 'налёт') : 'Неопознанная сигнатура';
+    const where = known
+      ? `${esc(m.target_name || m.sys_name || '?')}${m.from_sys ? ' ← ' + esc((GM.systems.find(s => s.id === m.from_sys) || {}).name || m.from_sys) : ''}`
+      : (m.sys_name ? esc(m.sys_name) : `сектор ${esc(m.sector || '?')}`);
+    const tags = [];
+    if (m.stood) tags.push('<span class="gm-r-tag gm-r-threat">стоит</span>');
+    if (m.mine) tags.push('<span class="gm-r-tag gm-r-threat">по вам</span>');
+    if (known) tags.push(`<span class="gm-r-tag">${+m.ships || 1} кор.</span>`);
+    else if (m.band) tags.push(`<span class="gm-r-tag">${esc(m.band)}</span>`);
+    return `<button class="gm-r-row${GM.thSel === m.id ? ' gm-r-sel' : ''}" onclick="gmTheatreSel('${esc(m.id)}')">
+        <span class="gm-r-ico">☠</span>
+        <span class="gm-r-main"><span class="gm-r-name">${esc(name)}</span>
+          <span class="gm-r-where">${where} · ${gmThEta(m.eta)}</span></span>
+        <span class="gm-r-tags">${tags.join('')}</span>
+      </button>`;
+  }).join('');
+
+  // Сектора: где зреет следующий удар. Копилка в процентах от цены удара —
+  // это и есть «потенциальный ход», ещё не ставший ватагой.
+  const secs = (d.sectors || []).slice().sort((a, b) => b.heat - a.heat).map(s => {
+    const pc = Math.round(s.heat * 100);
+    return `<div class="gm-th-sec"><span class="gm-th-sn">${esc(s.name)}</span>
+        <span class="gm-th-bar"><i style="width:${pc}%"></i></span>
+        <span class="gm-th-sv">${pc}%</span></div>`;
+  }).join('');
+
+  el.innerHTML = `<div class="gm-r-bar"><span class="gm-r-title">☠ Театр Легиона</span>
+      <button class="gm-close" onclick="gmToggleTheatre()">✕</button></div>
+    ${wrath}
+    <div class="gm-r-group"><div class="gm-r-head">Ходы и манёвры</div>
+      ${rows || '<div class="gm-r-hint">Ни одной вскрытой ватаги. Разведзастава с полным экипажем вскрывает замысел и весь маршрут.</div>'}</div>
+    <div class="gm-r-group"><div class="gm-r-head">Где зреет удар</div>
+      ${secs || '<div class="gm-r-hint">Секторов под наблюдением нет.</div>'}
+      <div class="gm-r-hint">Копилка сектора в долях от цены удара: 100% — ватага выходит.</div></div>
+    <div class="gm-th-leg">
+      <span><i class="gm-th-k1"></i>ватага в пути</span>
+      <span><i class="gm-th-k2"></i>встала в системе</span>
+      <span><i class="gm-th-k3"></i>логово</span>
+      <span><i class="gm-th-k4"></i>ваш след (обида)</span>
+    </div>`;
+  el.classList.remove('gm-hidden');
 }
 
 // ── Командная плашка носителя (клик по нему на карте) ──
@@ -3613,6 +4050,13 @@ async function gmPrimSpawnHere(sysId) {
   }
   if (!civ) { toast('На этом теле цивилизация не зажигается — выбери другое', 'err'); return; }
   civ.system_name = sys.name;
+  // §14.2 мир приходит с историей: якорь ставится ОДИН раз и неизменен, и на нём
+  // стоит вся вычисляемая жизнь державы (§19). Без него мир остаётся без досье —
+  // ровно так «Горнла» и приехала на старой карточке.
+  if (window.PrecursorSim) {
+    civ.anchor = PrecursorSim.anchor(civ, { cards: Precursors.CARDS });
+    civ.anchor_at = new Date().toISOString();
+  }
   if (!confirm(`Поселить на «${p.name}»?\n\n${civ.self_name} · ${civ.races.join(' + ')}\n`
     + `${(Precursors.PHASES[civ.phase] || {}).name || '?'} · ${civ.ideology} · ${civ.gov}\n`
     + `До звёздного полёта шагов: ${civ.roadmap.length}`)) return;
@@ -3881,7 +4325,7 @@ async function gmPrimApplyAll() {
   let have = [];
   let hasRoadmap = true;
   try {
-    have = await dbGet('primitive_civs', 'select=system_id,pid,phase,roadmap,state_name') || [];
+    have = await dbGet('primitive_civs', 'select=system_id,pid,phase,roadmap,state_name,anchor,scars,chronicle,env,tier,wellbeing,seed') || [];
   } catch (e) {
     hasRoadmap = false;
     try { have = await dbGet('primitive_civs', 'select=system_id,pid') || []; }
@@ -3893,6 +4337,13 @@ async function gmPrimApplyAll() {
   (GM.sectors || []).forEach(s => (s.system_ids || []).forEach(id => { secOf[id] = s.name; }));
   const src = GM.systems.map(s => ({ ...s, sector_name: secOf[s.id] || '' }));
   const rolled = Precursors.generateAll(src, { seed: 'v1', density: 32 });
+  // §14.2 мир приходит с историей, а не с мешком шрамов: 3–7 надломов по правилу
+  // дозы, чёрные седмицы, начальное русло. Якорь ставится ОДИН раз и неизменен —
+  // на нём стоит вся вычисляемая жизнь державы (§19).
+  if (window.PrecursorSim) rolled.forEach(c => {
+    c.anchor = PrecursorSim.anchor(c, { cards: Precursors.CARDS });
+    c.anchor_at = new Date().toISOString();
+  });
   const fresh = rolled.filter(c => !taken.has(c.system_id + ':' + c.pid));
   // Старые строки (заселены до этапа 4) не знают своего будущего: у них пустой
   // roadmap, и недельный ход шёл бы по скупому запасному банку из SQL. Прокатываем
@@ -3901,7 +4352,7 @@ async function gmPrimApplyAll() {
   rolled.forEach(c => { byKey[c.system_id + ':' + c.pid] = c; });
   const patch = !hasRoadmap ? [] : have.filter(r => {
     const g = byKey[r.system_id + ':' + r.pid];
-    return g && (!Array.isArray(r.roadmap) || !r.roadmap.length);
+    return g && ((!Array.isArray(r.roadmap) || !r.roadmap.length) || !r.anchor);
   });
   if (!fresh.length && !patch.length) { toast('Новых цивилизаций не выпало — всё уже заселено', 'ok'); return; }
   const byTier = fresh.reduce((a, c) => { a[c.tier] = (a[c.tier] || 0) + 1; return a; }, {});
@@ -3916,9 +4367,16 @@ async function gmPrimApplyAll() {
       const g = byKey[r.system_id + ':' + r.pid];
       // будущее считаем от ФАКТИЧЕСКОЙ фазы в базе (её мог сдвинуть игрок)
       const road = (g.roadmap || []).filter(e => e.ignite || (+e.i) > (+r.phase || 0));
+      const body = { roadmap: road, state_name: r.state_name || g.state_name, state_color: g.state_color };
+      // Якорь дописываем ТОЛЬКО тем, у кого его нет: он неизменен, и попытка
+      // переписать существующий упрётся в триггер _pc_anchor_guard (§19).
+      if (!r.anchor && window.PrecursorSim) {
+        // считаем от ФАКТИЧЕСКОЙ строки в базе: её фазу и летопись мог сдвинуть игрок
+        body.anchor = PrecursorSim.anchor({ ...g, ...r }, { cards: Precursors.CARDS });
+        body.anchor_at = new Date().toISOString();
+      }
       await dbPatch('primitive_civs',
-        `system_id=eq.${encodeURIComponent(r.system_id)}&pid=eq.${+r.pid}`,
-        { roadmap: road, state_name: r.state_name || g.state_name, state_color: g.state_color });
+        `system_id=eq.${encodeURIComponent(r.system_id)}&pid=eq.${+r.pid}`, body);
       done++;
     }
     toast(`Заселено миров: ${fresh.length}${done ? `, дописано будущее: ${done}` : ''}`, 'ok');
@@ -4065,6 +4523,7 @@ function gmmRender(host) {
       <div id="gm-panel" class="gm-hidden"></div>
       <div id="gm-form" class="gm-hidden"></div>
       <div id="gm-roster" class="gm-hidden"></div>
+      <div id="gm-theatre" class="gm-hidden"></div>
       <div id="gm-civlist" class="gm-hidden"></div>
       <div id="gm-opcmd" class="gm-hidden"></div>
     </div>`;
@@ -4541,6 +5000,12 @@ function gmmTapAt(lx, ly) {
   const sysAtScreen = () => gmmSysAtScreen(lx, ly);
   // ── РЕДАКТОР КАРТЫ: включённые инструменты перехватывают клик ──
   if (GM.editSession && GM.edit) { gmmEditTap(lx, ly); return; }
+  // ── ☠ ТЕАТР ЛЕГИОНА: тап по метке ватаги выбирает её ход (маршрут + строка
+  // в панели). Мимо метки — обычная навигация по карте, режим её не отбирает.
+  if (GM.showTheatre) {
+    const th = gmThHitAt(lx, ly);
+    if (th) { gmTheatreSel(th); GMM.lastTap = 0; return; }
+  }
   // 0а) РЕЖИМ ВЫБОРА СИСТЕМЫ. Карту встраивают чужие экраны (колонизация в
   // новелле на телефоне — render.js _heroColonyPhoneBuild): там нужен не
   // «паспорт системы», а выбор цели. Тап отдаём хозяину экрана, панель карты
@@ -4780,6 +5245,7 @@ function gmmBlit() {
   gmmPaintMzaRange(ctx); // сетка радиуса залпа Факельщика (режим наведения)
   gmmPaintOrbits(ctx);   // живой оверлей анимированных систем (на глубоком зуме)
   gmmPaintDeepFx(ctx);   // HUD-переход «вход в систему»: рамка/скобки/скан/импульс
+  gmmPaintTheatre(ctx);  // ☠ РЕЖИМ «Театр Легиона»: ходы и манёвры пиратов (поверх всего)
   gmmPaintDefense(ctx);  // оборона: аванпосты/носители — ПОВЕРХ орбит, иначе на глубоком
   // зуме большая планета/корона звезды перекрывают значки
 }
@@ -5473,6 +5939,8 @@ function gmStarGlow(tp) { return GMM_STAR_GLOW[tp] || '255,210,150'; }
 function gmmPaintOrbits(ctx) {
   GMM.focusFx = null;               // геометрия системы в фокусе — для HUD-перехода (gmmPaintDeepFx)
   GMM.colonyXY = {};                // МАРШ: экранные позиции планет-колоний (colId → {x,y,r}) — армии магнитятся к ним
+  GMM.sysGeo = {};                  // геометрия раскрытых систем (sys.id → {cx,cy,starR,rMax,rOuter,gz,tilt})
+  GMM.nemSys = {};                  // системы с Ожерельем Немезиды (sys.id → цвет державы)
   const a = gmmDeepA();
   if (a <= 0.01) return;
   const s = GMM.s, tx = GMM.tx, ty = GMM.ty;
@@ -5602,6 +6070,11 @@ function gmmPaintOrbits(ctx) {
     const owner = sys.faction ? (gmFaction(sys.union_origin || sys.faction) || gmFaction(sys.faction)) : null;
     const terr = owner ? gmRgb(gmReadable(owner.color)) : [120, 150, 205];
     if (isFocus) GMM.focusFx = { cx, cy, rMax, color: terr };   // для HUD-перехода входа в систему
+    // ГЕОМЕТРИЯ СИСТЕМЫ для слоёв, которые рисуются ПОСЛЕ орбит (оборона): мины и
+    // мегасооружения должны стоять ВНУТРИ системы, на своём кольце за внешней
+    // орбитой, а не значком над звездой. Без этого слепка gmmPaintDefense знает
+    // только мировые координаты звезды и вынужден рисовать схему сбоку.
+    GMM.sysGeo[sys.id] = { cx, cy, starR, rMax, rOuter: rOuterMain, gz, tilt: TILT };
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     // Свечение домена ХУГАЕТ саму систему, а не всю ячейку. Раньше тянули до дальнего
@@ -5763,7 +6236,7 @@ function gmmPaintOrbits(ctx) {
       }
 
       // ── «признаки жизни» колонизированного мира (базовый слой) — на мёртвом мире нет ──
-      if (p.isColony && !isAnom && !p.dead) { gmmBodyLife(ctx, px, py, sz, p, a, t, cx, cy); colPos.push({ px, py }); }
+      if (p.isColony && !isAnom && !p.dead) { gmmBodyLife(ctx, px, py, sz, p, a, t, cx, cy, sys); colPos.push({ px, py }); }
       // МАРШ: запоминаем экранную позицию планеты-колонии — армии рисуются у неё, а не у звезды
       if (p.isColony && !isAnom && p.colId) GMM.colonyXY[p.colId] = { x: px, y: py, r: sz };
 
@@ -6037,7 +6510,7 @@ function gmmPaintOrbits(ctx) {
         const ang = bi * 2.39996 + t * 0.06 + ci;   // мини-системы вращаются чуть живее
         const px2 = ccx + Math.cos(ang) * rr, py2 = ccy + Math.sin(ang) * rr * TILT;
         gmmPaintBody(ctx, px2, py2, sz, p, zc, a, t, ccx, ccy);
-        if (p.isColony && !p.dead) { gmmBodyLife(ctx, px2, py2, sz, p, a, t, ccx, ccy); }
+        if (p.isColony && !p.dead) { gmmBodyLife(ctx, px2, py2, sz, p, a, t, ccx, ccy, sys); }
         if (p.isColony && p.colId) GMM.colonyXY[p.colId] = { x: px2, y: py2, r: sz };
         if (GM.showRes && !p.dead) gmmPaintPlanetRes(ctx, px2, py2, sz, p, a);
         if (isFocus && p.name) cLabels.push({ p, ang, rr, sz });
@@ -6104,7 +6577,7 @@ function gmmColonyTint(bld) {
 // сонар Научного института, патрули Центра подготовки, теневые запуски спецслужб.
 // Данные чужих не грузим (разведданные) → для них только базовый слой в цвете фракции.
 // Интенсивность («развитость») — по сумме слотов своих, иначе по статусу (столица>колония).
-function gmmBodyLife(ctx, px, py, sz, body, a, t, cx, cy) {
+function gmmBodyLife(ctx, px, py, sz, body, a, t, cx, cy, sys) {
   const cap = !!body.isCapital, ph = gmmBodyPhase(body);
   const bld = (GM.bldByCol && body.colId) ? GM.bldByCol[body.colId] : null;  // только свои колонии
   const fac = body.faction_id ? gmFaction(body.faction_id) : null;
@@ -6169,25 +6642,115 @@ function gmmBodyLife(ctx, px, py, sz, body, a, t, cx, cy) {
   }
   ctx.restore();
 
-  // ── СПУТНИКИ: 1–3 точки на круговой орбите ──
-  const moons = 1 + Math.round(dev * 2);
-  const orbR = sz * 1.45; // Спутники прижаты ближе к планете
-  const spd = 0.22 + dev * 0.12;
-  for (let k = 0; k < moons; k++) {
-    const aa = ph + k * (6.2832 / moons) + t * spd * (k % 2 ? -1 : 1);
-    const mx = px + Math.cos(aa) * orbR, my = py + Math.sin(aa) * orbR * 0.6;
-
-    // Спутник уходит в тень планеты/выходит на свет
-    const mdot = Math.cos(aa) * ldx + Math.sin(aa) * ldy * 0.6;
-    const mlit = Math.max(0.15, 0.5 + mdot * 0.5);
-
-    ctx.globalAlpha = a * mlit;
-    ctx.fillStyle = cap ? '#ffe7a8' : `rgb(${lr},${lg},${lb})`;
-    ctx.beginPath(); ctx.arc(mx, my, 1.2, 0, 6.2832); ctx.fill();
-  }
+  // ── ОРБИТАЛЬНАЯ СЕТЬ: спутники связи + структуры построек ──
+  // Раньше это были точки 1.2 px: «что-то живое рядом» читалось, а ЧТО именно —
+  // нет. Теперь каждая структура рисуется своим силуэтом (OG), а точка осталась
+  // заглушкой на дальнем зуме, где силуэт всё равно не разобрать.
+  gmmOrbitalRig(ctx, px, py, sz, body, bld, dev, [r, g, b], ph, a, t, ldx, ldy, cap, sys);
 
   // ── ПОСТРОЙКО-ТОЧНЫЕ эффекты (только свои колонии: есть bld) ──
   if (bld) gmmColonySpecials(ctx, px, py, sz, bld, ph, a, t, ldx, ldy);
+  ctx.globalAlpha = 1;
+}
+
+// ОРБИТАЛЬНАЯ ГРУППИРОВКА КОЛОНИИ.
+// Что где висит:
+//   · сеть спутников связи — у всех колоний, число по развитости (базовый слой,
+//     для чужих держав это ЕДИНСТВЕННОЕ, что видно: состав построек — разведданные);
+//   · структуры построек — только свои колонии (bld): обсерватория, грузовой
+//     терминал, верфь-стапель, оборонный спутник, звёздная база.
+// Спутники сидят на ближней орбите, тяжёлые структуры — на дальней, чтобы не
+// сваливались в кучу. Все довёрнуты ПО КАСАТЕЛЬНОЙ к своей орбите (эллипс сжат
+// по Y, поэтому угол берём из производной эллипса, а не из угла точки).
+// mega:true — МЕГАСООРУЖЕНИЕ. Такое стоит НА СВОЁМ ОБЪЕКТЕ И НЕПОДВИЖНО: это не
+// спутник, а сооружение размером с город, у него нет причин ползти по орбите.
+// Обычные структуры по-прежнему еле смещаются (живая система).
+const GMM_ORB_RIG = [                          // btype → вид структуры (порядок = приоритет показа)
+  { keys: ['starbase'], kind: 'base', h: 1.30 },
+  { keys: ['shipyard'], kind: 'dock', h: 1.15 },
+  { keys: ['science', 'sci_giant', 'sci_anomaly'], kind: 'obs', h: 1.00 },
+  { keys: ['trade', 'warehouse', 'market'], kind: 'cargo', h: 1.00 },
+  { keys: ['abm', 'flak'], kind: 'battery', h: 0.95 },
+  { keys: ['shellforge'], kind: 'shell', h: 1.40, mega: true },   // Арсенал Судного Дня
+  { keys: ['ballfab'], kind: 'ball', h: 1.35, mega: true },       // Баллистический военпромзавод
+];
+function gmmOrbitalRig(ctx, px, py, sz, body, bld, dev, col, ph, a, t, ldx, ldy, cap, sys) {
+  const TILTY = 0.6;                            // сжатие орбиты по Y (как у планетных орбит)
+  const [r, g, b] = col;
+  const lr = Math.min(255, r + 90), lg = Math.min(255, g + 90), lb = Math.min(255, b + 70);
+  // Точка на орбите + касательная В ЭКРАННЫХ координатах (грабля №2: угол точки
+  // ≠ угол хода, если орбита сжата).
+  const at = (aa, R) => {
+    const x = px + Math.cos(aa) * R, y = py + Math.sin(aa) * R * TILTY;
+    const ang = Math.atan2(Math.cos(aa) * TILTY, -Math.sin(aa));
+    const dot = Math.cos(aa) * ldx + Math.sin(aa) * ldy * TILTY;   // в тени планеты или на свету
+    return { x, y, ang, lit: Math.max(0.25, 0.55 + dot * 0.45) };
+  };
+
+  // ── СПУТНИКИ СВЯЗИ ──
+  const sats = 1 + Math.round(dev * 2);
+  const satR = sz * 1.45, satH = Math.max(10, Math.min(20, sz * 0.75));
+  const spd = 0.22 + dev * 0.12;
+  const satTile = gmmOrbTile('sat', col, satH);
+  for (let k = 0; k < sats; k++) {
+    const aa = ph + k * (6.2832 / sats) + t * spd * (k % 2 ? -1 : 1);
+    const P = at(aa, satR);
+    if (satTile) gmmBlitTile(ctx, satTile, P.x, P.y, P.ang, a * P.lit);
+    else {                                      // дальний зум — прежняя точка
+      ctx.globalAlpha = a * P.lit;
+      ctx.fillStyle = cap ? '#ffe7a8' : `rgb(${lr},${lg},${lb})`;
+      ctx.beginPath(); ctx.arc(P.x, P.y, 1.2, 0, 6.2832); ctx.fill();
+    }
+  }
+
+  const bigR = sz * 2.15;                       // дальняя орбита — тяжёлые узлы
+  // ── ДЛАНЬ НЕОТВРАТИМОСТИ ──
+  // Рисуется у ЛЮБОЙ державы, не только своей: doom_guns читается публично
+  // намеренно — «видна угроза». Ствол докрашен жаром, тон корпуса — тревожно-
+  // красный вне зависимости от цвета державы: это орудие, выжигающее планеты.
+  const gun = (body.colId && GM.doomByCol) ? GM.doomByCol[body.colId] : null;
+  if (gun) {
+    // НЕПОДВИЖНА: орудие пристреляно к своей планете, а не летает вокруг неё
+    const P = at(ph, bigR * 1.12);
+    const h = Math.max(12, Math.min(38, sz * 1.35));
+    const dcol = [214, 96, 74];
+    const tile = gmmOrbTile('doom', dcol, h);
+    if (tile) {
+      // тлеющий отблеск камеры заряда: заметно даже краем глаза, но БЕЗ градиента
+      // на кадр (грабля с караванами) — просто точка с прозрачностью по пульсу.
+      gmmBlitTile(ctx, tile, P.x, P.y, P.ang, a * P.lit);
+      ctx.globalAlpha = a * (0.45 + 0.35 * Math.sin(t * 2.2 + ph));
+      ctx.fillStyle = 'rgba(255,140,80,0.95)';
+      ctx.beginPath(); ctx.arc(P.x, P.y, Math.max(1.6, h * 0.1), 0, 6.2832); ctx.fill();
+    } else {
+      ctx.globalAlpha = a * 0.95;
+      ctx.fillStyle = 'rgb(232,120,86)';
+      ctx.fillRect(P.x - 2.2, P.y - 1.1, 4.4, 2.2);
+    }
+  }
+
+  // ── СТРУКТУРЫ ПОСТРОЕК (только свои колонии: состав чужих — разведданные) ──
+  if (!bld) { ctx.globalAlpha = 1; return; }
+  // ОЖЕРЕЛЬЕ НЕМЕЗИДЫ здесь НЕ рисуется. Оно перехватывает залпы по ЛЮБОЙ планете
+  // системы («одно Ожерелье на систему», см. EC-каталог) — значит и охватывать должно
+  // СИСТЕМУ, а не висеть венком вокруг одной планеты, как было раньше. Тут только
+  // отмечаем систему; кольцо кладёт gmmPaintDefense по слепку GMM.sysGeo.
+  if (bld.nemesis && sys) GMM.nemSys[sys.id] = col;
+  const rigs = GMM_ORB_RIG.filter(R => R.keys.some(k => bld[k]));
+  if (!rigs.length) { ctx.globalAlpha = 1; return; }
+  rigs.forEach((R, i) => {
+    // мегасооружение НЕ ползёт (t в угол не входит) — оно приколочено к своей планете
+    const aa = ph * 1.7 + i * (6.2832 / rigs.length) + (R.mega ? 0 : t * 0.06);
+    const P = at(aa, bigR);
+    const h = Math.max(12, Math.min(34, sz * R.h));
+    const tile = gmmOrbTile(R.kind, col, h);
+    if (tile) gmmBlitTile(ctx, tile, P.x, P.y, P.ang, a * P.lit);
+    else {                                      // мельче порога — узелок-заглушка
+      ctx.globalAlpha = a * P.lit * 0.9;
+      ctx.fillStyle = `rgb(${lr},${lg},${lb})`;
+      ctx.fillRect(P.x - 1.4, P.y - 1.4, 2.8, 2.8);
+    }
+  });
   ctx.globalAlpha = 1;
 }
 
@@ -6258,12 +6821,25 @@ function gmmColonySpecials(ctx, px, py, sz, bld, ph, a, t, ldx, ldy) {
 // Внутрисистемный трафик между колониями. Маршруты строятся стабильно
 // (между соседними орбитами). Корабли летят по величественным орбитальным
 // дугам (переходным орбитам) очень медленно, чтобы чувствовался масштаб космоса.
+const GMM_SYS_TRAF_COL = [170, 205, 245];   // тон внутрисистемного борта (холодный металл)
+// Высота силуэта. НЕ опускать ниже GMM_HULL_MIN: корпус HG собран из крупных
+// секций с пазами, и мельче него читается блоками, а не кораблём. 16 px давало
+// кораблики крупнее планетных значков — сбавлено до нижней границы читаемости.
+const GMM_SYS_TRAF_H = 12;
 function gmmSysTraffic(ctx, colPos, a, t) {
   const edges = [];
   // Соединяем колонии последовательно, чтобы маршруты были постоянными
   for (let i = 0; i < colPos.length - 1; i++) {
     edges.push([colPos[i], colPos[i + 1]]);
   }
+
+  // Один градиент выхлопа на весь слой: цвет у всех бортов общий
+  // (GMM_SYS_TRAF_COL), длина следа фиксирована — разводить их по кораблям
+  // было незачем, а платили за это каждым кадром.
+  const trailLen = 14;
+  const след = ctx.createLinearGradient(0, 0, -trailLen, 0);
+  след.addColorStop(0, 'rgba(150, 200, 255, 0.9)');
+  след.addColorStop(1, 'rgba(150, 200, 255, 0)');
 
   edges.forEach(([A, B], i) => {
     const hx = B.px - A.px, hy = B.py - A.py, len = Math.hypot(hx, hy) || 1;
@@ -6332,14 +6908,11 @@ function gmmSysTraffic(ctx, colPos, a, t) {
       ctx.translate(px, py);
       ctx.rotate(drawHead);
 
-      // Плазменный след (длинный выхлоп)
+      // Плазменный след (длинный выхлоп). Градиент берём ГОТОВЫЙ: раньше он
+      // создавался на каждый корабль каждый кадр — та же трата, из-за которой
+      // просел кадр на караванах гиперпутей.
       ctx.globalAlpha = a * 0.45 * fade;
-      const trailLen = 12 + (seed % 6);
-      const trailGrad = ctx.createLinearGradient(0, 0, -trailLen, 0);
-      trailGrad.addColorStop(0, 'rgba(150, 200, 255, 0.9)');
-      trailGrad.addColorStop(1, 'rgba(150, 200, 255, 0)');
-
-      ctx.fillStyle = trailGrad;
+      ctx.fillStyle = след;
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(-trailLen, -0.7);
@@ -6347,16 +6920,28 @@ function gmmSysTraffic(ctx, colPos, a, t) {
       ctx.closePath();
       ctx.fill();
 
-      // Клиновидная форма корабля (Wedge / Arrowhead)
+      // Корпус: запечённый силуэт из конструктора кораблей (чётные — грузовик,
+      // нечётные — лёгкий борт). Берём ГОТОВЫЙ ТАЙЛ нужного размера и блитим 1:1
+      // — ужимать 256px-картинку на каждый борт каждый кадр нельзя (кадр падает).
+      // Тайл нос ВВЕРХ → доворот +90° (ход по +X). Мельче порога читаемости, или
+      // движка нет, или картинка ещё грузится → старый клин.
       ctx.globalAlpha = a * 0.95 * fade;
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.moveTo(2.5, 0);          // Острый нос
-      ctx.lineTo(-1.5, -1.5);      // Левое крыло
-      ctx.lineTo(-0.5, 0);         // Вырез сзади (двигатель)
-      ctx.lineTo(-1.5, 1.5);       // Правое крыло
-      ctx.closePath();
-      ctx.fill();
+      const tile = gmmHullTile(isReverse ? 'carrier' : 'corvette', GMM_SYS_TRAF_COL, GMM_SYS_TRAF_H);
+      if (tile) {
+        ctx.save();
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(tile, -tile.width / 2, -tile.height / 2);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(2.5, 0);          // Острый нос
+        ctx.lineTo(-1.5, -1.5);      // Левое крыло
+        ctx.lineTo(-0.5, 0);         // Вырез сзади (двигатель)
+        ctx.lineTo(-1.5, 1.5);       // Правое крыло
+        ctx.closePath();
+        ctx.fill();
+      }
 
       ctx.restore();
     }
@@ -6388,6 +6973,22 @@ function gmmPaintLaneTraffic(ctx) {
     const dur = cv.total / V;            // время полного прохода маршрута
     const [r, g, b] = cv.col;
     const lr = Math.min(255, r + 70), lg = Math.min(255, g + 70), lb = Math.min(255, b + 70);
+    // ⚠ Здесь стоял силуэт носителя из конструктора (`gmmHullSprite('carrier')`)
+    // с ореолом-градиентом под ним. Снято, и по двум причинам сразу:
+    //
+    //   ФПС. На КАЖДЫЙ кораблик КАЖДЫЙ кадр создавался новый
+    //   createRadialGradient и поверх рисовался SVG-спрайт высотой 256 px,
+    //   ужатый до пяти. Караванов на карте десятки — на этом и падал кадр.
+    //
+    //   ВИД. На пяти пикселях силуэт корпуса не читается силуэтом: выходит
+    //   блямба, из-за которой трассу приняли за ряд «щитов».
+    //
+    // Караван на карте — это ТРАФИК, а не парад кораблей. Достаточно короткого
+    // штриха по ходу движения: направление видно, трасса читается, кадр цел.
+    // Строки цвета считаем один раз на караван, а не на кораблик.
+    const цвет = `rgba(${lr},${lg},${lb},${(a * 0.95).toFixed(3)})`;
+    const след = `rgba(${r},${g},${b},${(a * 0.4).toFixed(3)})`;
+    const дл = sz * 2.2, тл = Math.max(1, sz * 0.5);   // длина штриха и его толщина
     for (let k = 0; k < cv.ships; k++) {
       const u = ((t / dur) + (k / cv.ships) + ci * 0.13) % 1;   // позиция вдоль ВСЕГО маршрута
       const dist = u * cv.total;
@@ -6398,14 +6999,24 @@ function gmmPaintLaneTraffic(ctx) {
       const p = gmmBezPt(seg.g, lu);
       if (p.x < wx0 || p.x > wx1 || p.y < wy0 || p.y > wy1) continue;   // вне кадра
       const px = p.x * s + tx, py = gmmTY(p.y * s + ty);
+      // ⚠ УГОЛ — ТОЛЬКО ПО ЭКРАНУ. p.ang — касательная в МИРОВЫХ координатах, а
+      // карта сжимает Y (gmmTY, завал плоскости): по мировому углу штрих ложился
+      // ПОПЕРЁК трассы и читался «галкой» на линии, а не кораблём вдоль неё.
+      // Берём вторую точку чуть позади и считаем угол по их экранным позициям.
+      // У самого начала отрезка «назад» идти некуда (обрежется в ту же точку и
+      // угол выйдет нулевым) — там смотрим ВПЕРЁД и берём тот же вектор хода.
+      const d = 0.01, fwd = lu < d;
+      const o2 = gmmBezPt(seg.g, fwd ? lu + d : lu - d);
+      const opx = o2.x * s + tx, opy = gmmTY(o2.y * s + ty);
+      const ang = fwd ? Math.atan2(opy - py, opx - px) : Math.atan2(py - opy, px - opx);
       ctx.save();
-      ctx.translate(px, py); ctx.rotate(p.ang);
-      ctx.globalAlpha = a * 0.45;
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
-      gmmTri(ctx, sz * 1.8);            // матовый ореол
-      ctx.globalAlpha = a * 0.95;
-      ctx.fillStyle = `rgb(${lr},${lg},${lb})`;
-      gmmTri(ctx, sz);                  // плотное ядро
+      ctx.translate(px, py); ctx.rotate(ang);
+      // след позади — тем же штрихом, только тусклее: даёт направление хода
+      ctx.fillStyle = след;
+      ctx.fillRect(-дл * 1.7, -тл * 0.5, дл, тл);
+      // сам караван
+      ctx.fillStyle = цвет;
+      ctx.fillRect(-дл * 0.5, -тл * 0.5, дл, тл);
       ctx.restore();
     }
   });
@@ -6862,7 +7473,7 @@ function gmmPaintSalvos(ctx) {
 //  • корабль idle  → значок носителя у звезды его системы.
 //  • корабль летит → носитель скользит по гиперпути from→dest (позиция по времени).
 function gmmBuildDefense() {
-  GMM.defense = { mines: [], outposts: [], ships: [], drones: [] };
+  GMM.defense = { mines: [], outposts: [], ships: [], drones: [], guards: [] };
   const byId = Object.fromEntries((GM.systems || []).map(s => [s.id, s]));
   // минные заграждения СИСТЕМЫ: агрегат по (система, фракция).
   const mAgg = new Map();
@@ -6879,6 +7490,13 @@ function gmmBuildDefense() {
     const fac = gmFaction(e.fid);
     const col = fac ? gmRgb(fac.color) : [220, 90, 70];   // нет фракции → тревожный красный
     GMM.defense.mines.push({ sys: e.sys, col, hexes: Math.min(e.hexes, e.hexMax), hexMax: e.hexMax, mine: e.mine });
+  });
+  // ПОСТЫ ДРЕВНИХ СТРАЖЕЙ: одно мегасооружение на систему (guardian_build проверяет
+  // exists по system_id), владельца-державы у него нет в смысле цвета герба — это
+  // даллерианская машина, поэтому цвет янтарный, а не фракционный.
+  (GM.guardians || []).forEach(g => {
+    const sys = byId[g.system_id]; if (!sys) return;
+    GMM.defense.guards.push({ sys, charges: +g.charges || 0, fid: g.faction_id || null });
   });
   // посты дронов: по одному рою на (система, фракция).
   (GM.droneposts || []).forEach(d => {
@@ -7099,6 +7717,126 @@ function gmmOutpostGlyph(ctx, x, y, rad, col, a) {
   ctx.moveTo(0, -rad * 0.6); ctx.lineTo(rad * 0.72, 0);
   ctx.lineTo(0, rad * 0.6); ctx.lineTo(-rad * 0.72, 0); ctx.closePath();
   ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+// ── СИЛУЭТЫ КОРАБЛЕЙ = ЗАПЕЧЁННЫЙ SVG КОНСТРУКТОРА ───────────
+// ТРАФИК (караваны по гиперпутям и конвои между планетами) рисовался белыми
+// треугольничками — рядом с корпусами из верфи это выглядело чужеродно. Берём ТОТ
+// ЖЕ движок, что печёт карточки выбора корпуса (HG + геометрия CN_SHIP_GEO): один
+// раз рендерим SVG класса, растеризуем в Image и дальше просто drawImage.
+// Тон металла — цвет державы, подмешанный к базовому (иначе тёмный герб даёт
+// чёрное пятно). ⚠️ Значки ФЛОТОВ/носителей сюда НЕ относятся — у них свой
+// глиф с гербом-штандартом (gmmUnitEmblem), его не трогаем.
+// ⚠️ ТРИ ГРАБЛИ, НА КОТОРЫЕ УЖЕ НАСТУПИЛИ (17.08) — не наступать снова:
+//  1. ФПС. Нельзя каждый кадр звать drawImage с УЖИМАНИЕМ большой картинки
+//     (256px → 11px) на каждый кораблик: пере-масштабирование считается заново
+//     каждый раз и роняет кадры. Спрайт ОДИН РАЗ пережигается в маленькую канву
+//     нужного размера (gmmHullTile), дальше в кадре только блит 1:1.
+//  2. УГОЛ. Карта СЖИМАЕТ Y (gmmTY, завал плоскости), поэтому мировая касательная
+//     маршрута ≠ экранное направление: корабль летел «чуть отвернувшись».
+//     Угол считаем ТОЛЬКО по двум экранным точкам.
+//  3. ЧИТАЕМОСТЬ. HG рисует корпус крупными секциями с пазами; мельче ~14px это
+//     каша из блоков. Значок меньше порога — рисуем старый треугольник.
+const GMM_HULL_SPR = new Map();                 // 'класс|цвет' → Image (null = движка нет)
+const GMM_HULL_MIN = 12;                        // ниже этого силуэт нечитаем → значок-заглушка
+
+// Тон металла: цвет державы + база (0.45/0.55) — герб узнаётся, но корпус не чернеет.
+function gmmHullTint(col) {
+  const base = [168, 176, 186];
+  return '#' + col.map((c, i) => Math.max(0, Math.min(255, Math.round(c * 0.45 + base[i] * 0.55))).toString(16).padStart(2, '0')).join('');
+}
+// Исходный растр корпуса (нос ВВЕРХ, крупный). Сам в кадре НЕ рисуется — только
+// служит источником для тайлов. Пока грузится — null; onload гонит перерисовку.
+function gmmHullSprite(hull, col) {
+  const key = hull + '|' + col.map(v => Math.round(v / 8)).join(',');
+  const hit = GMM_HULL_SPR.get(key);
+  if (hit !== undefined) return (hit && hit.complete && hit.naturalWidth && !hit.failed) ? hit : null;
+  if (typeof HG === 'undefined' || typeof CN_SHIP_GEO === 'undefined' || !CN_SHIP_GEO[hull]) { GMM_HULL_SPR.set(key, null); return null; }
+  let svg;
+  try {
+    const H = CN_SHIP_GEO[hull];
+    const uid = 'gm' + key.replace(/[^a-z0-9]/gi, '');
+    const o = { uid, clip: 'gmHc_' + uid, hull, aRt: 0.5, seed: 11, detail: 1, nozzles: 2, tint: gmmHullTint(col) };
+    const E = HG.extent(H, o);
+    const pad = Math.max(6, E.hw * 0.1);
+    const vx = 160 - E.hw - pad, vy = E.y0 - pad, vw = E.hw * 2 + pad * 2, vh = (E.y1 - E.y0) + pad * 2;
+    const py = 256, px = Math.max(24, Math.round(py * vw / vh));   // высота фиксирована: корпус длинный
+    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${py}" `
+      + `viewBox="${vx.toFixed(1)} ${vy.toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}">${HG.hull(H, o)}</svg>`;
+  } catch (e) { GMM_HULL_SPR.set(key, null); return null; }
+  const im = new Image();
+  im.onload = () => {
+    GMM_SPR_TILE.clear();                       // тайлы пережгутся с новым исходником
+    if (GMM.active && GMM.cv && GMM.cv.isConnected) { GMM.dirty = true; gmmKick(); }
+  };
+  im.onerror = () => { im.failed = true; };
+  im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  GMM_HULL_SPR.set(key, im);
+  return null;
+}
+// ГОТОВЫЙ ТАЙЛ нужной высоты (с шагом 4px, чтобы зум не пережигал канву на каждый
+// пиксель). Отдаёт null, если силуэт мельче порога читаемости или движка нет.
+function gmmHullTile(hull, col, h) {
+  return gmmSprTile('h:' + hull, col, h, () => {
+    const im = gmmHullSprite(hull, col);
+    return im;
+  });
+}
+
+// ── ОРБИТАЛЬНЫЕ СТРУКТУРЫ (OG) ───────────────────────────────
+// Постройки колонии, видимые с орбиты: спутники связи, обсерватория, грузовой
+// терминал, верфь-стапель, оборонный спутник, звёздная база. Тот же конвейер,
+// что у корпусов: SVG → Image → тайл нужного размера → блит 1:1.
+const GMM_ORB_SPR = new Map();                  // 'вид|цвет' → Image
+function gmmOrbSprite(kind, col) {
+  const key = kind + '|' + col.map(v => Math.round(v / 8)).join(',');
+  const hit = GMM_ORB_SPR.get(key);
+  if (hit !== undefined) return (hit && hit.complete && hit.naturalWidth && !hit.failed) ? hit : null;
+  if (typeof OG === 'undefined') { GMM_ORB_SPR.set(key, null); return null; }
+  let svg;
+  try { svg = OG.svg(kind, { tint: OG.tintOf(col) }, 128); }
+  catch (e) { GMM_ORB_SPR.set(key, null); return null; }
+  const im = new Image();
+  im.onload = () => {
+    GMM_SPR_TILE.clear();
+    if (GMM.active && GMM.cv && GMM.cv.isConnected) { GMM.dirty = true; gmmKick(); }
+  };
+  im.onerror = () => { im.failed = true; };
+  im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  GMM_ORB_SPR.set(key, im);
+  return null;
+}
+function gmmOrbTile(kind, col, h) {
+  return gmmSprTile('o:' + kind, col, h, () => gmmOrbSprite(kind, col));
+}
+
+// Общая пекарня тайлов: размер округляем до 4px, ниже порога читаемости не
+// печём вовсе (вызывающий рисует дешёвый значок-заглушку).
+const GMM_SPR_TILE = new Map();
+function gmmSprTile(tag, col, h, srcFn) {
+  h = Math.round(h / 4) * 4;
+  if (h < GMM_HULL_MIN) return null;
+  const key = tag + '|' + col.map(v => Math.round(v / 8)).join(',') + '|' + h;
+  const hit = GMM_SPR_TILE.get(key);
+  if (hit !== undefined) return hit;
+  const im = srcFn();
+  if (!im) return null;                         // ещё грузится — тайл не кэшируем
+  const w = Math.max(2, Math.round(h * im.naturalWidth / im.naturalHeight));
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const c2 = cv.getContext('2d');
+  c2.imageSmoothingEnabled = true; c2.imageSmoothingQuality = 'high';
+  c2.drawImage(im, 0, 0, w, h);
+  GMM_SPR_TILE.set(key, cv);
+  return cv;
+}
+// Блит готового тайла с доворотом (ang — ЭКРАННЫЙ угол, 0 = «вперёд вправо»).
+function gmmBlitTile(ctx, tile, x, y, ang, alpha) {
+  ctx.save();
+  ctx.translate(x, y); if (ang) ctx.rotate(ang);
+  if (alpha != null) ctx.globalAlpha = alpha;
+  ctx.drawImage(tile, -tile.width / 2, -tile.height / 2);
   ctx.restore();
 }
 
@@ -7362,7 +8100,12 @@ function gmmSegPt(segs, total, u) {
 function gmmPaintDefense(ctx) {
   GMM.shipHit = [];                  // клик-зоны моих кораблей-носителей (idle)
   const D = GMM.defense;
-  if (!D || (!D.mines.length && !D.outposts.length && !D.ships.length)) return;
+  // ⚠ drones в этой проверке ОБЯЗАТЕЛЕН: без него система, где стоит только
+  // мегасооружение (ни мин, ни аванпостов, ни моих кораблей), выходила отсюда
+  // сразу и Пост Древних Стражей не рисовался вообще никогда.
+  if (!D || (!D.mines.length && !D.outposts.length && !D.ships.length
+      && !(D.drones || []).length && !(D.guards || []).length
+      && !Object.keys(GMM.nemSys || {}).length)) return;
   const s = GMM.s, sq = 1 - 0.5 * gmmDeepA(), deep = gmmDeepA() > 0.2, now = Date.now(), t = performance.now() / 1000;
   // Коэффициент размера значков по зуму: на обзоре/карте секторов звёзды — крошечные
   // точки, поэтому оборонные значки ужимаем (иначе они в разы крупнее самих систем);
@@ -7374,26 +8117,109 @@ function gmmPaintDefense(ctx) {
   ctx.save();
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
-  // ── Минные заграждения СИСТЕМЫ: кольцо зарядов под звездой. Мины больше не
-  // привязаны к планетам, поэтому кольцо рисуется на любом зуме. ──
+  // ── Минные заграждения СИСТЕМЫ ──
+  // ЗАШЛИ В СИСТЕМУ (есть слепок геометрии в GMM.sysGeo) — заряды стоят ВНУТРИ неё,
+  // на своём кольце за внешней орбитой: заграждение прикрывает подступы, поэтому его
+  // место там, а не значком сбоку от звезды. Один запечённый спрайт OG = один заряд,
+  // пустые гнёзда до hexMax остаются тёмными — сразу видно, полное поле или нет.
+  // Обзор галактики (слепка нет, силуэт в 3 px всё равно не разобрать) — прежнее
+  // компактное кольцо-схема под звездой.
   if (GM.showMines) D.mines.forEach(d => {
     const tX = SX(d.sys.x), tY = SY(d.sys.y);
     if (!onScreen(tX, tY)) return;
-    const ip = gmmIconPx(d.sys, s);
-    const R = ip * 0.62 + 6;
-    const hr = Math.max(1.4, ip * 0.11) * zf;            // размер одного заряда
-    const a = d.mine ? 0.85 : 0.6;                       // чужие чуть бледнее
-    gmmMineRing(ctx, tX, tY + R * 0.62 * sq, hr, sq, d.col, d.hexes, d.hexMax, a);
+    const g = GMM.sysGeo && GMM.sysGeo[d.sys.id];
+    const al = d.mine ? 0.9 : 0.62;                      // чужие чуть бледнее
+    if (g) {
+      const R = Math.max(g.rOuter + g.starR * 0.9, g.rMax * 0.9);   // кольцо заграждения
+      const hh = Math.max(9, Math.min(34, g.starR * 0.5));          // габарит спрайта заряда
+      const n = Math.max(1, d.hexMax);
+      const tile = gmmOrbTile('mine', d.col, hh);
+      for (let i = 0; i < n; i++) {
+        const aa = i * (6.2832 / n);                                // стоят на месте: заграждение не орбита
+        const x = tX + Math.cos(aa) * R, y = tY + Math.sin(aa) * R * g.tilt;
+        const live = i < d.hexes;                                   // взведён / пустое гнездо
+        if (tile) gmmBlitTile(ctx, tile, x, y, 0, al * (live ? 1 : 0.22));
+        else gmmMineGlyph(ctx, x, y, Math.max(1.6, hh * 0.18), d.col, al, live);
+      }
+    } else {
+      const ip = gmmIconPx(d.sys, s);
+      const R = ip * 0.62 + 6;
+      const hr = Math.max(1.4, ip * 0.11) * zf;          // размер одного заряда
+      gmmMineRing(ctx, tX, tY + R * 0.62 * sq, hr, sq, d.col, d.hexes, d.hexMax, al);
+    }
   });
 
-  // ── Посты дронов: рой точек над звездой, гуще с числом крыльев ──
-  if (GM.showMines) (D.drones || []).forEach(d => {
+  // ── ПОСТЫ ДРЕВНИХ СТРАЖЕЙ (guardian_posts) — НАСТОЯЩЕЕ мегасооружение ──
+  // Даллерианская машина из ихора, одна на систему. Стоит У ЗВЕЗДЫ СТАЦИОНАРОМ: это
+  // не спутник, ему незачем ползти по орбите (угол не зависит от t). Цвет янтарный,
+  // не фракционный — герба у неё нет, она старше держав.
+  if (GM.showMega) (D.guards || []).forEach(d => {
     const tX = SX(d.sys.x), tY = SY(d.sys.y);
     if (!onScreen(tX, tY)) return;
-    const ip = gmmIconPx(d.sys, s);
-    const R = ip * 0.62 + 6;
-    gmmDroneSwarm(ctx, tX, tY - R * 1.25 * sq, Math.max(2.2, ip * 0.22) * zf, sq,
-      d.col, d.wings, d.mine ? 0.9 : 0.62);
+    const g = GMM.sysGeo && GMM.sysGeo[d.sys.id];
+    const gcol = [235, 150, 60];
+    const al = d.charges > 0 ? 0.95 : 0.5;              // разряженный пост бледнее
+    let gx, gy, hh;
+    if (g) {
+      const R = g.starR * 2.0;                          // между звездой и первой орбитой
+      gx = tX + Math.cos(-Math.PI / 2) * R;
+      gy = tY + Math.sin(-Math.PI / 2) * R * g.tilt;
+      hh = Math.max(18, Math.min(84, g.starR * 1.5));   // машина размером с луну
+    } else {
+      const ip = gmmIconPx(d.sys, s);
+      gx = tX; gy = tY - (ip * 0.62 + 6) * 1.5 * sq;
+      hh = Math.max(12, Math.min(30, ip * 0.7)) * zf;
+    }
+    const tile = gmmOrbTile('guard', gcol, hh);
+    if (tile) gmmBlitTile(ctx, tile, gx, gy, 0, al);
+    else gmmDroneSwarm(ctx, gx, gy, Math.max(2.2, hh * 0.22), sq, gcol, Math.max(1, d.charges), al);
+  });
+
+  // ── ОЖЕРЕЛЬЕ НЕМЕЗИДЫ — мегасооружение уровня СИСТЕМЫ ──
+  // Перехватывает залпы по ЛЮБОЙ планете системы, одно на систему — поэтому и кольцо
+  // охватывает всю систему по внешней орбите, а не одну планету (раньше висело венком
+  // вокруг колонии). Неподвижно: перехватчики стоят на своих постах, а не летают.
+  if (GM.showMega && GMM.nemSys) Object.keys(GMM.nemSys).forEach(sid => {
+    const g = GMM.sysGeo && GMM.sysGeo[sid];
+    if (!g) return;                                     // видно только в раскрытой системе
+    const ncol = GMM.nemSys[sid];
+    const R = g.rMax * 0.80, N = 9;
+    const hh = Math.max(10, Math.min(26, g.starR * 0.42));
+    const tile = gmmOrbTile('icept', ncol, hh);
+    for (let k = 0; k < N; k++) {
+      const aa = k * (6.2832 / N) - Math.PI / 2;        // фиксированные посты по кольцу
+      const x = g.cx + Math.cos(aa) * R, y = g.cy + Math.sin(aa) * R * g.tilt;
+      if (!onScreen(x, y)) continue;
+      // спрайт смотрит НАРУЖУ системы — оттуда приходит залп
+      if (tile) gmmBlitTile(ctx, tile, x, y, aa, 0.9);
+      else { ctx.globalAlpha = 0.8; ctx.fillStyle = `rgb(${ncol[0]},${ncol[1]},${ncol[2]})`; ctx.fillRect(x - 1, y - 1, 2, 2); }
+    }
+  });
+
+  // ── ПОСТЫ ДРОНОВ (system_drone_posts) ──
+  // ⚠ ЭТО НЕ МЕГАСООРУЖЕНИЕ. Обычная оборона державы за ГС (dronepost_build, «крыло
+  // дронов»). Раньше комментарий здесь врал, называя их Постом Древних Стражей, —
+  // отсюда и путаница. Силуэт guard они носят ВРЕМЕННО, по той же ошибке: своего вида
+  // у них пока нет, поведение оставлено как было.
+  if (GM.showMega) (D.drones || []).forEach(d => {
+    const tX = SX(d.sys.x), tY = SY(d.sys.y);
+    if (!onScreen(tX, tY)) return;
+    const g = GMM.sysGeo && GMM.sysGeo[d.sys.id];
+    const al = d.mine ? 0.95 : 0.7;
+    let gx, gy, hh;
+    if (g) {
+      const R = Math.max(g.rOuter + g.starR * 1.5, g.rMax * 0.97);   // за кольцом мин
+      const aa = -Math.PI / 2 + t * 0.02;
+      gx = tX + Math.cos(aa) * R; gy = tY + Math.sin(aa) * R * g.tilt;
+      hh = Math.max(16, Math.min(72, g.starR * 1.15));               // объект размером с луну
+    } else {
+      const ip = gmmIconPx(d.sys, s);
+      gx = tX; gy = tY - (ip * 0.62 + 6) * 1.25 * sq;
+      hh = Math.max(12, Math.min(30, ip * 0.62)) * zf;
+    }
+    const tile = gmmOrbTile('guard', d.col, hh);
+    if (tile) gmmBlitTile(ctx, tile, gx, gy, 0, al);
+    else gmmDroneSwarm(ctx, gx, gy, Math.max(2.2, hh * 0.22), sq, d.col, d.wings, al);
   });
 
   // ── Аванпосты: станция над звездой ── (можно скрыть тоглом)

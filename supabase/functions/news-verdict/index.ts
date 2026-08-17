@@ -40,7 +40,24 @@ const MODELS = [
   Deno.env.get("LLM_MODEL"),
   "qwen/qwen3-next-80b-a3b-instruct:free",
   "meta-llama/llama-3.3-70b-instruct:free",
-  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "deepseek/deepseek-chat-v3.1:free",
+].filter(Boolean) as string[];
+
+// Groq и Gemini тоже перебираем списком: модели там снимают без предупреждения,
+// а одиночный ID превращал провайдера в мёртвый фолбэк.
+const GROQ_MODELS = [
+  Deno.env.get("GROQ_MODEL"),
+  "llama-3.3-70b-versatile",
+  "openai/gpt-oss-20b",
+  "llama-3.1-8b-instant",
+].filter(Boolean) as string[];
+
+const GEMINI_MODELS = [
+  Deno.env.get("GEMINI_MODEL"),
+  "gemini-3.6-flash",
+  "gemini-2.5-flash",
+  "gemini-flash-latest",
+  "gemini-2.5-flash-lite",
 ].filter(Boolean) as string[];
 const RECENT_LIMIT = 6;       // сколько прошлых новостей подавать для continuity
 const MAX_BODY = 4000;        // обрезка текста новости в промпте
@@ -128,8 +145,7 @@ Deno.serve(async (req) => {
     //     ~1000 запросов/день. OpenAI-совместимый эндпоинт.
     let groqErr = "";
     const GROQ_KEY = Deno.env.get("GROQ_KEY");
-    if (!ok && GROQ_KEY) {
-      const gmodel = Deno.env.get("GROQ_MODEL") ?? "llama-3.3-70b-versatile";
+    if (!ok && GROQ_KEY) for (const gmodel of GROQ_MODELS) {
       try {
         const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
@@ -149,8 +165,8 @@ Deno.serve(async (req) => {
         const provErr = data?.error?.message || data?.error || (!resp.ok ? `HTTP ${resp.status}` : "");
         const content = data?.choices?.[0]?.message?.content ?? "";
         parsed = safeParseJson(content);
-        if (parsed) { ok = true; usedModel = "groq/" + gmodel; }
-        else groqErr = `[${gmodel}] ` + (provErr ? "groq: " + String(provErr).slice(0, 250) : "не распарсил: " + String(content || JSON.stringify(data)).slice(0, 250));
+        if (parsed) { ok = true; usedModel = "groq/" + gmodel; groqErr = ""; break; }
+        groqErr = `[${gmodel}] ` + (provErr ? "groq: " + String(provErr).slice(0, 250) : "не распарсил: " + String(content || JSON.stringify(data)).slice(0, 250));
       } catch (e) {
         groqErr = `[${gmodel}] ошибка вызова groq: ` + String(e);
       }
@@ -159,8 +175,7 @@ Deno.serve(async (req) => {
     // 5b. Google Gemini (если задан GEMINI_KEY): надёжный JSON,
     //     щедрый бесплатный лимит (~1500/день, без карты — НО привязан к стране аккаунта).
     const GEMINI_KEY = Deno.env.get("GEMINI_KEY");
-    if (!ok && GEMINI_KEY) {
-      const gmodel = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.0-flash";
+    if (!ok && GEMINI_KEY) for (const gmodel of GEMINI_MODELS) {
       try {
         const resp = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${gmodel}:generateContent?key=${GEMINI_KEY}`,
@@ -178,8 +193,8 @@ Deno.serve(async (req) => {
         const provErr = data?.error?.message || (!resp.ok ? `HTTP ${resp.status}` : "");
         const content = (data?.candidates?.[0]?.content?.parts ?? []).map((p: any) => p?.text ?? "").join("");
         parsed = safeParseJson(content);
-        if (parsed) { ok = true; usedModel = "google/" + gmodel; }
-        else gemErr = `[${gmodel}] ` + (provErr ? "gemini: " + String(provErr).slice(0, 250) : "не распарсил: " + String(content || JSON.stringify(data)).slice(0, 250));
+        if (parsed) { ok = true; usedModel = "google/" + gmodel; gemErr = ""; break; }
+        gemErr = `[${gmodel}] ` + (provErr ? "gemini: " + String(provErr).slice(0, 250) : "не распарсил: " + String(content || JSON.stringify(data)).slice(0, 250));
       } catch (e) {
         gemErr = `[${gmodel}] ошибка вызова gemini: ` + String(e);
       }

@@ -1,0 +1,84 @@
+<!doctype html>
+<!-- Стенд КАРТОЧКИ мира целиком: вкладки, донесение, решения, летопись.
+     Живой мир из базы (_pcs_probe_data.js), сети нет. Файл рабочий, в сборку
+     не входит. Нужен затем, чтобы смотреть на карточку глазами: она собирается
+     из четырёх источников сразу (паспорт, досье, линия мира, летопись), и на
+     слово тут верить нечему. -->
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Карточка мира — стенд</title>
+<link rel="stylesheet" href="css/index.css">
+<style>
+  html, body { overflow: auto !important; height: auto !important; }
+  body { background: var(--color-surface-base, #14171c); margin: 0; }
+  #hp-vn-tama { max-width: 760px; margin: 0 auto; padding: 14px; }
+</style>
+</head><body>
+<div id="hp-vn-tama" class="show"></div>
+
+<script>
+  // ── то немногое, что карточка берёт снаружи ──
+  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const jsq = s => String(s ?? '').replace(/[^0-9A-Za-z]/g,
+    c => '\\u' + c.charCodeAt(0).toString(16).padStart(4,'0'));
+  window.gbHelpOpen = k => console.log('руководство:', k);
+  window.toast = (t, k) => console.log('[toast]', k || '', t);
+  window.ecLoadApp = async () => {};
+  window.ecReloadPaint = async () => {};
+  window.EC = { app: { faction_id: 'probe' } };
+
+  // Подставной сервер линии мира: тот же порядок, что на настоящем.
+  const SAGA = { node: null, flags: {}, scale: 0, done: false, ending: null, wait: 0 };
+  let BAG = { 'Ионит': 200, 'Дейтерий': 200, 'Платина': 200 };
+  async function ecRpc(fn, p) {
+    p = p || {};
+    if (fn === 'precursor_get') return { ok: true, gc: 5000000, fid: 'probe',
+      now: new Date().toISOString(), civs: [window.__CIV] };
+    if (fn === 'precursor_arrears') return null;
+    if (fn === 'precursor_can') return { ok: true, rows: [] };
+    if (fn === 'precursor_saga_get') return { ok: true, now: new Date().toISOString(),
+      me: { race: 'Гуманоиды', ideology: 'Ксенофилия', gov: 'Республика' },
+      'склад': Object.assign({}, BAG),
+      rows: [{ world: МИР, node: SAGA.node, flags: SAGA.flags, scale: SAGA.scale,
+        done: SAGA.done, ending: SAGA.ending,
+        'посланник': { 'имя': 'Тавен Ирр', 'пост': 'младший наблюдатель', 'ходок': 3,
+                       'прикипел': true, 'сломан': false },
+        'до_вас': { 'держав': 2, 'дошли': 1, 'встал': null },
+        'память': [{ 'кто': 'Алая Уния', 'что': 'приходили с дарами и ушли, не спросив имени' }],
+        ready_at: SAGA.wait ? new Date(Date.now() + SAGA.wait * 3600e3).toISOString() : null }] };
+    if (fn === 'precursor_saga_step') {
+      if (SAGA.wait) return { ok: false, wait: true,
+        ready_at: new Date(Date.now() + SAGA.wait * 3600e3).toISOString() };
+      SAGA.scale += Math.max(-3, Math.min(3, +p.p_weight || 0));
+      SAGA.node = p.p_node;
+      Object.assign(SAGA.flags, p.p_flags || {});
+      if (p.p_ending) { SAGA.done = true; SAGA.ending = p.p_ending; }
+      return { ok: true, scale: SAGA.scale };
+    }
+    return { ok: true };
+  }
+</script>
+
+<script src="precursor_gen.js"></script>
+<script src="precursor_sim.js"></script>
+<script src="precursor_ui2.js"></script>
+<script src="precursor_art.js"></script>
+<script src="precursor_saga.js"></script>
+<script src="saga_weave.js"></script>
+<script src="saga_kit.js"></script>
+<script src="saga_layers.js"></script>
+<script src="saga_layers2.js"></script>
+<script src="saga_worlds.js"></script>
+<script src="precursor_risen.js"></script>
+<script src="precursor_ui.js"></script>
+<script src="_pcs_probe_data.js"></script>
+<script>
+  const МИР = 'civ:' + window.__CIV.system_id + ':' + window.__CIV.pid;
+  (async () => {
+    await heroVNTamaOpen();                       // список миров
+    heroVNTamaShow(window.__CIV.system_id, window.__CIV.pid);   // и карточка
+  })();
+</script>
+</body></html>

@@ -1,0 +1,106 @@
+/* ════════════════════════════════════════════════════════════
+   ВЕРСТАК ХРОНИКИ · РАСКЛАДКА  (admin_saga.js, вкладка «📜 Хроника»)
+
+   Верстак писался под монитор: десять контролов в ряд, подпись и поле
+   плечом к плечу, ширины в пикселях. На телефоне это разваливалось в
+   колонку высотой в пол-экрана, и до текста надо было доскроллить.
+
+   Раскладка вынесена сюда, а не осталась в атрибутах style: разложить
+   контейнер по ширине экрана инлайном нельзя — @media в атрибут не
+   пишется. Цвета и мелочь остались в admin_saga.js.
+
+   ⚠ Узкий блок стоит В КОНЦЕ файла: поздний десктопный блок перебивает
+   ранний @media (грабли mobile-late-desktop-override).
+   ════════════════════════════════════════════════════════════ */
+
+/* ── шапка: параметры собираемого мира ───────────────────────── */
+.svk-head {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px 12px;
+  padding: 12px;
+  border: 1px solid var(--w2, #2a3340);
+  border-radius: 8px;
+  background: var(--b2, #141a22);
+}
+.svk-f { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--t3, #8aa0b0); }
+.svk-f select,
+.svk-f input {
+  width: 100%;
+  min-width: 0;                    /* иначе select распирает ячейку грида */
+  background: var(--b3, #0c1322);
+  color: var(--t1, #e8edf2);
+  border: 1px solid var(--w2, #2a3340);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+/* Кнопка-аккордеон нужна только там, где шапка занимает экран. */
+.svk-fold { display: none; }
+
+/* ── ряды кнопок: виды, полки, выгрузка ──────────────────────── */
+.svk-tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.svk-tabs.svk-views { margin: 14px 0 4px; }
+.svk-bar {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  padding: 8px 0 2px; border-bottom: 1px solid var(--w2, #2a3340);
+}
+.svk-count { margin-left: auto; font-size: 11px; color: var(--t3, #8aa0b0); }
+
+/* ── строка правки: подпись слева, поле справа ───────────────── */
+.svk-row {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 6px 0; border-bottom: 1px solid var(--w2, #2a3340);
+}
+.svk-row > .svk-lbl { flex: 0 0 150px; font-size: 11px; padding-top: 6px; color: var(--t3, #8aa0b0); }
+.svk-row > .svk-lbl.is-edit { color: #e8b45f; }
+.svk-row > .svk-val { flex: 1; min-width: 0; }
+.svk-row textarea,
+.svk-row input {
+  width: 100%;
+  background: var(--b3, #0c1322);
+  color: var(--t1, #e8edf2);
+  border: 1px solid var(--w2, #2a3340);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.svk-row textarea { resize: vertical; }
+
+.svk-box {
+  border: 1px solid var(--w2, #2a3340); border-radius: 8px;
+  background: var(--b2, #141a22); padding: 10px 12px; margin-bottom: 10px;
+}
+
+/* ── узкий экран ─────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  /* Шапка складывается: на телефоне сперва читают текст, а параметры
+     мира трогают редко — но трогают, поэтому кнопка, а не «скрыто». */
+  .svk-fold { display: block; width: 100%; margin-bottom: 8px; }
+  .svk-head { grid-template-columns: 1fr; padding: 10px; }
+  .svk-head.is-fold { display: none; }
+
+  /* Вкладок пять, и в два ряда они съедали экран до текста. Один ряд,
+     который таскают пальцем. */
+  .svk-tabs {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    margin-left: -12px; margin-right: -12px;   /* ряд идёт от края до края */
+    padding: 0 12px 2px;
+  }
+  .svk-tabs::-webkit-scrollbar { display: none; }
+  .svk-tabs > .btn { flex: 0 0 auto; }
+  .svk-count { flex: 0 0 auto; margin-left: 8px; }
+
+  /* Подпись над полем: на 375px «имя главы» и поле рядом не живут. */
+  .svk-row { flex-direction: column; gap: 4px; }
+  .svk-row > .svk-lbl { flex: none; padding-top: 0; }
+  .svk-row > .svk-val { width: 100%; }
+  /* Палец промахивается по строке в 28px. */
+  .svk-row textarea, .svk-row input { padding: 8px 10px; font-size: 13px; }
+
+  .svk-box { padding: 8px 10px; }
+}

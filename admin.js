@@ -245,7 +245,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['promo', '🎁 Промокоды'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['intelart', '🕵 Разведка'], ['artifacts', '🎒 Артефакты', (AD.artKinds || []).length], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['promo', '🎁 Промокоды'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['saga', '📜 Хроника'], ['intelart', '🕵 Разведка'], ['artifacts', '🎒 Артефакты', (AD.artKinds || []).length], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -259,7 +259,15 @@ function adPaint() {
     else if (AD.tab === 'ach')       tabContent = adAchPanel();
     else if (AD.tab === 'promo')     tabContent = adPromoPanel();
     else if (AD.tab === 'shells')    tabContent = adShellArtPanel();
-    else if (AD.tab === 'precursor') tabContent = adPrecursorArtPanel();
+    // Во вкладке дозвёздных две разные заливки: мелкие иконки решений и
+    // широкие сцены хроник сеткой раса × эпоха. Одна вкладка — их всегда
+    // ищут в одном месте.
+    else if (AD.tab === 'precursor') tabContent = adPrecursorArtPanel() + adPrecursorSagaArtPanel() + adPrecursorWorldsPanel();
+    // Верстак хроники (admin_saga.js): мир собирается тут же, весь граф на
+    // экране. Отдельная вкладка от «Дозвёздных» намеренно — там арты, тут текст.
+    else if (AD.tab === 'saga')      tabContent = (typeof adSagaPanel === 'function')
+      ? adSagaPanel()
+      : '<div style="color:#ff7a7a">admin_saga.js не загружен</div>';
     else if (AD.tab === 'intelart')  tabContent = adIntelArtPanel();
     else if (AD.tab === 'artifacts') tabContent = adArtKindsPanel();
     else if (AD.tab === 'shipart')   tabContent = adShipArtPanel();
@@ -2072,6 +2080,372 @@ async function adPrecursorArtUpload(key, inputEl) {
     console.error('[admin] precursor art', e);
     if (st) st.textContent = 'Ошибка';
     toast('Не удалось сохранить арт: ' + (e.message || e), 'err');
+  }
+}
+
+
+// ── Сцены хроник: сетка «раса × эпоха» (assets/precursor/worlds/) ──
+// Фон сцены новеллы берётся не по имени мира, а по двум осям: КТО там живёт и
+// КОГДА мы их застали (precursor_art.js). Клеток много, и раскладывать их
+// вручную по папкам — работа для батника; здесь тот же батник, только видно,
+// что уже залито и чего не хватает.
+//
+// Пишет тот же локальный сервер («Загрузка артов.bat»), но в подпапку расы и
+// с пересчётом manifest.json — клиент читает клетки только из него.
+const AD_PCW_DIR = 'assets/precursor/worlds';
+const AD_PCW_RACES = [
+  ['common',    'любая раса'],
+  ['humanoid',  'Гуманоиды'],
+  ['mammal',    'Млекопитающие'],
+  ['reptiloid', 'Рептилоиды'],
+  ['avian',     'Авианы'],
+  ['insectoid', 'Инсектоиды'],
+  ['aquatic',   'Акватики'],
+  ['plantoid',  'Плантоиды'],
+  ['lithoid',   'Литоиды'],
+  ['synth',     'Синтетики'],
+  ['energy',    'Энергетические'],
+];
+const AD_PCW_EPOCHS = [
+  ['E0', 'Собиратели'], ['E1', 'Оседлость'], ['E2', 'Металл'], ['E3', 'Письмо'],
+  ['E4', 'Бронза'], ['E5', 'Железо'], ['E6', 'Классика'], ['E7', 'Тёмный провал'],
+  ['E8', 'Порох и паруса'], ['E9', 'Пар и фабрика'], ['E10', 'Атом и код'], ['E11', 'Порог'],
+];
+
+// Манифест тянем один раз на открытие вкладки: это статический файл рядом с
+// игрой, а не запрос к серверу артов — грид должен быть виден и без батника.
+async function adPcwLoad(force) {
+  if (AD.pcwMan && !force) return AD.pcwMan;
+  try {
+    const r = await fetch(`${AD_PCW_DIR}/manifest.json?t=${Date.now()}`, { cache: 'no-store' });
+    AD.pcwMan = r.ok ? (await r.json()) : {};
+  } catch (e) { AD.pcwMan = {}; }
+  return AD.pcwMan;
+}
+const adPcwCell = (race, ep) => ((AD.pcwMan || {})[race] || {})[ep] || [];
+
+function adPrecursorWorldsPanel() {
+  if (!AD.pcwMan) { adPcwLoad().then(() => adPaint()); }
+  const man = AD.pcwMan;
+  const bust = AD.pcwBust || '';
+  const total = man ? Object.values(man).reduce(
+    (n, c) => n + Object.values(c).reduce((k, a) => k + a.length, 0), 0) : 0;
+
+  // Шапка сетки: эпохи. Подпись короткая, полная — в title.
+  const head = `<tr><th style="position:sticky;left:0;background:var(--b2,#141a22);z-index:2"></th>${
+    AD_PCW_EPOCHS.map(([e, nm]) =>
+      `<th title="${esc(nm)}" style="padding:4px 2px;font:600 9px/1.2 monospace;letter-spacing:.08em;color:var(--t4,#6a7a88);text-align:center">${esc(e)}</th>`
+    ).join('')}</tr>`;
+
+  const rows = AD_PCW_RACES.map(([race, nm]) => {
+    const cells = AD_PCW_EPOCHS.map(([ep]) => {
+      const v = man ? adPcwCell(race, ep) : [];
+      const sel = AD.pcwSel === race + ':' + ep;
+      const url = v.length ? `${AD_PCW_DIR}/${race}/${v[0]}${bust ? `?t=${bust}` : ''}` : '';
+      return `<td style="padding:1px">
+        <div title="${esc(nm)} · ${esc(ep)}${v.length ? ` · вариантов: ${v.length}` : ' · пусто'}"
+             ondragover="event.preventDefault();this.style.outline='1px solid var(--gdl,#5fb0e6)'"
+             ondragleave="this.style.outline=''"
+             ondrop="this.style.outline='';adPcwDrop(event,'${race}','${ep}')"
+             onclick="adPcwPick('${race}','${ep}')"
+             style="position:relative;width:52px;height:38px;border-radius:5px;cursor:pointer;overflow:hidden;
+                    border:1px solid ${sel ? 'var(--gdl,#5fb0e6)' : 'var(--w2,#2a3340)'};
+                    background:${v.length ? `#0c1322 center/cover url('${esc(url)}')` : 'var(--b1,#0f141b)'}">
+          ${v.length > 1 ? `<span style="position:absolute;right:2px;bottom:1px;font:600 8px monospace;color:#dfe6ef;text-shadow:0 1px 2px #000">${v.length}</span>` : ''}
+          ${!v.length ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font:400 13px monospace;opacity:.5">+</span>` : ''}
+        </div></td>`;
+    }).join('');
+    const have = man ? AD_PCW_EPOCHS.filter(([e]) => adPcwCell(race, e).length).length : 0;
+    return `<tr><th style="position:sticky;left:0;background:var(--b2,#141a22);z-index:1;text-align:left;
+      padding:0 10px 0 0;font:500 11px/1 var(--font-body,sans-serif);color:${have ? 'var(--t2,#c3d0dc)' : 'var(--t4,#6a7a88)'};white-space:nowrap">
+      ${esc(nm)} <span style="font:400 9px monospace;color:var(--t4,#6a7a88)">${have}/${AD_PCW_EPOCHS.length}</span></th>${cells}</tr>`;
+  }).join('');
+
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">Сцены хроник
+      <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· раса × эпоха${man ? ` · залито ${total}` : ' · читаю манифест…'}</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 10px">Широкий кадр (16:9, от 1280 по длинной стороне) — он идёт фоном сцены. Клетка пустая: сцена рисует ровный тон, и это нормально.</div>
+
+    <div ondragover="event.preventDefault();this.style.borderColor='var(--gdl,#5fb0e6)'"
+         ondragleave="this.style.borderColor='var(--w2,#2a3340)'"
+         ondrop="this.style.borderColor='var(--w2,#2a3340)';adPcwDrop(event)"
+         onclick="document.getElementById('ad-pcw-bulk').click()"
+         style="border:1px dashed var(--w2,#2a3340);border-radius:8px;padding:14px;text-align:center;cursor:pointer;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--t2,#c3d0dc)">Бросьте картинки сюда — разложатся сами, как на батнике</div>
+      <div style="font-size:11px;color:var(--t4,#6a7a88);margin-top:3px">Имя файла решает клетку: <code>humanoid_E8.webp</code>, <code>lithoid_E7.webp</code>, <code>common_E3_2.png</code>. Чтобы залить без имени — бросьте прямо в клетку сетки.</div>
+      <input type="file" id="ad-pcw-bulk" accept="image/*" multiple style="display:none" onclick="event.stopPropagation()" onchange="adPcwUploadList([...this.files]);this.value=''">
+    </div>
+
+    <div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:0">${head}${rows}</table></div>
+    <div id="ad-pcw-st" style="font-size:11px;color:var(--t4,#6a7a88);margin-top:8px;min-height:14px"></div>
+    ${adPcwSelHtml()}
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin-top:10px;line-height:1.5">Пишется <b>прямо в папку игры</b> (<code>${AD_PCW_DIR}/&lt;раса&gt;/E8_1.webp</code>) и обновляет манифест. Запусти батник <b>«Загрузка артов.bat»</b> и держи окно открытым.</div>
+  </div>`;
+}
+
+// Выбранная клетка: варианты списком, с заливкой и удалением поштучно.
+function adPcwSelHtml() {
+  if (!AD.pcwSel) return '';
+  const [race, ep] = AD.pcwSel.split(':');
+  const nm = (AD_PCW_RACES.find(r => r[0] === race) || [race, race])[1];
+  const epn = (AD_PCW_EPOCHS.find(e => e[0] === ep) || [ep, ''])[1];
+  const v = adPcwCell(race, ep);
+  const bust = AD.pcwBust || '';
+  const items = v.length ? v.map(f => `<div style="width:150px">
+      <div style="height:84px;border-radius:6px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover url('${esc(`${AD_PCW_DIR}/${race}/${f}${bust ? `?t=${bust}` : ''}`)}')"></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+        <span style="font:400 9px monospace;color:var(--t4,#6a7a88);flex:1;overflow:hidden;text-overflow:ellipsis">${esc(f)}</span>
+        <button class="btn btn-gh btn-xs" onclick="adPcwDelete('${race}','${esc(f)}')">Убрать</button>
+      </div></div>`).join('')
+    : `<div style="font-size:12px;color:var(--t4,#6a7a88)">Клетка пуста.</div>`;
+  return `<div style="margin-top:12px;border:1px solid var(--w2,#2a3340);border-radius:8px;background:var(--b1,#0f141b);padding:12px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="font-size:13px;color:var(--t2,#c3d0dc)">${esc(nm)} · ${esc(ep)} <span style="color:var(--t4,#6a7a88)">${esc(epn)}</span></div>
+      <div style="flex:1"></div>
+      <input type="file" id="ad-pcw-one" accept="image/*" multiple style="display:none"
+             onchange="adPcwUploadList([...this.files],'${race}','${ep}');this.value=''">
+      <button class="btn btn-gh btn-xs" onclick="document.getElementById('ad-pcw-one').click()">Добавить вариант</button>
+      <button class="btn btn-gh btn-xs" onclick="AD.pcwSel=null;adPaint()">Закрыть</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">${items}</div>
+  </div>`;
+}
+
+function adPcwPick(race, ep) {
+  AD.pcwSel = (AD.pcwSel === race + ':' + ep) ? null : race + ':' + ep;
+  adPaint();
+}
+
+// Бросок на клетку кладёт файлы именно в неё; бросок в общую зону — разбирает
+// имена, как батник. Ровно две дороги, третьей быть не должно.
+function adPcwDrop(ev, race, ep) {
+  ev.preventDefault();
+  const files = [...((ev.dataTransfer && ev.dataTransfer.files) || [])];
+  if (files.length) adPcwUploadList(files, race, ep);
+}
+
+// Разбор имени по правилу батника: <раса>_<эпоха>[_номер].
+function adPcwParse(name) {
+  const base = String(name || '').replace(/\.[^.]+$/, '');
+  const p = base.split('_');
+  const race = (p[0] || '').toLowerCase(), ep = (p[1] || '').toUpperCase();
+  if (!AD_PCW_RACES.some(r => r[0] === race)) return null;
+  if (!AD_PCW_EPOCHS.some(e => e[0] === ep)) return null;
+  return { race, ep };
+}
+
+async function adPcwUploadList(files, race, ep) {
+  const st = document.getElementById('ad-pcw-st');
+  const say = t => { if (st) st.textContent = t; };
+  if (!files || !files.length) return;
+  say('Проверка сервера…');
+  if (!(await adPortServerAlive())) {
+    say('нет сервера');
+    toast('Запусти «Загрузка артов.bat» (node tools/upload-server.js)', 'err');
+    return;
+  }
+  let ok = 0; const skip = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    // Клетка задана броском в неё; иначе читаем из имени, как батник.
+    const cell = (race && ep) ? { race, ep } : adPcwParse(f.name);
+    if (!cell) { skip.push(f.name); continue; }
+    say(`Сохранение ${i + 1} из ${files.length}…`);
+    try {
+      // Сцена — широкий фон, а не иконка: жмём до 1600, качество повыше.
+      const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 1600, 0.9) : f;
+      const q = `dir=pcworlds&sub=${encodeURIComponent(cell.race)}&ext=webp&name=${encodeURIComponent(cell.ep + '.webp')}`;
+      const r = await fetch(`${AD_PORT_SERVER}/upload?${q}`, {
+        method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+      ok++;
+    } catch (e) {
+      console.error('[admin] сцена хроники', e);
+      skip.push(f.name + ' — ' + (e.message || e));
+    }
+  }
+  AD.pcwBust = Date.now();
+  await adPcwLoad(true);
+  adPaint();
+  // Пропущенные называем поимённо: молча проглоченный файл выглядит как
+  // «загрузчик не работает», а на деле в имени не та раса.
+  const st2 = document.getElementById('ad-pcw-st');
+  if (st2) st2.textContent = skip.length ? `Залито: ${ok}. Пропущено: ${skip.join('; ')}` : `Залито: ${ok}.`;
+  toast(ok ? `Сцен залито: ${ok}` : 'Ни один файл не подошёл', ok ? 'ok' : 'err');
+}
+
+async function adPcwDelete(race, file) {
+  if (!confirm(`Убрать вариант ${file}? Файл будет удалён из папки игры.`)) return;
+  if (!(await adPortServerAlive())) {
+    toast('Запусти «Загрузка артов.bat» (node tools/upload-server.js)', 'err');
+    return;
+  }
+  try {
+    const r = await fetch(`${AD_PORT_SERVER}/file?dir=pcworlds&sub=${encodeURIComponent(race)}&name=${encodeURIComponent(file)}`,
+      { method: 'DELETE' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.pcwBust = Date.now();
+    await adPcwLoad(true);
+    adPaint();
+    toast('Вариант убран', 'ok');
+  } catch (e) {
+    console.error('[admin] удаление сцены', e);
+    toast('Не удалось убрать: ' + (e.message || e), 'err');
+  }
+}
+
+
+// ── Арт хроник: лица говорящих и кадры глав (assets/precursor/saga/) ──
+// Список того, что можно залить, НЕ ПИШЕТСЯ ЗДЕСЬ РУКАМИ: он читается из
+// самих хроник (PrecursorSaga.WORLDS — их регистрируют файлы saga_*.js).
+// Добавили третий мир — его люди и главы появятся в этой панели сами, и
+// заливка остаётся единственным действием: код после этого не трогают.
+const AD_PCS_DIR = 'assets/precursor/saga';
+
+async function adPcsLoad(force) {
+  if (AD.pcsMan && !force) return AD.pcsMan;
+  try {
+    const r = await fetch(`${AD_PCS_DIR}/manifest.json?t=${Date.now()}`, { cache: 'no-store' });
+    AD.pcsMan = r.ok ? (await r.json()) : {};
+  } catch (e) { AD.pcsMan = {}; }
+  return AD.pcsMan;
+}
+const adPcsFile = (world, kind, key) => {
+  const c = (AD.pcsMan || {})[world];
+  const f = kind === 'door' ? (c && c.door) : (c && c[kind] && c[kind][key]);
+  return f ? `${AD_PCS_DIR}/${world}/${f}` : null;
+};
+
+// Одна плитка: что это, залито ли, кнопка и место под статус.
+function adPcsTile(world, kind, key, title, sub, wide) {
+  const bust = AD.pcsBust || '';
+  const url = adPcsFile(world, kind, key);
+  const id = `${world}-${kind}-${key}`;
+  const nm = kind === 'door' ? 'door' : `${kind}_${key}`;
+  return `<div style="width:${wide ? 210 : 132}px">
+    <div ondragover="event.preventDefault();this.style.outline='1px solid var(--gdl,#5fb0e6)'"
+         ondragleave="this.style.outline=''"
+         ondrop="this.style.outline='';adPcsDrop(event,'${world}','${kind}','${key}')"
+         onclick="document.getElementById('ad-pcs-f-${id}').click()"
+         title="${esc(nm)}.webp — бросьте картинку или нажмите"
+         style="position:relative;height:${wide ? 118 : 150}px;border-radius:8px;cursor:pointer;overflow:hidden;
+                border:1px solid var(--w2,#2a3340);
+                background:${url ? `#0c1322 center/${kind === 'who' ? 'contain' : 'cover'} no-repeat url('${esc(url + (bust ? `?t=${bust}` : ''))}')` : 'var(--b1,#0f141b)'}">
+      ${!url ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font:400 12px monospace;opacity:.6">пусто</span>` : ''}
+    </div>
+    <div style="font-size:11px;color:var(--t2,#c3d0dc);margin-top:5px;line-height:1.3">${esc(title)}</div>
+    <div style="font:400 9px monospace;color:var(--t4,#6a7a88);margin-top:2px">${esc(sub || nm)}</div>
+    <input type="file" accept="image/*" id="ad-pcs-f-${id}" style="display:none"
+           onchange="adPcsUpload(this.files[0],'${world}','${kind}','${key}');this.value=''">
+    ${url ? `<button class="btn btn-gh btn-xs" style="margin-top:4px" onclick="adPcsDelete('${world}','${esc(nm)}')">Убрать</button>` : ''}
+  </div>`;
+}
+
+function adPrecursorSagaArtPanel() {
+  const SAGA = window.PrecursorSaga;
+  if (!SAGA || !SAGA.ORDER || !SAGA.ORDER.length) return '';
+  if (!AD.pcsMan) { adPcsLoad().then(() => adPaint()); }
+
+  const blocks = SAGA.ORDER.map(id => {
+    const w = SAGA.WORLDS[id];
+    // Говорящие — из WHO мира; безымянный голос свода лица не имеет и в
+    // список не идёт: заливать под него нечего.
+    const speakers = Object.keys(w.WHO || {})
+      .filter(k => (w.WHO[k] || {}).name)
+      .map(k => adPcsTile(id, 'who', k, w.WHO[k].name, `who_${k}`)).join('');
+    // Кадры — по одному на главу: узел, с которого глава начинается.
+    const chapters = Object.keys(w.NODES || {})
+      .filter(n => w.NODES[n].ch)
+      .map(n => adPcsTile(id, 'bg', n, w.NODES[n].ch, `bg_${n}`, true)).join('');
+    return `<div style="margin-top:14px;border:1px solid var(--w2,#2a3340);border-radius:8px;background:var(--b1,#0f141b);padding:12px 14px">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+        <div style="font-size:14px;font-weight:600;color:var(--t1,#e9edf3)">${esc(w.name)}</div>
+        <div style="font:400 10px monospace;color:var(--t4,#6a7a88)">${esc(id)} · ${esc(w.race || '—')}</div>
+      </div>
+      <div style="font-size:11px;color:var(--t4,#6a7a88);margin-bottom:6px">Дверь и лица говорящих</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        ${adPcsTile(id, 'door', 'door', 'Карточка на двери', 'door')}${speakers}</div>
+      <div style="font-size:11px;color:var(--t4,#6a7a88);margin:12px 0 6px">Кадры глав <span style="color:var(--t4,#6a7a88)">— один файл красит всю главу</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">${chapters}</div>
+    </div>`;
+  }).join('');
+
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">Хроники: лица и кадры
+      <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· ${SAGA.ORDER.length} хроник${AD.pcsMan ? '' : ' · читаю манифест…'}</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Список берётся из самих хроник, поэтому здесь ровно то, что игра умеет показать. Лицо — портрет с прозрачным фоном (в рост, высокий кадр), кадр главы — широкий снимок 16:9.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 4px;line-height:1.5">Порядок поиска фона: свой кадр сцены → кадр главы → сетка «раса × эпоха» ниже → ровный тон. Пусто — не поломка, а честное пустое место.</div>
+    ${blocks}
+    <div id="ad-pcs-st" style="font-size:11px;color:var(--t4,#6a7a88);margin-top:8px;min-height:14px"></div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin-top:6px;line-height:1.5">Пишется <b>прямо в папку игры</b> (<code>${AD_PCS_DIR}/&lt;мир&gt;/</code>). Запусти батник <b>«Загрузка артов.bat»</b> и держи окно открытым.</div>
+  </div>`;
+}
+
+function adPcsDrop(ev, world, kind, key) {
+  ev.preventDefault();
+  const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+  if (f) adPcsUpload(f, world, kind, key);
+}
+
+async function adPcsUpload(file, world, kind, key) {
+  const st = document.getElementById('ad-pcs-st');
+  const say = t => { if (st) st.textContent = t; };
+  if (!file) return;
+  say('Проверка сервера…');
+  if (!(await adPortServerAlive())) {
+    say('нет сервера');
+    toast('Запусти «Загрузка артов.bat» (node tools/upload-server.js)', 'err');
+    return;
+  }
+  try {
+    say('Сохранение…');
+    // Лицо режем по высоте и БЕЗ потери прозрачности (webp её держит),
+    // кадр главы — по ширине: это фон, а не иконка.
+    const cf = (typeof compressImageFile === 'function')
+      ? await compressImageFile(file, kind === 'who' ? 1200 : 1600, 0.9) : file;
+    const nm = kind === 'door' ? 'door.webp' : `${kind}_${key}.webp`;
+    const r = await fetch(`${AD_PORT_SERVER}/upload?dir=pcsaga&sub=${encodeURIComponent(world)}&ext=webp&name=${encodeURIComponent(nm)}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.pcsBust = Date.now();
+    await adPcsLoad(true);
+    // Хроника держит свой манифест в памяти — без сброса новый арт увидят
+    // только после F5, и это читается как «загрузка не сработала».
+    if (window.PcArt && PcArt.sagaReset) { PcArt.sagaReset(); PcArt.sagaLoad().catch(() => {}); }
+    adPaint();
+    say('Готово');
+    toast('Арт хроники сохранён', 'ok');
+  } catch (e) {
+    console.error('[admin] арт хроники', e);
+    say('Ошибка');
+    toast('Не удалось сохранить: ' + (e.message || e), 'err');
+  }
+}
+
+async function adPcsDelete(world, name) {
+  if (!confirm(`Убрать ${name}? Файл будет удалён из папки игры.`)) return;
+  if (!(await adPortServerAlive())) {
+    toast('Запусти «Загрузка артов.bat» (node tools/upload-server.js)', 'err');
+    return;
+  }
+  try {
+    const r = await fetch(`${AD_PORT_SERVER}/file?dir=pcsaga&sub=${encodeURIComponent(world)}&name=${encodeURIComponent(name + '.webp')}`,
+      { method: 'DELETE' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.pcsBust = Date.now();
+    await adPcsLoad(true);
+    if (window.PcArt && PcArt.sagaReset) { PcArt.sagaReset(); PcArt.sagaLoad().catch(() => {}); }
+    adPaint();
+    toast('Убрано', 'ok');
+  } catch (e) {
+    console.error('[admin] удаление арта хроники', e);
+    toast('Не удалось убрать: ' + (e.message || e), 'err');
   }
 }
 

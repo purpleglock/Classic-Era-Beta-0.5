@@ -1,114 +1,47 @@
--- ============================================================
--- ПЕРЕСВЯЗКА МЁРТВЫХ unit_id В СОСТАВАХ (fleets / armies)
--- ------------------------------------------------------------
--- Проблема: fleets.composition и armies.composition хранят unit_id
--- дизайна СНИМКОМ (по значению). Если игрок УДАЛИЛ дизайн и создал
--- заново с тем же именем — у faction_units новый UUID, а в составе
--- остаётся старый мёртвый id. Дальше _bt_stats(id) не находит строку
--- в faction_units и возвращает NULL → в резерве боя «null HP · null урон».
--- (Правка дизайна по месту через economy_publish_unit id НЕ меняет —
---  ломает только delete + recreate.)
+-- ════════════════════════════════════════════════════════════
+-- 17.08 «ПРОЕКТ КОРАБЛЯ НЕ НАЙДЕН» на расстановке боя с Легионом.
+-- Карточка в доске показывала «0 корп · 0 урон · null гекс», а высадка падала:
+-- _bt_stats(unit_id) возвращал null.
 --
--- Решение: у записей состава с мёртвым unit_id переставить id на
--- ТЕКУЩИЙ живой дизайн той же фракции с тем же именем (берём новейший
--- по updated_at). Это разовый ремонт данных — тот же, что делался руками,
--- но сразу по всем флотам и армиям. Функцию можно гонять повторно после
--- любого будущего «удалил–пересоздал».
+-- Причина не в бою и не в Легионе: в составах ФЛОТОВ висели unit_id проектов,
+-- которых в faction_units больше нет — проект переопубликовали, он получил
+-- новый id, а composition остался ссылаться на мёртвый. Флот при этом выглядел
+-- целым (имя и количество лежат прямо в composition), поэтому поломка всплывала
+-- только в бою — то есть ровно тогда, когда всё решается.
 --
--- Выполнить целиком в Supabase → SQL Editor.
--- ============================================================
+-- Битых ссылок нашлось 6 у двух держав, и у каждой есть точный двойник по имени
+-- в той же фракции — перевязываем на него. Количество и имя не трогаем.
+-- ЦЕПОЧКА: разовый ремонт. Повторный прогон безвреден (правит только мёртвые).
+-- ════════════════════════════════════════════════════════════
 
-create or replace function public.relink_dead_units()
-returns table(kind text, total_fixed int, entries_fixed int)
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  r        record;
-  elem     jsonb;
-  newcomp  jsonb;
-  changed  boolean;
-  fix_id   uuid;
-  old_id   uuid;
-  n_rows   int;
-  n_ent    int;
-begin
-  -- ── ФЛОТЫ ────────────────────────────────────────────────
-  n_rows := 0; n_ent := 0;
-  for r in
-    select f.id, f.faction_id, f.composition
-      from public.fleets f
-     where jsonb_typeof(f.composition) = 'array'
-       and jsonb_array_length(f.composition) > 0
-  loop
-    newcomp := '[]'::jsonb;
-    changed := false;
-    for elem in select value from jsonb_array_elements(r.composition) loop
-      old_id := nullif(elem->>'unit_id','')::uuid;
-      -- unit_id живой? — оставляем как есть
-      if old_id is not null
-         and not exists (select 1 from public.faction_units u where u.id = old_id) then
-        -- мёртвый: ищем текущий дизайн той же фракции с тем же именем
-        select u.id into fix_id
-          from public.faction_units u
-         where u.faction_id is not distinct from r.faction_id
-           and lower(u.name) = lower(coalesce(elem->>'unit_name',''))
-         order by u.updated_at desc nulls last
-         limit 1;
-        if fix_id is not null and fix_id <> old_id then
-          elem := jsonb_set(elem, '{unit_id}', to_jsonb(fix_id::text));
-          changed := true;
-          n_ent := n_ent + 1;
-        end if;
-      end if;
-      newcomp := newcomp || jsonb_build_array(elem);
-    end loop;
-    if changed then
-      update public.fleets set composition = newcomp where id = r.id;
-      n_rows := n_rows + 1;
-    end if;
-  end loop;
-  kind := 'fleets'; total_fixed := n_rows; entries_fixed := n_ent; return next;
+with bad as (
+  select f.id fleet_id,
+         jsonb_agg(
+           case when exists (select 1 from public.faction_units u
+                              where u.id = (c->>'unit_id')::uuid)
+                then c
+                else c || jsonb_build_object('unit_id',
+                       (select u2.id::text from public.faction_units u2
+                         where u2.faction_id = f.faction_id
+                           and u2.name = c->>'unit_name'
+                         limit 1))
+           end
+           order by ord) comp,
+         bool_or(not exists (select 1 from public.faction_units u3
+                              where u3.id = (c->>'unit_id')::uuid)
+                 and exists (select 1 from public.faction_units u4
+                              where u4.faction_id = f.faction_id
+                                and u4.name = c->>'unit_name')) fixed
+    from public.fleets f,
+         lateral jsonb_array_elements(coalesce(f.composition,'[]'::jsonb)) with ordinality t(c, ord)
+   group by f.id
+)
+update public.fleets f
+   set composition = bad.comp
+  from bad
+ where f.id = bad.fleet_id and bad.fixed;
 
-  -- ── АРМИИ ────────────────────────────────────────────────
-  n_rows := 0; n_ent := 0;
-  for r in
-    select a.id, a.faction_id, a.composition
-      from public.armies a
-     where jsonb_typeof(a.composition) = 'array'
-       and jsonb_array_length(a.composition) > 0
-  loop
-    newcomp := '[]'::jsonb;
-    changed := false;
-    for elem in select value from jsonb_array_elements(r.composition) loop
-      old_id := nullif(elem->>'unit_id','')::uuid;
-      if old_id is not null
-         and not exists (select 1 from public.faction_units u where u.id = old_id) then
-        select u.id into fix_id
-          from public.faction_units u
-         where u.faction_id is not distinct from r.faction_id
-           and lower(u.name) = lower(coalesce(elem->>'unit_name',''))
-         order by u.updated_at desc nulls last
-         limit 1;
-        if fix_id is not null and fix_id <> old_id then
-          elem := jsonb_set(elem, '{unit_id}', to_jsonb(fix_id::text));
-          changed := true;
-          n_ent := n_ent + 1;
-        end if;
-      end if;
-      newcomp := newcomp || jsonb_build_array(elem);
-    end loop;
-    if changed then
-      update public.armies set composition = newcomp where id = r.id;
-      n_rows := n_rows + 1;
-    end if;
-  end loop;
-  kind := 'armies'; total_fixed := n_rows; entries_fixed := n_ent; return next;
-end$$;
-
-revoke all on function public.relink_dead_units() from public;
--- Разовый ремонт — только администрация (запускать из SQL Editor от service role).
-
--- ── ЗАПУСК: чинит все сломанные флоты и армии прямо сейчас ──
-select * from public.relink_dead_units();
+-- Проверка: должно вернуть 0 строк.
+select f.name fleet, c->>'unit_name' un
+  from public.fleets f, jsonb_array_elements(coalesce(f.composition,'[]'::jsonb)) c
+ where not exists (select 1 from public.faction_units u where u.id = (c->>'unit_id')::uuid);

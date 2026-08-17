@@ -1,0 +1,42 @@
+<!doctype html>
+<!-- Стенд досье дозвёздных: живой мир из базы, без входа и без сети.
+     Нужен только чтобы смотреть на вёрстку глазами. Удалить не жалко. -->
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Досье державы — стенд</title>
+<link rel="stylesheet" href="css/index.css">
+<style>
+  /* Общие стили сайта запирают прокрутку на #app — стенду её надо вернуть */
+  html, body { overflow: auto !important; height: auto !important; }
+  body { background: var(--color-surface-base, #14171c); padding: 18px; max-width: 760px; margin: 0 auto; }
+  .hp-vn-btn { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--color-border-strong);
+    background: var(--color-surface-raised); color: var(--color-text); font: inherit; font-size: .8rem; cursor: pointer; }
+  .hp-vn-btn.hp-vn-back { opacity: .5; cursor: not-allowed; }
+</style>
+</head><body>
+<div id="out"></div>
+<script src="precursor_gen.js"></script>
+<script src="precursor_sim.js"></script>
+<script src="precursor_ui2.js"></script>
+<script src="_pcs_probe_data.js"></script>
+<script>
+  window.gbHelpOpen = k => alert('окно руководства: ' + k);
+  window.ecRpc = null;                      // сети нет: все кнопки серые
+  // реестр недоимки: живой ответ precursor_arrears() на стадии «сбор»
+  const __ARR = {
+    stage: 'сбор', total: 2880, next: 6000, mult: 0.55,
+    mine: { amount: 2280, taken: 2280, repaid: 780, worlds: 3 },
+    rows: [
+      { fid: 'a', name: 'Алая Уния', amount: 2280, taken: 2280, repaid: 780, worlds: 3, share: 0.7917, mine: true },
+      { fid: 'b', name: 'Консорциум Ardsheva', amount: 600, taken: 600, repaid: 0, worlds: 1, share: 0.2083, mine: false },
+    ], log: [],
+  };
+  document.getElementById('out').innerHTML =
+    PrecursorDossier.arrears(__ARR) + PrecursorDossier.render(window.__CIV);
+  const st = PrecursorDossier.calc(window.__CIV);
+  console.log('состояние:', JSON.stringify({
+    русло: st.band, набат: st.alarm, устой: st.stead, прочность: st.grit,
+    небо: st.sky, вскрыто: st.open, седмиц: st.weeks.length, доктрина: st.doctrine }));
+</script>
+</body></html>

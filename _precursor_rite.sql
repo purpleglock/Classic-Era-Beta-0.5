@@ -68,7 +68,7 @@ begin
   begin perform public._pc_bonds_tick(); exception when others then null; end;
   select coalesce(f.rep, 0) into rep from public.faction_foundation f where f.faction_id = fid;
   select m.faith_id into v_faith from public.faith_membership m
-    where m.faction_id = fid order by (m.role = 'founder') desc limit 1;
+    where m.faction_id = fid and m.role = 'founder' limit 1;   -- своя = основанная
   select f.name, coalesce(f.stigma, 0) into v_faith_nm, v_stigma
     from public.faiths f where f.id = v_faith;
   select coalesce(jsonb_agg(x order by x_tier desc, x_name), '[]'::jsonb) into v
@@ -136,7 +136,7 @@ begin
 
   -- Своя вера обязательна: обряд служат ЕЙ, клеймо ложится на неё.
   select m.faith_id into v_faith from public.faith_membership m
-    where m.faction_id = fid order by (m.role = 'founder') desc limit 1;
+    where m.faction_id = fid and m.role = 'founder' limit 1;   -- своя = основанная
   if v_faith is null then raise exception 'no faith of your own'; end if;
   select f.name into v_faith_nm from public.faiths f where f.id = v_faith;
 

@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260816mnav4';
+  var BUILD = '20260817theatre';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -60,7 +60,7 @@
      никогда не грузился — у кого Inter стоял локально (часто старый, без курсива),
      браузер синтезировал «косой» faux-italic в цитатах, у остальных шёл Exo 2. -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:ital,wght@0,200;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400&family=Orbitron:wght@400;500;700;900&family=Audiowide&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/index.css?v=20260816mnav4">
+<link rel="stylesheet" href="css/index.css?v=20260817svkmob">
 </head>
 <body>
 <!-- Экран загрузки после входа по почте. Рисуется ДО первого кадра приложения
@@ -472,8 +472,37 @@
 <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6/dist/d3-delaunay.min.js"></script>
 <script src="galaxy_gen.js?v=20260715multistar1"></script>
 <script src="precursor_gen.js?v=20260727pcart1"></script>
-<script src="precursor_ui.js?v=20260727pcart1"></script>
-<script src="galaxy_map.js?v=20260813gbop"></script>
+<script src="precursor_sim.js?v=20260816sim1"></script>
+<script src="precursor_ui.js?v=20260817cost1"></script>
+<script src="precursor_ui2.js?v=20260817tabs"></script>
+<script src="precursor_risen.js?v=20260817civ2"></script>
+<script src="precursor_art.js?v=20260816saga4"></script>
+<script src="precursor_saga.js?v=20260817tabs"></script>
+<!-- Хроника найденного мира: стан собирает мир из строки primitive_civs,
+     пласты строят из него главы, saga_worlds связывает то и другое. -->
+<script src="saga_weave.js?v=20260817civ3"></script>
+<!-- полки конструктора: темы, люди с нуждой, ружья, события. Кладётся ДО
+     пластов: saga_layers.js собирает главы из него, а свой скелет держит
+     запасным. -->
+<!-- Текст полок отдельным файлом: фразы с дырами, ни строчки логики. Правится
+     в консоли (вкладка «📜 Хроника») и выгружается оттуда же. Строго ДО
+     saga_kit.js — тот без него не заводится намеренно. -->
+<script src="saga_text.js?v=20260817text1"></script>
+<script src="saga_kit.js?v=20260817text1"></script>
+<script src="saga_layers.js?v=20260817civ3"></script>
+<script src="saga_layers2.js?v=20260817civ3"></script>
+<script src="saga_worlds.js?v=20260817civ3"></script>
+<!-- ПАРТИЯ (lore/precursor_run.md): срок в 12 веков, внимание, две шкалы и
+     два конца. Экран мира теперь один — этот; пять вкладок карточки остались
+     мёртвым, вышедшим к звёздам и мирам без якоря. Кладётся ПОСЛЕ хроники:
+     событие века берётся из её узла. -->
+<script src="precursor_run.js?v=20260817rite"></script>
+<script src="precursor_run_ui.js?v=20260817rite"></script>
+<!-- Рукописных миров больше нет. «Долгая Вода» и «Восьмой жилы нет» уехали
+     в пласты редкими вариантами (saga_layers2.js: счёт без восьмого номера,
+     выскобленный разворот), следы игроков — в pc_record. Файлов рукописей на
+     диске больше нет: всё, что видит игрок, собирается по полкам. -->
+<script src="galaxy_map.js?v=20260817minespr1"></script>
 <script src="faction_reg.js?v=20260816wiki16"></script>
 <script src="locations.js?v=20260624a"></script>
 <script src="faction_news.js?v=20260809vnmob"></script>
@@ -485,6 +514,7 @@
 <script src="turret_gen.js?v=20260801turret1"></script>
 <script src="reactor_gen.js?v=20260808rgtech"></script>
 <script src="hull_gen.js?v=20260808colossus2"></script>
+<script src="orbital_gen.js?v=20260817minespr1"></script>
 <!-- Пехота и наземная техника: свой рендер и свой экран выкладки (не корабельный движок) -->
 <script src="army_forge.js?v=20260814army1"></script>
 <script src="constructors.js?v=20260809perks2"></script>
@@ -524,12 +554,16 @@
      что игрок разложил на палубе. Грузится после battle_gl.js — берёт его
      геометрию корпуса; three.js так же лениво (bgLoadThree). -->
 <script src="ship_preview.js?v=20260808battleview6"></script>
-<script src="admin.js?v=20260813path2"></script>
+<script src="admin.js?v=20260817saga1"></script>
+<!-- Верстак хроники: вкладка «📜 Хроника» в консоли. Собирает мир теми же
+     saga_weave/saga_layers, что и игра, и показывает весь граф с замером.
+     Строго ПОСЛЕ saga_*.js и admin.js. -->
+<script src="admin_saga.js?v=20260817svkmob"></script>
 <!-- «Пойдём к течению»: звёздная отмель на карте галактики (изометрия),
      играешь за корабль. Пришла на смену берегу из fishing.js — тот файл
      удалён, RPC рыбалки (fishing_cast/land) остались под тралом. -->
 <script src="garden.js?v=20260813gdrare"></script>
-<script src="guide.js?v=20260816wiki16"></script>
+<script src="guide.js?v=20260817civ4"></script>
 <script src="tickets.js?v=20260607a"></script>
 <script src="chat.js?v=20260727ghost2"></script>
 <script>

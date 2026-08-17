@@ -832,7 +832,7 @@ const EC_MODS = {
     'Акватики (Водные)':          { gc: 0.15, colonize: 0.15 },
     'Плантоиды (Растениевидные)': { mine: 0.15, gc: 0.05, agents_flat: -1 },
     'Литоиды (Каменные)':         { mine: 0.20, gc: -0.15 },
-    'Синтетики / Киборги':        { gc: -0.35, research: -0.15, sci_flat: 2 },  // все планеты родные → намеренно сильный дебаф денег
+    'Синтетики / Киборги':        { gc: -0.15, mine: 0.10, research: -0.15, sci_flat: 2 },  // РЕВОРК 17.08: было -0.35; свои правила вместо тупого минуса (см. ecIsRobot)
     'Энергетические сущности':    { gc: -0.15, research: -0.10, sci_flat: 1, agents_flat: 1 },
   },
   // Тип → СТАРТ: фронтир = дешёвая быстрая экспансия, но бедно; колония = богато/вглубь, медленно вширь.
@@ -867,7 +867,7 @@ const EC_LANE_ICON = { science: '🔬', war: '⚔', econ: '💰', expand: '🪐'
 function ecArchetype(app) {
   app = app || EC.app || {};
   const isRobot = app.race === 'Синтетики / Киборги' || app.gov === 'Машинный разум (ИИ)';
-  if (isRobot) return { title: 'Машинный разум', lane: 'science', tagline: 'Синтетический рой: любой мир — дом, наука и сила вместо денег.', signature: 'Робот-набор — все миры родные, пехота ×3, +слот, 2 захвата' };
+  if (isRobot) return { title: 'Машинный разум', lane: 'science', tagline: 'Синтетический рой: любой мир — дом, ни голода, ни соцсферы.', signature: 'Робо-набор — все миры родные, +слот науки, 2 захвата, склад +50%, наземка −35%' };
   return EC_ARCHETYPE[app.ideology] || { title: 'Независимая держава', lane: 'econ', tagline: 'Сбалансированный путь без выраженной специализации.', signature: '' };
 }
 
@@ -940,6 +940,9 @@ function ecFactionMods(app) {
   add(EC_MODS.gov[app.gov]); add(EC_MODS.regime[app.regime]);
   add(EC_MODS.ideology[app.ideology]); add(EC_MODS.race[app.race]);
   add(EC_MODS.civ[app.civ_type]);
+  // РЕВОРК 17.08: «Синтетики» и «Машинный разум» — одна и та же природа,
+  // денежный штраф не берётся дважды (зеркало _faction_mods).
+  if (app.race === 'Синтетики / Киборги' && app.gov === 'Машинный разум (ИИ)') add({ gc: 0.15 });
   add((EC_CAPITAL[app.capital_env] || {}).mods);   // лёгкий бонус планеты-столицы
   // Бонусы изученных политических технологий (зеркало SQL _faction_mods).
   // Применяются к текущей фракции (research лежит в EC.eco, не в анкете).
@@ -1073,7 +1076,11 @@ function ecSlotsSum(t) { return EC.buildings.filter(b => b.btype === t).reduce((
 const EC_STORE_BASE = 1000, EC_STORE_PER_SLOT = 500;
 const EC_STORE_CAP_MULT = [0.80, 0.90, 1.00, 1.15, 1.30];   // зеркало _budget_cap_mult
 function ecStoreCapMult() { return EC_STORE_CAP_MULT[ecBudgetLvl('infra')]; }
-function ecStoreCap() { return Math.round((EC_STORE_BASE + ecSlotsSum('warehouse') * EC_STORE_PER_SLOT) * ecStoreCapMult()); }
+const EC_ROBOT_STORE_MULT = 1.5;   // МАШИНЫ: дроны-логисты, склад +50% (зеркало economy_accrue)
+function ecStoreCap() {
+  return Math.round((EC_STORE_BASE + ecSlotsSum('warehouse') * EC_STORE_PER_SLOT)
+    * ecStoreCapMult() * (ecIsRobot() ? EC_ROBOT_STORE_MULT : 1));
+}
 // ── Раса/правление «роботов»: раса «Синтетики / Киборги» ИЛИ правление
 //    «Машинный разум (ИИ)». Роботы: пехота на Военном Заводе (×3), 2 слота
 //    исследований, 2 захвата систем за цикл. Зеркало: public._faction_is_robot().
@@ -1553,8 +1560,10 @@ function ecBudgetPanel() {
   const pop = ecBudgetPop();
   const rows = Object.keys(EC_BUDGET).map(k => {
     const d = EC_BUDGET[k], lvl = ecBudgetLvl(k);
-    const cost = Math.round(EC_BUDGET_W[lvl] * d.k * pop * ecBudgetPopMult(pop));
-    const eff = k === 'military'
+    // МАШИНЫ: соцблока у них нет — ползунок инертен и денег не стоит.
+    const dead = ecIsRobot() && k === 'social';
+    const cost = dead ? 0 : Math.round(EC_BUDGET_W[lvl] * d.k * pop * ecBudgetPopMult(pop));
+    const eff = dead ? '— машинам не нужно' : k === 'military'
       ? (lvl === 0 ? '⛔ юниты не строятся' : `постройка юнитов ×${d.mults[lvl]} времени`)
       : d.mults ? `множитель ×${d.mults[lvl].toFixed(2)}` : `до ${EC_BUDGET_SLOTS[lvl]} слот./постройка`;
     const dots = [0, 1, 2, 3, 4].map(i =>
@@ -1569,6 +1578,7 @@ function ecBudgetPanel() {
   }).join('');
   const cap = ecBudgetPopCap();
   const grB = ecBudgetGrowthBase(), grG = ecBudgetGrowthGoods(), gr = grB + grG;
+  const grRobot = ecIsRobot();   // МАШИНЫ: прирост от ПРОМЫШЛЕННОСТИ, соцблока у них нет
   const dPop = Math.round(pop * gr);
   const jobs = Math.floor(pop / EC_POP_PER_SLOT);
   const grTxt = gr >= 0 ? `+${(gr * 100).toFixed(1)}%` : `${(gr * 100).toFixed(1)}%`;
@@ -1576,10 +1586,12 @@ function ecBudgetPanel() {
   return `<div class="ec-bud-panel">
     <div class="ec-bud-pop">
       <span class="ec-bud-pop-i" data-tip="Население живёт в ячейках колоний: потолок = ячейки × ${EC_POP_CAP_CELL}. Колонизация и терраформ добавляют ячейки — поднимают потолок.">👥 Население <b>${ecNum(pop)}</b> / ${ecNum(cap)}</span>
-      <span class="ec-bud-pop-i ${grCls}" data-tip="Прирост = соцобеспечение (${(grB * 100).toFixed(1)}%: ${EC_POP_GROWTH.map((g, i) => `${EC_BUDGET_LVL[i]} ${g >= 0 ? '+' : ''}${(g * 100).toFixed(1)}%`).join(' · ')}) + товары (${grG >= 0 ? '+' : ''}${(grG * 100).toFixed(1)}%: полное обеспечение Фабрикой товаров даёт до +1.0%/сут).">${gr >= 0 ? '📈' : '📉'} ${grTxt}/сут (${dPop >= 0 ? '+' : ''}${ecNum(dPop)} чел.) <i style="font-style:normal;opacity:.7">⚖${(grB * 100).toFixed(1)} + 🛍${(grG * 100).toFixed(1)}</i></span>
+      <span class="ec-bud-pop-i ${grCls}" data-tip="${grRobot
+        ? `Машины не рождаются, а сходят с конвейера: прирост даёт ПРОМЫШЛЕННОСТЬ (${(grB * 100).toFixed(1)}%: ${EC_POP_GROWTH.map((g, i) => `${EC_BUDGET_LVL[i]} ${g >= 0 ? '+' : ''}${(g * 100).toFixed(1)}%`).join(' · ')}). Соцобеспечение и товары на них не действуют.`
+        : `Прирост = соцобеспечение (${(grB * 100).toFixed(1)}%: ${EC_POP_GROWTH.map((g, i) => `${EC_BUDGET_LVL[i]} ${g >= 0 ? '+' : ''}${(g * 100).toFixed(1)}%`).join(' · ')}) + товары (${grG >= 0 ? '+' : ''}${(grG * 100).toFixed(1)}%: полное обеспечение Фабрикой товаров даёт до +1.0%/сут).`}">${gr >= 0 ? '📈' : '📉'} ${grTxt}/сут (${dPop >= 0 ? '+' : ''}${ecNum(dPop)} чел.) <i style="font-style:normal;opacity:.7">${grRobot ? `🏭${(grB * 100).toFixed(1)}` : `⚖${(grB * 100).toFixed(1)} + 🛍${(grG * 100).toFixed(1)}`}</i></span>
       <span class="ec-bud-pop-i" data-tip="Каждый рабочий слот постройки требует ${EC_POP_PER_SLOT} жителей. Не хватает рук — слоты всех построек срезаются пропорционально.">👷 хватает на <b>${ecNum(jobs)}</b> слот.</span>
     </div>
-    <div class="ec-bud-legend">Как это играется: <b>население</b> — и налоговая база, и рабочие руки (${EC_POP_PER_SLOT} жителей = 1 слот постройки; слоты двигают доход, науку и темп добычи). Растёт от <b>соцобеспечения</b> и <b>товаров</b> (Фабрика товаров), потолок поднимают новые ячейки (колонизация/терраформ). Цена уровней <b>прогрессивная</b> (веса ${EC_BUDGET_W.join('/')}): «норма» дешёвая, «максимум» кусается. Итог: <b>−${ecNum(ecBudgetUpkeep())} ГС/сут</b>.</div>
+    <div class="ec-bud-legend">Как это играется: <b>население</b> — и налоговая база, и рабочие руки (${EC_POP_PER_SLOT} жителей = 1 слот постройки; слоты двигают доход, науку и темп добычи). Растёт от ${grRobot ? '<b>промышленности</b> (машины собираются на линиях)' : '<b>соцобеспечения</b> и <b>товаров</b> (Фабрика товаров)'}, потолок поднимают новые ячейки (колонизация/терраформ). Цена уровней <b>прогрессивная</b> (веса ${EC_BUDGET_W.join('/')}): «норма» дешёвая, «максимум» кусается. Итог: <b>−${ecNum(ecBudgetUpkeep())} ГС/сут</b>.</div>
     ${rows}
   </div>`;
 }
@@ -2669,6 +2681,11 @@ function ecGoodsInfo() {
   const slots = ecSlotsSum('goodsfab');
   const pop = ecBudgetPop();
   const demand = pop / 600;
+  // МАШИНЫ (реворк 17.08): ТНП они не потребляют. Спроса нет, просперити
+  // зафиксировано на 1.00: ни бонуса до ×1.25, ни провала до ×0.90; вода и
+  // сырьё не сгорают, Фабрика товаров им бесполезна. Зеркало economy_accrue.
+  if (ecIsRobot()) return { slots, water: 0, mat: 0, waterNeed: 0, matNeed: 0, ratio: 0, made: 0,
+    pop, demand: 0, cov: 1, welfare: 1, recipe: null, gBonus: 0, cap: 1, lacksText: '', robot: true };
   // Рецепт активен ТОЛЬКО при изученной технологии И сохранённом рецепте; иначе легаси.
   const rec = ecHasGoodsTech() ? ecRecipeCalc(EC.recipe) : null;
   if (rec) {
@@ -3184,17 +3201,21 @@ function ecBudgetPop() {
 function ecBudgetPopCap() { return (EC.colonies || []).reduce((a, c) => a + (+c.cells || 0), 0) * EC_POP_CAP_CELL; }
 // Рост населения %/сут = соцобеспечение + бонус за обеспечение товарами
 // (до +1%/сут при полном покрытии) — зеркало роста pop в economy_accrue.
-function ecBudgetGrowthBase() { return EC_POP_GROWTH[ecBudgetLvl('social')]; }
-function ecBudgetGrowthGoods() { return 0.01 * Math.min(1, ecGoodsInfo().cov); }
+// МАШИНЫ (реворк 17.08): не рождаются — сходят с конвейера. Прирост считает
+// ПРОМЫШЛЕННОСТЬ, соцобеспечение и товары на них не влияют.
+function ecBudgetGrowthBase() { return EC_POP_GROWTH[ecBudgetLvl(ecIsRobot() ? 'industry' : 'social')]; }
+function ecBudgetGrowthGoods() { return ecIsRobot() ? 0 : 0.01 * Math.min(1, ecGoodsInfo().cov); }
 function ecBudgetGrowth() { return ecBudgetGrowthBase() + ecBudgetGrowthGoods(); }
 // Апкип ГС/сут = население × скидка(нас.) × Σ(ставка × вес уровня) — зеркало _budget_upkeep
 function ecBudgetUpkeep() {
-  const pop = ecBudgetPop();
+  const pop = ecBudgetPop(), robot = ecIsRobot();
   return Math.round(pop * ecBudgetPopMult(pop) *
-    Object.keys(EC_BUDGET).reduce((a, k) => a + EC_BUDGET_W[ecBudgetLvl(k)] * EC_BUDGET[k].k, 0));
+    Object.keys(EC_BUDGET).reduce((a, k) =>
+      a + (robot && k === 'social' ? 0 : EC_BUDGET_W[ecBudgetLvl(k)] * EC_BUDGET[k].k), 0));
 }
-// Благополучие от соцобеспечения — множитель всего ГС-дохода (зеркало _budget_gc_mult)
-function ecBudgetGcMult() { return EC_BUDGET.social.mults[ecBudgetLvl('social')]; }
+// Благополучие от соцобеспечения — множитель всего ГС-дохода (зеркало _budget_gc_mult).
+// МАШИНЫ: соцсферы у них нет — ни бонуса, ни провала, и апкип за неё не берётся.
+function ecBudgetGcMult() { return ecIsRobot() ? 1 : EC_BUDGET.social.mults[ecBudgetLvl('social')]; }
 
 // ══════════════════════════════════════════════════════════════
 // КУРС ДЕРЖАВЫ — экономические политики (зеркало _econ_policy.sql).
