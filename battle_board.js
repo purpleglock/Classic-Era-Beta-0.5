@@ -4530,6 +4530,58 @@ function hsSoon(iso) {
   const m = Math.round(ms / 60000);
   return m < 60 ? ('через ' + m + ' мин') : ('через ~' + Math.round(m / 60) + ' ч');
 }
+// ── 🛑 ВЫХОД С КРЫСИНЫХ ТРОП (_legion_intercept.sql) ──
+// Легион идёт задворками и выныривает в обжитое пространство лишь на последних
+// двух прыжках перед целью. Эти два узла и есть единственное место, где ватагу
+// можно встретить до налёта — сервер отдаёт их только на ступени 'resolved',
+// то есть только тем, кто держит recon-заставу с полным экипажем.
+// ⚠ Кнопка НЕ «регистрирует засаду»: она просто шлёт флот в узел. Засада —
+// это факт стоянки там в час прохода, и правило должно читаться именно так,
+// иначе игрок будет искать несуществующий режим и злиться.
+function hsAt(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function hsRoadBlock(t) {
+  if (!Array.isArray(t.road) || !t.road.length) return '';
+  const rows = t.road.map(r => `<div class="hs-road-r">
+      <b>${esc(r.name || r.sys)}</b>
+      <span>проход ${hsAt(r.at)}</span>
+      <button class="btn btn-gh btn-sm" onclick="hsIntercept('${jsq(r.sys)}', this)">Встать флотом</button>
+    </div>`).join('');
+  return `<div class="hs-road">
+      <div class="hs-road-h">🛑 Выход с крысиных троп</div>
+      ${rows}
+      <div class="hs-road-n">Раньше этих узлов ватаги на трассе нет — Легион идёт задворками, и ловить там некого. Флот, стоящий здесь в час прохода, вскроет её на месте: налёт сорвётся, но бой будет сразу.</div>
+    </div>`;
+}
+// Выбор флота прямо в карточке: список — свои мобильные соединения на стоянке.
+// Станции и флоты в пути отсеяны — встать в засаду они не могут по определению.
+async function hsIntercept(sys, btn) {
+  const box = btn.parentElement;
+  btn.disabled = true;
+  let list = [];
+  try { list = await ecRpc('fleets_mine', {}); } catch (e) { toast(e.message, 'err'); btn.disabled = false; return; }
+  const free = (Array.isArray(list) ? list : []).filter(f => f.status === 'idle' && !f.is_station && +f.ships > 0);
+  if (!free.length) { toast('Свободных флотов на стоянке нет', 'err'); btn.disabled = false; return; }
+  box.innerHTML = `<select class="hs-road-sel">${free.map(f =>
+      `<option value="${jsq(f.id)}">${esc(f.name || 'Флот')} · ${+f.ships} кор.${f.system_id === sys ? ' · уже здесь' : ''}</option>`
+    ).join('')}</select>
+    <button class="btn btn-gd btn-sm" onclick="hsInterceptGo('${jsq(sys)}', this)">Отправить</button>`;
+}
+async function hsInterceptGo(sys, btn) {
+  const sel = btn.parentElement.querySelector('.hs-road-sel');
+  if (!sel) return;
+  btn.disabled = true;
+  try {
+    const r = await ecRpc('fleet_send', { p_id: sel.value, p_dest_sys: sys });
+    if (r && r.ok === false) throw new Error(r.why || 'флот не вышел');
+    toast('Флот идёт в узел. Успеет до прохода — ватага вскроется там', 'ok');
+    renderHotspots();
+  } catch (e) { toast(e.message, 'err'); btn.disabled = false; }
+}
 function hsThreatsBlock(list) {
   if (!list || !list.length) return '';
   const known = list.filter(t => t.grade !== 'ghost')
@@ -4557,6 +4609,7 @@ function hsThreatsBlock(list) {
         ${t.stood && (t.looted || t.next_at) ? `<div class="hs-card-loot">
           ${t.looted ? `Угнано за стоянку: <b>${(+t.looted).toLocaleString('ru')}</b> жит.` : ''}
           ${t.next_at ? `<span>следующий сбор ${hsSoon(t.next_at)}</span>` : ''}</div>` : ''}
+        ${hsRoadBlock(t)}
       </div>`;
   }).join('');
 

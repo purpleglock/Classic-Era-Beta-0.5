@@ -689,6 +689,9 @@ function gardenStart(cv, world, spawn) {
   // Чужие садоводы: слепок с сервера + своя интерполяция между пингами.
   const peers = [];
   let pingBusy = false, pingTimer = 0;
+  // Вебсокет присутствия: канал системы, широковещание своего места.
+  let wsChan = null, wsSys = null, wsOk = false, wsAt = 0, wsX = NaN, wsY = NaN, wsA = NaN;
+  let me = null;                 // паспорт с сервера: {id, nm, col} — им подписываемся
   // Обзорный зум: в одной системе — «вся система в кадре», на галактике —
   // прежний дальний план между светилами.
   const hyperZ = world.solo
@@ -813,6 +816,7 @@ function gardenStart(cv, world, spawn) {
         p_hat: GD_LOOK.hat, p_hull: GD_LOOK.hull,
         p_sys: (_gdState && _gdState.temple) || null,
       });
+      if (r && r.me && r.me.id) { me = r.me; wsOpen(r.me.sys); }
       const was = peers.length;
       peersMerge((r && r.peers) || []);
       // Сводку трогаем только когда состав менялся: перерисовывать её каждые
@@ -822,23 +826,104 @@ function gardenStart(cv, world, spawn) {
     pingBusy = false;
   }
 
+  // ── Вебсокет. Один канал на систему: сюда 8 раз в секунду уходит своё
+  // место и отсюда же приходят чужие. Пинг в базу остаётся, но редкий: он
+  // держит строку живой (её читают те, у кого сокет не поднялся) и приносит
+  // паспорт. Провод и база кладут корабли в ОДНУ корзину по одному ключу
+  // (md5 uuid, см. _garden_ws.sql) — иначе сосед двоится.
+  function wsOpen(sys) {
+    if (!sys || typeof sb === 'undefined' || !me) return;
+    if (wsChan && wsSys === sys) return;
+    wsClose();
+    wsSys = sys;
+    const ch = sb.channel('gd:' + sys, {
+      config: { broadcast: { self: false }, presence: { key: me.id } },
+    });
+    wsChan = ch;
+    ch.on('broadcast', { event: 'p' }, ({ payload }) => wsPeer(payload))
+      // Уход по проводу виден сразу — ждать 25 секунд, пока протухнет строка
+      // в базе, значит держать в кадре чужой корабль, которого уже нет.
+      .on('presence', { event: 'leave' }, ({ key }) => {
+        const i = peers.findIndex(x => x.id === key);
+        if (i >= 0) { peers.splice(i, 1); gardenPaintHud(); }
+      })
+      .subscribe(st => {
+        if (st === 'SUBSCRIBED') {
+          wsOk = true;
+          try { ch.track({ id: me.id }); } catch (e) {}
+          wsSend(true);
+        } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') {
+          // Канал после CLOSED сам не оживает: сносим и поднимаем заново —
+          // до тех пор соседей везёт пинг в базу.
+          wsOk = false;
+          if (wsChan === ch && !stop) setTimeout(() => {
+            if (wsChan !== ch || stop) return;
+            wsChan = null; wsSys = null; wsOpen(sys);
+          }, 3000);
+        }
+      });
+  }
+  function wsClose() {
+    const ch = wsChan; wsChan = null; wsSys = null; wsOk = false;
+    if (ch && typeof sb !== 'undefined') { try { sb.removeChannel(ch); } catch (e) {} }
+  }
+  // Отправка: не чаще 8 раз в секунду и только когда что-то изменилось;
+  // раз в секунду — удар пульса, чтобы стоящий корабль не считали ушедшим.
+  function wsSend(force) {
+    if (!wsOk || !wsChan || !me) return;
+    const now = performance.now();
+    const moved = !(Math.abs(P.tx - wsX) < .002 && Math.abs(P.ty - wsY) < .002
+                    && Math.abs(P.ang - wsA) < .01);
+    if (!force && now - wsAt < (moved ? 120 : 1000)) return;
+    wsAt = now; wsX = P.tx; wsY = P.ty; wsA = P.ang;
+    try {
+      wsChan.send({ type: 'broadcast', event: 'p', payload: {
+        id: me.id, nm: me.nm, col: me.col,
+        tx: P.tx, ty: P.ty, ang: P.ang, hat: GD_LOOK.hat, hull: GD_LOOK.hull,
+      } });
+    } catch (e) {}
+  }
+  function wsPeer(d) {
+    if (!d || !d.id || (me && d.id === me.id)) return;
+    const was = peers.length;
+    peerSet(d).wsAt = Date.now();   // метка «говорит по проводу», см. peersMerge
+    if (peers.length !== was) gardenPaintHud();
+  }
+  // Общая укладка соседа: и провод, и база зовут её же.
+  function peerSet(d) {
+    let q = peers.find(x => x.id === d.id);
+    if (!q) {
+      q = { id: d.id, tx: +d.tx, ty: +d.ty, ang: +d.ang || 0, thr: 0, bob: 0 };
+      peers.push(q);
+    }
+    q.nm = String(d.nm || 'Безымянные').slice(0, 24);
+    q.col = /^#[0-9a-f]{6}$/i.test(String(d.col || '')) ? d.col : '#6f8bb5';
+    q.hat = GD_HATS.includes(d.hat) ? d.hat : 'straw';
+    q.hull = GD_HULLS[d.hull] ? d.hull : 'steel';
+    q.ttx = +d.tx; q.tty = +d.ty; q.tang = +d.ang || 0;
+    return q;
+  }
+
   function peersMerge(list) {
     const seen = {};
+    const now = Date.now();
     list.forEach(d => {
       seen[d.id] = 1;
       let q = peers.find(x => x.id === d.id);
+      // Кто говорит по проводу — тому база не указ: её слепок отстал на
+      // секунды и дёрнул бы корабль назад.
+      if (q && q.wsAt && now - q.wsAt < 6000) return;
       if (!q) {
         // Первый раз — ставим сразу на место, без подъезда через полкарты.
-        q = { id: d.id, tx: +d.tx, ty: +d.ty, ang: +d.ang || 0, thr: 0, bob: 0 };
-        peers.push(q);
+        // Первый раз — ставим сразу на место, без подъезда через полкарты.
       }
-      q.nm = String(d.nm || 'Безымянные').slice(0, 24);
-      q.col = /^#[0-9a-f]{6}$/i.test(String(d.col || '')) ? d.col : '#6f8bb5';
-      q.hat = GD_HATS.includes(d.hat) ? d.hat : 'straw';
-      q.hull = GD_HULLS[d.hull] ? d.hull : 'steel';
-      q.ttx = +d.tx; q.tty = +d.ty; q.tang = +d.ang || 0;
+      peerSet(d);
     });
-    for (let i = peers.length - 1; i >= 0; i--) if (!seen[peers[i].id]) peers.splice(i, 1);
+    for (let i = peers.length - 1; i >= 0; i--) {
+      // Свежий голос по проводу — довод, что корабль на месте, даже если в
+      // базе строка ещё не обновилась.
+      if (!seen[peers[i].id] && !(peers[i].wsAt && now - peers[i].wsAt < 6000)) peers.splice(i, 1);
+    }
   }
 
   function peersStep(dt, t) {
@@ -974,6 +1059,7 @@ function gardenStart(cv, world, spawn) {
     cam.z = Math.exp(Math.log(cam.z) + (Math.log(wantZ) - Math.log(cam.z)) * kz);
 
     hatStep(dt, t);          // шляпа и седок живут своей пружиной, см. drawShip
+    wsSend(false);           // своё место — в эфир, см. wsSend
     peersStep(dt, t);        // чужие корабли едут между пингами
     netStep(dt, t);          // брошенная сеть летит к камню и возвращается
     astStep(dt, t);          // камни дрейфуют, см. «ЛОВЛЯ КАМНЕЙ»
@@ -2825,7 +2911,9 @@ function gardenStart(cv, world, spawn) {
   }
   requestAnimationFrame(frame);
   ping();                                  // первый слепок сразу, не через 1.5 с
-  pingTimer = setInterval(ping, 1500);
+  // Провод несёт движение, база — только страховка и паспорт: реже пинг —
+  // меньше нагрузки, а живость соседа теперь не от него зависит.
+  pingTimer = setInterval(ping, 5000);
 
   return {
     P, cam, near: null, actAt: 0, astNear, peers,
@@ -2836,6 +2924,7 @@ function gardenStart(cv, world, spawn) {
     stop: () => {
       stop = true;
       clearInterval(pingTimer);
+      wsClose();
       // Уходя — снимаем себя с обода сразу, а не ждём, пока протухнет строка:
       // призрак чужого корабля, который стоит и не двигается, хуже пустоты.
       if (typeof ecRpc === 'function') { try { ecRpc('garden_bye', {}); } catch (e) {} }

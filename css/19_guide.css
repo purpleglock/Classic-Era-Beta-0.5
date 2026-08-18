@@ -867,6 +867,13 @@
   color: var(--color-text-muted); max-width: 78ch;
 }
 .gb-topic-lead b { color: var(--color-text); font-weight: 600; }
+/* Второй абзац карточки: подробность, а не правило. Тоном ниже ведущего, чтобы
+   глаз читал их по порядку, а не как два равных куска текста. */
+.gb-topic-more {
+  margin: 9px 0 0; font-size: 13px; line-height: 1.6;
+  color: var(--color-text-faint); max-width: 78ch;
+}
+.gb-topic-more b { color: var(--color-text-muted); font-weight: 600; }
 /* Шаги внутри карточки — компактнее страничных: это не отдельный раздел. */
 .gb-topic-steps { gap: 6px; margin: 14px 0 12px; }
 .gb-topic-steps .gb-step { padding: 8px 12px; font-size: 13px; gap: 11px; }
@@ -940,3 +947,33 @@
   .gb-help { padding: 0; align-items: flex-end; }
   .gb-help-card { max-height: 88vh; border-radius: var(--radius-lg, 8px) var(--radius-lg, 8px) 0 0; }
 }
+
+/* ── ЧТО ИЗМЕНИЛОСЬ: лента правок правил (guide.js, gbChangesRows) ──
+   Карточка правки — не «новость»: дата и метка сверху мелко, заголовок
+   строкой, суть абзацем, и одна кнопка — в тот раздел, где правило живёт. */
+.gb-changes { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.gb-changes-empty { padding: 10px 0; font-size: 13px; color: var(--color-text-dim, #8d97a8); }
+.gb-ch {
+  padding: 10px 12px;
+  border: var(--deco-frame-w, 1px) solid var(--color-border);
+  border-left: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.gb-ch.is-new { border-left-color: var(--color-accent); }
+.gb-ch-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.gb-ch-date { font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--color-text-dim, #8d97a8); }
+.gb-ch-tag {
+  font-size: 11px; padding: 1px 7px; border-radius: var(--radius-sm);
+  border: var(--deco-frame-w, 1px) solid var(--color-border); color: var(--color-text-dim, #8d97a8);
+}
+.gb-ch-new { font-size: 11px; padding: 1px 7px; border-radius: var(--radius-sm); color: var(--color-canvas); background: var(--color-accent); }
+.gb-ch-t { margin: 0 0 4px; font-size: 15px; font-weight: 600; color: var(--color-text); }
+.gb-ch-b { margin: 0 0 8px; font-size: 13.5px; line-height: 1.5; color: var(--color-text); }
+.gb-ch-go {
+  padding: 4px 10px; cursor: pointer; font-size: 12.5px;
+  color: var(--color-accent); background: transparent;
+  border: var(--deco-frame-w, 1px) solid var(--color-border);
+  border-radius: var(--radius-sm); transition: var(--duration-fast);
+}
+.gb-ch-go:hover { color: var(--color-canvas); background: var(--color-accent); border-color: var(--color-accent); }

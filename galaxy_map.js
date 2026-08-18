@@ -2081,7 +2081,12 @@ function gmOpenPanel(sys) {
   (GM.outposts || []).filter(o => o.system_id === sys.id).forEach(o => {
     const f = gmFaction(o.faction_id); const c = f ? gmReadable(f.color) : 'rgba(150,200,245,.9)';
     const nm = (f && f.name) || o.faction_name || (GM.facMeta && GM.facMeta[o.faction_id] && GM.facMeta[o.faction_id].name) || 'Неизвестно';
-    const rm = o.mine ? `<button class="btn btn-gh btn-sm" style="padding:1px 7px;font-size:11px" onclick="gmOutpostDismantleMap('${o.id}','${sys.id}')" title="Разобрать (возврат ~50%)">разобрать</button>` : `<span class="gm-col-ty">${esc(nm)}</span>`;
+    // Чужую заставу сносит стоящий здесь боевой флот (сервер требует войну).
+    // raze_fleet приходит из outposts_visible — если его нет, сносить нечем.
+    const raze = (!o.mine && o.raze_fleet)
+      ? `<button class="btn btn-gh btn-sm" style="padding:1px 7px;font-size:11px" onclick="gmOutpostRaze('${o.id}','${o.raze_fleet}','${sys.id}')" title="Уничтожить чужой аванпост флотом (нужна война)">снести</button>`
+      : '';
+    const rm = o.mine ? `<button class="btn btn-gh btn-sm" style="padding:1px 7px;font-size:11px" onclick="gmOutpostDismantleMap('${o.id}','${sys.id}')" title="Разобрать (возврат ~50%)">разобрать</button>` : `<span class="gm-col-ty">${esc(nm)}</span>${raze}`;
     const md = o.mode === 'mining' ? ' ⛏' : (o.mode === 'depot' ? ' ⛽' : (o.mode === 'recon' ? ' 🛰' : ''));
     // Смена режима на месте: outpost_set_mode есть на сервере с _outpost_depot.sql,
     // но органа управления не было — держава без верфи не могла поднять заставу
@@ -2275,6 +2280,19 @@ async function gmOutpostMode(id, sysId, mode, prev) {
       (mode === 'depot' ? ' · здесь можно заправлять флот' : ''), 'ok');
     await gmReloadDefense(sysId);
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); await gmReloadDefense(sysId); }
+  finally { GM._defBusy = false; }
+}
+
+// Снос ЧУЖОГО аванпоста флотом (_fleet_logistics.sql). Требует войны — отказ
+// приходит внятной ошибкой с сервера, поэтому здесь только подтверждение.
+async function gmOutpostRaze(id, fleetId, sysId) {
+  if (!confirm('Снести чужой аванпост?\n\nНужно состояние войны с его державой. Флот потратит одно плечо хода.')) return;
+  if (GM._defBusy) return; GM._defBusy = true;
+  try {
+    await gmDefRpc('outpost_raze', { p_outpost_id: id, p_fleet_id: fleetId });
+    toast('Аванпост снесён', 'ok');
+    await gmReloadDefense(sysId);
+  } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
   finally { GM._defBusy = false; }
 }
 
@@ -2512,6 +2530,14 @@ function gmThEta(iso) {
   return h < 48 ? ('~' + Math.round(h) + ' ч') : ('~' + Math.round(h / 24) + ' сут');
 }
 
+// Час прохода узла: у засады смысл в «успею ли», а не в «через сколько» —
+// игроку надо сверить это с временем полёта своего флота, поэтому часы.
+function gmThClock(ms) {
+  if (!(ms > 0)) return '';
+  const d = new Date(ms), p = n => String(n).padStart(2, '0');
+  return p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
 // ── Отрисовка театра. Живой слой, экранные координаты (как залпы артиллерии) ──
 function gmmPaintTheatre(ctx) {
   const TH = GMM.theatre;
@@ -2571,31 +2597,74 @@ function gmmPaintTheatre(ctx) {
     const sel = GM.thSel === m.id;
 
     if (m.pts.length > 1) {
-      // Пройденное — сплошной ржавый след, оставшееся — пунктир: ход виден
-      // насквозь, от логова до цели, вместе с тем, сколько ещё идти.
+      // Маршрут распадается на ДВА разных по смыслу куска, и рисовать их одной
+      // линией — врать игроку (_legion_intercept.sql):
+      //   • КРЫСИНАЯ ТРОПА (узлы 0…road_from) — задворки. Ватаги там для нас
+      //     нет: встать на пути нельзя, ловить некого. Рисуем еле видимым
+      //     редким пунктиром без свечения и без бега — это не живой след,
+      //     а «примерно оттуда лезут».
+      //   • ВЫХОД (последние два прыжка до цели) — единственный участок, где
+      //     ватагу можно встретить флотом. Горячий, толстый, с бегущим штрихом
+      //     и узлами-мишенями: сюда и надо смотреть.
       const u = gmThProgress(m, now);
       const scr = m.pts.map(p => [SX(p.x), SY(p.y)]);
+      const rf = Number.isInteger(m.road_from)
+        ? Math.max(0, Math.min(m.road_from, scr.length - 2)) : 0;
+
+      const poly = (a, b) => {
+        ctx.beginPath(); ctx.moveTo(scr[a][0], scr[a][1]);
+        for (let i = a + 1; i <= b; i++) ctx.lineTo(scr[i][0], scr[i][1]);
+        ctx.stroke();
+      };
+      if (rf > 0) {
+        ctx.strokeStyle = gmThRgba(col, sel ? 0.22 : 0.13); ctx.lineWidth = 1;
+        ctx.setLineDash([2, 9]); ctx.lineDashOffset = 0;
+        poly(0, rf); ctx.setLineDash([]);
+      }
       ctx.strokeStyle = gmThRgba(col, sel ? 0.5 : 0.3); ctx.lineWidth = sel ? 2 : 1.4;
       ctx.setLineDash([6, 6]); ctx.lineDashOffset = -t * 12;
-      ctx.beginPath(); ctx.moveTo(scr[0][0], scr[0][1]);
-      for (let i = 1; i < scr.length; i++) ctx.lineTo(scr[i][0], scr[i][1]);
-      ctx.stroke(); ctx.setLineDash([]);
+      poly(rf, scr.length - 1); ctx.setLineDash([]);
+
+      // Узлы выхода: где именно ватага вынырнет в обжитое пространство. Кольцо
+      // с перекрестием = «сюда можно встать флотом», подпись — час прохода.
+      // Показываем только те, что ещё впереди: прошедший узел уже не засада.
+      for (let i = rf; i <= scr.length - 2; i++) {
+        if (!(m.at[i] > now)) continue;
+        const nx = scr[i][0], ny = scr[i][1];
+        if (nx < -60 || nx > GMM.vw + 60 || ny < -60 || ny > GMM.vh + 60) continue;
+        const pulse = mine ? (0.55 + 0.45 * Math.sin(t * 2.2 + i)) : 0.8;
+        ctx.strokeStyle = gmThRgba(col, 0.85 * pulse); ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(nx, ny, 9, 0, 6.2832); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(nx - 13, ny); ctx.lineTo(nx - 9, ny);
+        ctx.moveTo(nx + 9, ny); ctx.lineTo(nx + 13, ny);
+        ctx.moveTo(nx, ny - 13); ctx.lineTo(nx, ny - 9);
+        ctx.moveTo(nx, ny + 9); ctx.lineTo(nx, ny + 13);
+        ctx.stroke();
+        if (s > 1.1 || sel) gmThLabel(ctx, nx, ny + 24, 'выход ' + gmThClock(m.at[i]), col, false);
+      }
 
       const head = gmThPointAt(m.pts, u), hx = SX(head.x), hy = SY(head.y);
-      ctx.strokeStyle = gmThRgba(col, sel ? 0.95 : 0.7); ctx.lineWidth = sel ? 2.4 : 1.8;
-      ctx.shadowColor = gmThRgba(col, 0.6); ctx.shadowBlur = sel ? 8 : 4;
-      ctx.beginPath(); ctx.moveTo(scr[0][0], scr[0][1]);
-      const passed = gmThPointAt(m.pts, u);
-      for (let i = 1; i < scr.length; i++) {
-        const d = Math.hypot(m.pts[i].x - m.pts[0].x, m.pts[i].y - m.pts[0].y);
-        const dh = Math.hypot(passed.x - m.pts[0].x, passed.y - m.pts[0].y);
-        if (d > dh) break;
-        ctx.lineTo(scr[i][0], scr[i][1]);
+      // Горячий след пройденного тянем ТОЛЬКО от выхода с троп: пока ватага в
+      // задворках, у неё и следа для нас нет — она там для нас не существует.
+      const onRoad = !!(m.at[rf] && now >= m.at[rf]);
+      if (onRoad) {
+        ctx.strokeStyle = gmThRgba(col, sel ? 0.95 : 0.7); ctx.lineWidth = sel ? 2.4 : 1.8;
+        ctx.shadowColor = gmThRgba(col, 0.6); ctx.shadowBlur = sel ? 8 : 4;
+        ctx.beginPath(); ctx.moveTo(scr[rf][0], scr[rf][1]);
+        const passed = gmThPointAt(m.pts, u);
+        for (let i = rf + 1; i < scr.length; i++) {
+          const d = Math.hypot(m.pts[i].x - m.pts[rf].x, m.pts[i].y - m.pts[rf].y);
+          const dh = Math.hypot(passed.x - m.pts[rf].x, passed.y - m.pts[rf].y);
+          if (d > dh) break;
+          ctx.lineTo(scr[i][0], scr[i][1]);
+        }
+        ctx.lineTo(hx, hy); ctx.stroke(); ctx.shadowBlur = 0;
       }
-      ctx.lineTo(hx, hy); ctx.stroke(); ctx.shadowBlur = 0;
 
-      // сама ватага — стрелка по ходу движения
-      gmThMarker(ctx, hx, hy, head.ang || 0, col, sel, m.stood);
+      // сама ватага — стрелка по ходу движения; на тропе она полая: отметка
+      // есть, брать нечего, и глаз должен различать это без подписи
+      gmThMarker(ctx, hx, hy, head.ang || 0, col, sel, m.stood, !onRoad);
       GMM.thHit.push({ x: hx, y: hy, r: 14, id: m.id });
 
       // ЦЕЛЬ: пунктирное кольцо + подпись срока. Пульс только у своей — чтобы
@@ -2644,15 +2713,19 @@ function gmmPaintTheatre(ctx) {
   ctx.restore();
 }
 // Метка ватаги: клин по ходу движения (стоящая — квадрат в кольце).
-function gmThMarker(ctx, x, y, ang, col, sel, stood) {
+// ghost=true — ватага идёт крысиной тропой: клин полый, без свечения. Это не
+// украшение, а единственное, что отличает «вижу, но не достану» от «вот она».
+function gmThMarker(ctx, x, y, ang, col, sel, stood, ghost) {
   ctx.save(); ctx.translate(x, y);
   if (!stood) ctx.rotate(ang);
-  ctx.shadowColor = gmThRgba(col, 0.8); ctx.shadowBlur = sel ? 10 : 5;
+  ctx.shadowColor = gmThRgba(col, 0.8); ctx.shadowBlur = ghost ? 0 : (sel ? 10 : 5);
   ctx.fillStyle = gmThRgba(col, 0.95);
+  ctx.strokeStyle = gmThRgba(col, 0.55); ctx.lineWidth = 1;
   ctx.beginPath();
   if (stood) { ctx.rect(-4.5, -4.5, 9, 9); }
   else { ctx.moveTo(8, 0); ctx.lineTo(-5, 5); ctx.lineTo(-2.5, 0); ctx.lineTo(-5, -5); ctx.closePath(); }
-  ctx.fill(); ctx.shadowBlur = 0;
+  if (ghost) ctx.stroke(); else ctx.fill();
+  ctx.shadowBlur = 0;
   if (sel) {
     ctx.strokeStyle = 'rgba(255,240,225,0.9)'; ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.arc(0, 0, 12, 0, 6.2832); ctx.stroke();
@@ -2690,14 +2763,31 @@ function gmTheatreSel(id) {
 }
 
 // ── Боковая панель режима: расклад словами + легенда ──
+// ⚠ На телефоне это НЕ боковая панель, а нижний лист (как #gm-panel и #gm-opcmd):
+// карточкой в 300 px на экране 375 px режим съедал пол-карты — смотреть на ход
+// пиратов было негде. Поэтому на узком экране лист по умолчанию СВЁРНУТ в одну
+// строку: шапка с гневом остаётся на виду, а карта — свободной.
+function gmThMinToggle() {
+  GM.thMin = !GM.thMin;
+  document.getElementById('gm-theatre')?.classList.toggle('gm-th-min', GM.thMin);
+  document.getElementById('gm-th-min')?.setAttribute('aria-expanded', String(!GM.thMin));
+}
+function gmThBar(sub) {
+  return `<div class="gm-r-bar"><span class="gm-r-title">☠ Театр Легиона</span>
+      ${sub ? `<span class="gm-th-peek">${sub}</span>` : ''}
+      <button class="gm-th-min-btn" id="gm-th-min" aria-expanded="${String(!GM.thMin)}"
+              title="Свернуть или развернуть расклад" onclick="gmThMinToggle()">⌃</button>
+      <button class="gm-close" onclick="gmToggleTheatre()">✕</button></div>`;
+}
 function gmTheatreRender() {
   const el = document.getElementById('gm-theatre'); if (!el) return;
   if (!GM.showTheatre) { el.classList.add('gm-hidden'); return; }
+  if (GM.thMin === undefined) GM.thMin = gmIsMobile();
+  el.classList.toggle('gm-th-min', !!GM.thMin);
   const d = GM.theatre;
   if (!d) {
-    el.innerHTML = `<div class="gm-r-bar"><span class="gm-r-title">☠ Театр Легиона</span>
-        <button class="gm-close" onclick="gmToggleTheatre()">✕</button></div>
-      <div class="gm-roster-empty">Нет данных. Режим доступен державе с одобренной анкетой.</div>`;
+    el.innerHTML = gmThBar('') +
+      `<div class="gm-roster-empty">Нет данных. Режим доступен державе с одобренной анкетой.</div>`;
     el.classList.remove('gm-hidden'); return;
   }
   const w = d.wrath;
@@ -2737,8 +2827,13 @@ function gmTheatreRender() {
         <span class="gm-th-sv">${pc}%</span></div>`;
   }).join('');
 
-  el.innerHTML = `<div class="gm-r-bar"><span class="gm-r-title">☠ Театр Легиона</span>
-      <button class="gm-close" onclick="gmToggleTheatre()">✕</button></div>
+  // В свёрнутом виде на виду остаётся то, ради чего режим и включают: сколько
+  // ватаг уже идёт и не по вашу ли душу ближайшая.
+  const mineN = moves.filter(m => m.mine).length;
+  const peek = moves.length
+    ? `${moves.length} в пути${mineN ? ' · ' + mineN + ' по вам' : ''}`
+    : 'затишье';
+  el.innerHTML = gmThBar(peek) + `
     ${wrath}
     <div class="gm-r-group"><div class="gm-r-head">Ходы и манёвры</div>
       ${rows || '<div class="gm-r-hint">Ни одной вскрытой ватаги. Разведзастава с полным экипажем вскрывает замысел и весь маршрут.</div>'}</div>
@@ -2747,10 +2842,13 @@ function gmTheatreRender() {
       <div class="gm-r-hint">Копилка сектора в долях от цены удара: 100% — ватага выходит.</div></div>
     <div class="gm-th-leg">
       <span><i class="gm-th-k1"></i>ватага в пути</span>
+      <span><i class="gm-th-k5"></i>идёт тропой — не достать</span>
+      <span><i class="gm-th-k6"></i>узел выхода: сюда можно встать</span>
       <span><i class="gm-th-k2"></i>встала в системе</span>
       <span><i class="gm-th-k3"></i>логово</span>
       <span><i class="gm-th-k4"></i>ваш след (обида)</span>
-    </div>`;
+    </div>
+    <div class="gm-r-hint gm-th-road">Еле видимая нить от логова — <b>крысиная тропа</b>: там ватаги для нас нет. В обжитое пространство Легион выходит только на последних двух прыжках — эти узлы помечены перекрестием, рядом час прохода. Флот, стоящий в узле к этому часу, вскроет ватагу там, и налёт сорвётся ${gmHelp('raids')}</div>`;
   el.classList.remove('gm-hidden');
 }
 
@@ -3057,6 +3155,7 @@ function gmMzaPickPlanet(id, sys) {
     ['doom', 'Х67 «Ада»', 'планета → мёртвый мир, колония стёрта'],
     ['ball_light', 'Х19 «Хазар»', 'вдвое быстрее · 2–6% населения · 0–1 постройка'],
     ['ball_emp', 'Х69 «Фантом»', 'не видна планетарной ПРО · 2–5% населения · 1 постройка'],
+    ['ball_hunter', 'Х77 «Сполох»', 'цель — ФЛОТ · ведёт тепловую сигнатуру · 15–35% кораблей · сбивают только зенитки цели'],
     ['ball_cluster', 'Х05 «Сурей»', '8–16% населения · 2–4 постройки'],
     ['ball_heavy', 'Х0414 «Отей»', 'гарантированно 5 построек · 12–22% населения · дальность ×2'],
   ];
@@ -3311,7 +3410,38 @@ function gmFleetTankHtml(fl) {
   const btn = fl.can_refuel
     ? `<button class="gm-opcmd-btn" onclick="gmFleetRefuel('${fl.id}')">⛽ Заправить бак</button>`
     : '';
-  return line + btn;
+  // Разграбление системы: только там, где систему ДЕРЖИТ моя держава.
+  // Даёт до половины бака за счёт склада хозяина системы, раз в сутки.
+  const plunder = fl.can_plunder
+    ? `<button class="gm-opcmd-btn" onclick="gmFleetPlunder('${fl.id}')" title="Выкачать топливо из оккупированной системы (раз в сутки)">🛢 Разграбить систему</button>`
+    : '';
+  // Сбор у звезды — на случай, когда заправить негде и грабить нечего:
+  // флот на стоянке сам цедит по плечу, просто медленно.
+  const star = (!fl.can_refuel && fl.star_at && cur < cap)
+    ? `<div class="gm-opcmd-hint">☀ Сбор у звезды: +1 плечо ${gmWhen(fl.star_at)}</div>`
+    : '';
+  return line + btn + plunder + star;
+}
+// «через 2 ч 10 мин» / «вот-вот» для будущей отметки времени.
+function gmWhen(iso) {
+  const m = (new Date(iso) - Date.now()) / 6e4;
+  if (!isFinite(m) || m <= 1) return 'вот-вот';
+  if (m < 60) return `через ${Math.round(m)} мин`;
+  const h = Math.floor(m / 60), mm = Math.round(m % 60);
+  return `через ${h} ч${mm ? ' ' + mm + ' мин' : ''}`;
+}
+async function gmFleetPlunder(id) {
+  if (!confirm('Разграбить систему?\n\nФлот выкачает топливо из складов хозяина системы. Повторить здесь можно через сутки.')) return;
+  if (GM._defBusy) return; GM._defBusy = true;
+  try {
+    const r = await gmDefRpc('fleet_plunder', { p_id: id });
+    const took = gmFleetFuelFmt((r && r.took) || {});
+    toast(`Взято +${(r && r.gained) || 0} ${gmPlural(+((r && r.gained) || 0), 'плечо', 'плеча', 'плеч')} · бак ${(r && r.fuel) || 0}/${(r && r.fuel_cap) || 0}` +
+      (took ? ' · ⛽ ' + took : ''), 'ok');
+    gmCloseFleetCmd();
+    await gmReloadDefense();
+  } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
+  finally { GM._defBusy = false; }
 }
 async function gmFleetRefuel(id) {
   if (GM._defBusy) return; GM._defBusy = true;

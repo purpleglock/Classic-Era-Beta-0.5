@@ -4393,6 +4393,9 @@ body.ec-tree-fs-lock { overflow: hidden; }
 /* ── Тревога в списке построек ── */
 .abm-alert { padding: 12px 14px; --abm-bg: linear-gradient(100deg, color-mix(in srgb, var(--abm-red) 12%, hsl(216 24% 8%)), hsl(216 24% 8% / .94) 62%); }
 .abm-alert.is-set { --abm-red: var(--gd, #3a9bdc); }
+/* Снаряд-невидимка: тревога есть, но она не наша — тон гасим до нейтрального,
+   чтобы строка не звала жать то, чего у игрока нет. */
+.abm-alert.is-blind { --abm-red: #7e8aa0; }
 .abm-alert-hd { display: flex; align-items: center; gap: 9px; }
 .abm-alert-ic { font-size: 15px; color: var(--abm-red); }
 .abm-alert-tt {

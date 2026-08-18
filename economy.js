@@ -532,7 +532,7 @@ const EC_BUILD = {
   // АРСЕНАЛ СУДНОГО ДНЯ — строится отдельным RPC shellforge_build (без слотов).
   shellforge:       { name: 'Арсенал Судного Дня', cost: 300000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Собирает снаряды Длани: 1 снаряд за 1 день. Без снарядов орудия судного дня молчат. Слотов нет.' },
   // БАЛЛИСТИЧЕСКИЙ ВОЕНПРОМЗАВОД — RPC ballfab_build, техно pol.ballistics (без слотов).
-  ballfab:          { name: 'Баллистический военпромзавод', cost: 150000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Конвейер баллистических боеголовок для Гиперпейсера: 4 тира — Х19 «Хазар», Х69 «Фантом», Х05 «Сурей», Х0414 «Отей». 1 снаряд за 1 день. Слотов нет.' },
+  ballfab:          { name: 'Баллистический военпромзавод', cost: 150000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Конвейер баллистических боеголовок для Гиперпейсера: 5 тиров — Х19 «Хазар», Х69 «Фантом», Х05 «Сурей», Х0414 «Отей» и противофлотовый Х77 «Сполох». 1 снаряд за 1 день. Слотов нет.' },
   // ОЖЕРЕЛЬЕ НЕМЕЗИДЫ — мегасооружение, строится отдельным RPC nemesis_build.
   nemesis:          { name: 'Ожерелье Немезиды', cost: 6000000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Кольцо орбитальных перехватчиков вокруг всей системы. Сбивает любой залп Длани и Гиперпейсера — гарантированно, без зарядов и осечек. Пока Ожерелье стоит, система неуязвима для ударов из космоса.' },
 };
@@ -560,6 +560,7 @@ const EC_SHELL = {
   ball_emp:     { gc: 60000,  'Гравиядро': 2 },
   ball_cluster: { gc: 90000,  'Гравиядро': 4 },
   ball_heavy:   { gc: 250000, 'Гравиядро': 1 },
+  ball_hunter:  { gc: 120000, 'Гравиядро': 3 },
 };
 // ── Паспорт снарядов (ЕДИНЫЙ источник имён) ───────────────────────────────
 // Индекс + имя = как их зовёт наводчица в новелле наведения. Смайликов нет:
@@ -574,6 +575,7 @@ const EC_SHELL_META = {
   ball_emp:     { code: 'Х69',   nm: '«Фантом»', cls: 'баллистика-невидимка' },
   ball_cluster: { code: 'Х05',   nm: '«Сурей»',  cls: 'кассетная баллистика' },
   ball_heavy:   { code: 'Х0414', nm: '«Отей»',   cls: 'тяжёлая баллистика' },
+  ball_hunter:  { code: 'Х77',   nm: '«Сполох»', cls: 'противофлотовая баллистика' },
 };
 function ecShellMeta(k) { return EC_SHELL_META[k] || { code: '', nm: k, cls: 'снаряд' }; }
 // «Х67 «Ада»» — как его называют на пульте.
@@ -588,7 +590,7 @@ function ecShellIco(k) {
 }
 const EC_SHELL_LABEL = {
   doom: 'Х67 «Ада»', ball_light: 'Х19 «Хазар»', ball_emp: 'Х69 «Фантом»',
-  ball_cluster: 'Х05 «Сурей»', ball_heavy: 'Х0414 «Отей»',
+  ball_cluster: 'Х05 «Сурей»', ball_heavy: 'Х0414 «Отей»', ball_hunter: 'Х77 «Сполох»',
 };
 // Паспорт тира для подсказок (зеркало _ball_params): урон/приколы.
 const EC_BALL_INFO = {
@@ -596,8 +598,12 @@ const EC_BALL_INFO = {
   ball_emp:     'невидим для планетарной ПРО (сбивает только Немезида) · 2–5% населения · 1 постройка',
   ball_cluster: 'широкое накрытие · 8–16% населения · 2–4 постройки',
   ball_heavy:   'гарантированно 5 построек · 12–22% населения · бьёт ×2 радиуса · летит медленно',
+  ball_hunter:  'цель — ФЛОТ, а не планета · ведёт тепловую сигнатуру, уйти нельзя · 15–35% кораблей · сбить может только зенитный огонь самого флота (или Немезида над системой)',
 };
-const EC_BALL_KINDS = ['ball_light', 'ball_emp', 'ball_cluster', 'ball_heavy'];
+const EC_BALL_KINDS = ['ball_light', 'ball_emp', 'ball_cluster', 'ball_heavy', 'ball_hunter'];
+// Снаряды, которым нужна цель-ФЛОТ: сцена «мир» у них заменяется сценой «флот».
+const EC_FLEET_KINDS = ['ball_hunter'];
+function ecShellHitsFleet(k) { return EC_FLEET_KINDS.includes(k); }
 const EC_SHELL_KINDS = ['doom'].concat(EC_BALL_KINDS);
 function ecShellInfo(k) { return EC_BALL_INFO[k] || 'стирает планету в мёртвый камень: любая колония на ней, включая столицу, перестаёт быть'; }
 // Карточка снаряда: арт (или иконка) + индекс/имя + строка статуса.
@@ -684,7 +690,7 @@ const EC_BLD_HOWTO = {
   temple:           'Пассивный доход ГС + «сила веры»: чем больше слотов храмов, тем дешевле постройка войск. Спиритуалистам и теократиям бонус сильнее. Требует исповедуемой веры; при постройке указывается её религия (можно держать храмы разных вер).',
   doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 1 ПОСТРОЕННЫЙ снаряд Длани (собирается в Арсенале Судного Дня). Снаряд летит тем дольше, чем дальше цель: от ~3 ч до соседней системы и до суток — от края до края галактики. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
   shellforge:       'Заказывайте снаряды Длани прямо на строке арсенала (стирают планету; нужны Длани и Гиперпейсеру). 1 снаряд = 1 день работы; готовые ложатся на общий склад снарядов державы.',
-  ballfab:          'Заказывайте баллистику на строке завода: Х19 «Хазар» (быстрый, слабый), Х69 «Фантом» (не виден планетарной ПРО), Х05 «Сурей» (2–4 постройки), Х0414 «Отей» (1 Гравиядро, гарантированно 5 построек, бьёт ×2 радиуса). Носит только Гиперпейсер.',
+  ballfab:          'Заказывайте баллистику на строке завода: Х19 «Хазар» (быстрый, слабый), Х69 «Фантом» (не виден планетарной ПРО), Х05 «Сурей» (2–4 постройки), Х0414 «Отей» (1 Гравиядро, гарантированно 5 построек, бьёт ×2 радиуса), Х77 «Сполох» (бьёт по ФЛОТУ, ведёт тепловую сигнатуру, сбивают только зенитки цели). Носит только Гиперпейсер.',
   nemesis:          'Работает само: ГАРАНТИРОВАННО перехватывает ЛЮБОЙ залп Длани и Гиперпейсера по ЛЮБОЙ планете этой системы — без зарядов и осечек. Пока Ожерелье стоит, система неуязвима для ударов из космоса. Одно Ожерелье на систему. Диверсанты его не сносят — только война.',
 };
 // Иконки зданий (для каталога-выбора при постройке)
@@ -2464,6 +2470,10 @@ async function _ecLoadRestImpl() {
   // ПРО: входящие отметки по моим планетам (best-effort — _abm_duel.sql может быть не накатан).
   const abmIn = await ecRpc('abm_incoming').catch(() => null);
   EC.abmIncoming = Array.isArray(abmIn) ? abmIn : [];
+  // Х77 «Сполох»: входящие по моим ФЛОТАМ. Отдельная дверь — у залпа по флоту
+  // нет планеты-цели, в abm_incoming он не попадает по определению.
+  const flIn = await ecRpc('fleet_incoming').catch(() => null);
+  EC.fleetIncoming = Array.isArray(flIn) ? flIn : [];
   // Межзвёздная артиллерия: орудия фракции (с integrity) + залпы в полёте + баланс.
   EC.doom = (doom && typeof doom === 'object') ? doom : { guns: [], salvos: [], const: {} };
   EC.doomByBuilding = {};
@@ -7612,9 +7622,9 @@ function ecTabOutposts() {
 }
 // Подпись режима развёрнутого аванпоста.
 function ecOutpostModeLabel(mode) {
-  return mode === 'mining'
-    ? `⛏ добыча <span class="ec-hint">+${EC_OUTPOST_CAP} мест флота</span>`
-    : `🛰 разведка <span class="ec-hint">— срез по соседним державам</span>`;
+  if (mode === 'mining') return `⛏ добыча <span class="ec-hint">+${EC_OUTPOST_CAP} мест флота</span>`;
+  if (mode === 'depot')  return `⛽ застава <span class="ec-hint">— заправка флота вне границ</span>`;
+  return `🛰 разведка <span class="ec-hint">— срез по соседним державам</span>`;
 }
 // Список добываемых ресурсов системы аванпоста (v2: все, кроме эпик/легендарных).
 function ecOutpostResList(o) {
@@ -7675,12 +7685,69 @@ function ecOutpostPanelHtml() {
         <input type="text" id="ec-op-name" class="ec-prod-qty" style="width:150px" maxlength="40" placeholder="имя (необязательно)">
         <button class="btn btn-gd btn-sm" ${afford ? '' : 'disabled'} title="${afford ? '' : 'Не хватает ГС'}" onclick="ecOutpostBuildShip()">＋ Заложить носитель · ${ecNum(EC_OUTPOST_SHIP_COST)} ГС</button>
       </div>
-      <div class="ec-cap">Постройка носителя занимает <b>сутки</b>. Готовый носитель появится на <b>галактической карте</b> в выбранной системе — оттуда отправляйте его по гиперпутям и при развёртывании выбирайте режим: <b>🛰 разведка</b> (срез по соседним державам) или <b>⛏ добыча</b> (ресурсы вне границ + стоянка флота). Нельзя входить в чужие границы; разворачивать — не впритык к чужой границе.</div>`;
+      <div class="ec-cap">Постройка носителя занимает <b>сутки</b>. Готовый носитель появится на <b>галактической карте</b> в выбранной системе — оттуда отправляйте его по гиперпутям и при развёртывании выбирайте режим: <b>🛰 разведка</b>, <b>⛏ добыча</b> или <b>⛽ застава</b> (заправка флота). Лететь можно в любую систему; аванпост в системе — <b>один</b>, чей встал первым.</div>`;
   return `<div class="ec-section-title">Постройка носителя <span class="ec-hint">— строится сутки на Верфи; отправка и развёртывание — на карте</span></div>
     ${buildForm}
     ${ships.length ? `<div class="ec-sub-title" style="margin-top:8px">Носители · ${building} строятся, ${idle} на стоянке, ${transit} в пути</div>${shipRows}` : ''}
     ${mine.length ? `<div class="ec-sub-title" style="margin-top:8px">Развёрнутые аванпосты · ${mine.length}</div>${opRows}` : ''}
+    ${ecOutpostRightsHtml()}
     ${intelRows ? `<div class="ec-sub-title" style="margin-top:8px">🛰 Разведсводка аванпостов · ${intel.length}</div>${intelRows}` : ''}`;
+}
+
+// ── ПРАВО ПОЛЬЗОВАНИЯ ЗАСТАВАМИ (_fleet_logistics.sql) ──
+// Своя ⛽ застава заправляет только свои флоты. Чужие — по договору: держава
+// просит доступ, владелец даёт или отзывает. Список приходит отдельным RPC
+// и подгружается в контейнер после отрисовки раздела (данные редкие, тянуть
+// их в общий ecReload незачем).
+function ecOutpostRightsHtml() {
+  const others = ecOtherFactions();
+  const opts = others.map(f => `<option value="${esc(f.faction_id)}">${esc(f.name || f.faction_id)}</option>`).join('');
+  setTimeout(ecOutpostRightsLoad, 0);
+  return `<div class="ec-sub-title" style="margin-top:8px">⛽ Право на заставы</div>
+    ${others.length ? `<div class="ec-prod-form">
+      <select id="ec-opr-fid">${opts}</select>
+      <button class="btn btn-gh btn-sm" onclick="ecOutpostRightsRequest()">Запросить доступ</button>
+    </div>` : ''}
+    <div id="ec-opr-list"><div class="ec-hint" style="padding:4px 2px">Читаю договоры…</div></div>`;
+}
+async function ecOutpostRightsLoad() {
+  const box = ecId('ec-opr-list'); if (!box) return;
+  try {
+    const r = await ecRpc('outpost_rights_list', {});
+    EC.opRights = r || { incoming: [], outgoing: [] };
+    box.innerHTML = ecOutpostRightsRows(EC.opRights);
+  } catch (e) {
+    box.innerHTML = `<div class="ec-hint" style="padding:4px 2px">Договоры недоступны: ${esc(e.message || e)}</div>`;
+  }
+}
+function ecOutpostRightsRows(d) {
+  const st = { req: 'просит доступ', ok: 'пользуется вашими заставами', no: 'доступ закрыт' };
+  const inc = (d.incoming || []).map(r => `<div class="ec-q-row"><span class="ec-r-name">🚪 ${esc(r.name || r.fid)} <span class="ec-hint">${st[r.state] || r.state}</span></span>
+    <button class="btn btn-gh btn-sm" style="padding:1px 8px;font-size:11px" onclick="ecOutpostRightsSet('${esc(r.fid)}',true)">разрешить</button>
+    <button class="btn btn-gh btn-sm" style="padding:1px 8px;font-size:11px" onclick="ecOutpostRightsSet('${esc(r.fid)}',false)">закрыть</button></div>`).join('');
+  const sto = { req: 'запрос отправлен', ok: 'их заставы открыты вам', no: 'отказано' };
+  const out = (d.outgoing || []).map(r => `<div class="ec-q-row"><span class="ec-r-name">🛰 ${esc(r.name || r.fid)} <span class="ec-hint">${sto[r.state] || r.state} · застав: ${+r.depots || 0}</span></span></div>`).join('');
+  if (!inc && !out) return `<div class="ec-hint" style="padding:4px 2px">Договоров нет: свои заставы заправляют только ваш флот.</div>`;
+  return (inc ? `<div class="ec-cap">К вам</div>${inc}` : '') + (out ? `<div class="ec-cap">Ваши запросы</div>${out}` : '');
+}
+async function ecOutpostRightsRequest() {
+  const sel = ecId('ec-opr-fid'); if (!sel || !sel.value) return;
+  if (EC.busy) return; EC.busy = true;
+  try {
+    await ecRpc('outpost_rights_request', { p_owner_fid: sel.value });
+    toast('Запрос отправлен', 'ok');
+    await ecOutpostRightsLoad();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+async function ecOutpostRightsSet(fid, allow) {
+  if (EC.busy) return; EC.busy = true;
+  try {
+    await ecRpc('outpost_rights_set', { p_guest_fid: fid, p_allow: !!allow });
+    toast(allow ? 'Доступ к заставам открыт' : 'Доступ к заставам закрыт', 'ok');
+    await ecOutpostRightsLoad();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
 }
 
 // Заложить носитель аванпоста на Верфи (в системе своей колонии с Верфью).
@@ -11204,6 +11271,8 @@ async function ecLoadFleetsVisible() {
     EC.fleetsVisible = Array.isArray(r) ? r : [];
   } catch (e) { EC.fleetsVisible = EC.fleetsVisible || []; }
   if (typeof ecSpyCalcLive === 'function') ecSpyCalcLive();   // обновить селектор, если планировщик открыт
+  // Сцена целей «Сполоха» рисуется по этому же кэшу — перерисуем, если открыта.
+  if (document.getElementById('hd-aim') && typeof ecDoomVNStageSync === 'function') ecDoomVNStageSync(null);
 }
 // ── Полоска защищённости: одна шкала, один акцент ──
 function ecProtBar(v) {
@@ -14835,6 +14904,25 @@ function ecAbmDefState(x) {
 }
 
 function ecAbmDuelHtml(x) {
+  // «Фантом» (Х69): no_abm — планетарная ПРО его не видит вовсе, дуэли по осям нет.
+  // Окно всё равно открываем: отметку игрок видит, и должен понимать, чем её брать.
+  if (x.no_abm) return `<div class="abm-win">
+    <div class="abm-win-hd">
+      <span class="abm-win-tt">Отметка вне ПРО</span>
+      <span class="abm-win-sub">${esc(x.planet || 'планета')}</span>
+      <button class="abm-win-x" onclick="ecAbmDuelClose()">✕</button>
+    </div>
+    <div class="abm-win-bd">
+      <div class="abm-lead">Идёт снаряд-невидимка. Планетарная ПРО его <b>не видит</b> — наводить сеть не на что. Подлёт — <b>${ecProgressISO(null, x.ready_at, 1, 'скоро')}</b>.</div>
+      <div class="abm-intel">
+        <div class="abm-intel-k">Разведка · слотов ПРО ${ecNum(+x.slots || 0)} · вне досягаемости</div>
+        <div class="abm-intel-v">${x.nemesis
+          ? 'Над системой стоит <b>Ожерелье Немезиды</b> — оно снимет этот залп само, без вашего решения.'
+          : 'Такой снаряд останавливает только <b>Ожерелье Немезиды</b> над системой. Слоты ПРО здесь не помогут ни при каком числе.'}</div>
+      </div>
+      <div class="abm-state">Ваше решение по этой отметке не расходуется.</div>
+    </div>
+  </div>`;
   const slots = +x.slots || 0;
   const locked = !!x.my_approach;                 // сеть уже наведена на сервере
   const st = locked ? { approach: x.my_approach, window: x.my_window, pid: x.my_pid != null ? +x.my_pid : null }
@@ -14851,6 +14939,11 @@ function ecAbmDuelHtml(x) {
   if (!x.window_known) combos *= EC_ABM_WINDOWS.length;
   if (needsTarget && !x.target_known) combos *= Math.max(1, candidates.length);
   const chance = combos <= 1 ? 'все оси раскрыты — перехват верный' : `вслепую — 1 из ${combos}`;
+  // Чистая отметка растёт со слотами (сервер: _abm_clear_p). Без этой строки игрок
+  // видит только результат жребия и читает разницу 12 против 30 слотов как поломку.
+  const clearP = x.clear_p == null ? null : Math.round(+x.clear_p * 100);
+  const clearNote = (clearP == null || kind === 'clear') ? ''
+    : ` · чистая отметка ${clearP}%`;
 
   // ── Ось 1: траектория (карточки) ──
   const apCards = EC_ABM_PROFILES.map(p => {
@@ -14910,7 +15003,7 @@ function ecAbmDuelHtml(x) {
     <div class="abm-win-bd">
       <div class="abm-lead">Угадайте <b>все оси</b> подхода — тогда ПРО собьёт снаряд. Подлёт — <b>${ecProgressISO(null, x.ready_at, 1, 'скоро')}</b>.</div>
       <div class="abm-intel">
-        <div class="abm-intel-k">Разведка · слотов ПРО ${ecNum(slots)} · ${esc(chance)}</div>
+        <div class="abm-intel-k">Разведка · слотов ПРО ${ecNum(slots)} · ${esc(chance)}${clearNote}</div>
         <div class="abm-intel-v">${kind === 'clear'
           ? `Радар взял чистую отметку по траектории: <b>«${esc(ecAbmName(shown))}»</b>.`
           : kind === 'narrow'
@@ -16358,7 +16451,12 @@ async function ecBatVolley(id) {
    heroVNDoomRefresh — экран перерисовывается сам.
    ════════════════════════════════════════════════════════════════ */
 function ecDoomVNSt() { return EC._doomVN = EC._doomVN || { tab: 'arsenal' }; }
-function ecDoomVNTab(t) { ecDoomVNSt().tab = t; if (typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh(); }
+function ecDoomVNTab(t) {
+  ecDoomVNSt().tab = t;
+  // Сцена цели «Сполоха» живёт на видимых флотах — подтягиваем их при входе.
+  if (t === 'aim' && typeof ecLoadFleetsVisible === 'function') ecLoadFleetsVisible();
+  if (typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh();
+}
 // Выбор орудия из новеллы — НЕ через ecDoomTabSelGun: тот перерисовывает кабинет
 // (ecPaintCabinet «перекинул» бы игрока с главной). Обновляем только оверлей.
 function ecDoomVNSelGun(id) {
@@ -16387,7 +16485,7 @@ function ecDoomVNBody() {
   </div>`;
   const forges = ((EC.shells || {}).forges || []);
   const incoming = (EC.abmIncoming || []);
-  const tabs = [['arsenal', 'Арсенал', guns.length + mza.length], ['forge', 'Производство', forges.filter(f => f.shell_kind).length], ['aim', 'Наведение', 0], ['salvos', 'В полёте', salvos.length], ['defense', '⛨ Оборона', incoming.length]];
+  const tabs = [['arsenal', 'Арсенал', guns.length + mza.length], ['forge', 'Производство', forges.filter(f => f.shell_kind).length], ['aim', 'Наведение', 0], ['salvos', 'В полёте', salvos.length], ['defense', '⛨ Оборона', incoming.length + ((EC.fleetIncoming || []).length)]];
   const rail = `<div class="hp-vnd-tabs">${tabs.map(([id, l, n]) =>
     `<button class="hp-vnd-tab${st.tab === id ? ' on' : ''}" type="button" onclick="event.stopPropagation();ecDoomVNTab('${id}')">${l}${n ? `<i>${n}</i>` : ''}</button>`).join('')}</div>`;
   const body = st.tab === 'aim' ? ecDoomVNAim() : st.tab === 'salvos' ? ecDoomVNSalvos(salvos)
@@ -16397,8 +16495,29 @@ function ecDoomVNBody() {
 }
 
 // ── ОБОРОНА: входящие отметки ПРО по моим планетам → вход в «Окно перехвата» ──
+// Входящие «Сполохи» по моим флотам: решения нет — есть арифметика. Показываем
+// ровно то, что решит исход: стволы, шанс зениток, есть ли Ожерелье над головой.
+function ecDoomVNFleetIncoming() {
+  const rows = (EC.fleetIncoming || []).map(x => {
+    const p = Math.round((+x.flak_p || 0) * 100);
+    const eta = ecProgressISO(null, x.ready_at, 1, 'подлёт');
+    const safe = !!x.nemesis;
+    return `<div class="ec-bld abm-alert${safe ? ' is-set' : ''}" style="margin:8px 0">
+      <div class="abm-alert-hd">
+        <span class="abm-alert-ic">${safe ? '⛨' : '🔥'}</span>
+        <span class="abm-alert-tt">Сигнатура взята · ${esc(x.fleet || 'флот')}</span>
+        <span class="abm-alert-eta">${eta}</span>
+      </div>
+      <div class="abm-alert-tx">${safe
+        ? `По флоту идёт Х77 «Сполох». Флот стоит под <b>Ожерельем Немезиды</b> — залп снимут на подходе.`
+        : `По флоту идёт Х77 «Сполох» — снаряд ведёт сигнатуру, манёвром не сбросить. Зенитный расчёт: <b>${ecNum(Math.round(+x.flak || 0))}</b> стволов, шанс сбить — <b>${p}%</b>. Не собьют — вспышка снимет 15–35% из ${ecNum(x.ships)} кораблей.`}</div>
+    </div>`;
+  }).join('');
+  return rows;
+}
 function ecDoomVNDefense(incoming) {
-  if (!incoming.length) {
+  const fleetRows = ecDoomVNFleetIncoming();
+  if (!incoming.length && !fleetRows) {
     return `<div class="hp-vn-col-empty" style="padding:20px;text-align:center">
       Небо чисто: входящих залпов по вашим планетам нет.<br>
       <span style="color:var(--t4);font-size:12px">Когда по прикрытой ПРО планете пойдёт снаряд, здесь откроется «Окно перехвата» — и вы будете вести дуэль сами.</span>
@@ -16406,22 +16525,31 @@ function ecDoomVNDefense(incoming) {
   }
   const rows = incoming.map(x => {
     const done = !!x.my_approach;
+    const blind = !!x.no_abm;                       // снаряд-невидимка: ПРО его не берёт
     const eta = ecProgressISO(null, x.ready_at, 1, 'подлёт');
-    return `<div class="ec-bld abm-alert${done ? ' is-set' : ''}" style="margin:8px 0">
+    // Наведение расходуется навсегда — на «Фантом» его тратить не даём, но саму
+    // отметку оставляем: игрок должен видеть, что летит и почему ПРО бессильна.
+    const act = blind ? '' : `<div class="ec-bld-act"><button class="btn btn-gh btn-sm" type="button" onclick="event.stopPropagation();ecAbmDuelOpen('${x.salvo_id}')">${done ? 'Открыть окно' : '⌁ Вести перехват'}</button></div>`;
+    return `<div class="ec-bld abm-alert${done ? ' is-set' : ''}${blind ? ' is-blind' : ''}" style="margin:8px 0">
       <div class="abm-alert-hd">
-        <span class="abm-alert-ic">${done ? '⛨' : '☢'}</span>
-        <span class="abm-alert-tt">${done ? 'Сеть наведена' : 'Входящая отметка'} · ${esc(x.planet || 'планета')}</span>
+        <span class="abm-alert-ic">${blind ? '👁' : done ? '⛨' : '☢'}</span>
+        <span class="abm-alert-tt">${blind ? 'Отметка вне ПРО' : done ? 'Сеть наведена' : 'Входящая отметка'} · ${esc(x.planet || 'планета')}</span>
         <span class="abm-alert-eta">${eta}</span>
       </div>
-      <div class="abm-alert-tx">${done
-        ? `Ставка: <b>${esc(ecAbmName(x.my_approach))}</b>${x.my_window ? ` · окно «${esc(ecAbmWinName(x.my_window))}»` : ''}. Решение принято.`
-        : 'Противник тайно задал оси подхода. Угадайте все — снаряд будет сбит.'}</div>
-      <div class="ec-bld-act"><button class="btn btn-gh btn-sm" type="button" onclick="event.stopPropagation();ecAbmDuelOpen('${x.salvo_id}')">${done ? 'Открыть окно' : '⌁ Вести перехват'}</button></div>
+      <div class="abm-alert-tx">${blind
+        ? (x.nemesis
+            ? 'Снаряд-невидимка: планетарная ПРО его не видит. Над системой стоит <b>Ожерелье Немезиды</b> — оно снимет залп само.'
+            : 'Снаряд-невидимка: планетарная ПРО его не видит, вести дуэль нечем. Остановит только <b>Ожерелье Немезиды</b>.')
+        : done
+          ? `Ставка: <b>${esc(ecAbmName(x.my_approach))}</b>${x.my_window ? ` · окно «${esc(ecAbmWinName(x.my_window))}»` : ''}. Решение принято.`
+          : 'Противник тайно задал оси подхода. Угадайте все — снаряд будет сбит.'}</div>
+      ${act}
     </div>`;
   }).join('');
   return `<div class="hp-vnd-defense" style="padding:4px 2px">
     <div class="hp-vn-col-empty" style="padding:6px 4px;text-align:left;color:var(--t3)">Планетарная ПРО ведёт дуэль с входящими залпами. Больше слотов ПРО — больше разведки по осям подхода.</div>
     ${rows}
+    ${fleetRows ? `<div class="abm-axis-lbl" style="margin-top:10px">Удары по флотам</div>${fleetRows}` : ''}
   </div>`;
 }
 // АРСЕНАЛ: карточки стационарных орудий + секция Гиперпейсеров.
@@ -16582,8 +16710,10 @@ function ecDoomVNCar() {
    от носителя: у стационарной Длани снаряд один (Длань), сцена выбора снаряда
    выпадает; Гиперпейсер несёт все тиры — у него сцена снаряда есть. */
 function ecDoomVNSteps(car) {
+  // Снаряд выбирается ДО цели: «Сполох» бьёт по флоту, остальные — по миру,
+  // и сцена цели должна знать, что именно наводят.
   return (car && car.kind === 'mza')
-    ? ['car', 'sys', 'pid', 'shell', 'chain']
+    ? ['car', 'sys', 'shell', 'pid', 'chain']
     : ['car', 'sys', 'pid', 'chain'];
 }
 function ecDoomVNStepId(car) {
@@ -16596,7 +16726,7 @@ function ecDoomVNStepReady(stepId, car) {
   const st = ecDoomVNAimSt();
   if (stepId === 'car') return !!(car && car.ready);
   if (stepId === 'sys') return !!st.sysId;
-  if (stepId === 'pid') return Number.isInteger(st.pid);
+  if (stepId === 'pid') return ecShellHitsFleet(st.shell) ? !!st.fleetId : Number.isInteger(st.pid);
   if (stepId === 'shell') return ecShellsOf((car && car.kind === 'mza' && EC_BALL_KINDS.includes(st.shell)) ? st.shell : 'doom') >= 1;
   return false;
 }
@@ -16618,6 +16748,8 @@ function ecDoomVNPick(part, val) {
     st.sysId = (st.sysId === val ? null : val); st.pid = null;
   } else if (part === 'pid') {
     st.pid = (st.pid === +val ? null : +val);
+  } else if (part === 'fleet') {
+    st.fleetId = (st.fleetId === val ? null : val);
   }
   st.tgl = { pwr: false, seal: false, oath: false };
   ecDoomVNStageSync(null);
@@ -16625,7 +16757,11 @@ function ecDoomVNPick(part, val) {
 // Выбрать тип снаряда Гиперпейсера (остаёмся на сцене — дальше стрелкой).
 function ecDoomVNShell(k) {
   const st = ecDoomVNAimSt();
+  const was = st.shell;
   st.shell = EC_BALL_KINDS.includes(k) ? k : 'doom';
+  // Мир и флот — разные перекрестья: при смене рода цели старую снимаем, иначе
+  // в цепи пуска повиснет наведение, которого игрок уже не видит.
+  if (ecShellHitsFleet(was) !== ecShellHitsFleet(st.shell)) { st.pid = null; st.fleetId = null; }
   st.tgl = { pwr: false, seal: false, oath: false };
   ecDoomVNStageSync(null);
 }
@@ -16769,11 +16905,53 @@ function ecDoomVNTargetSec() {
       <span class="hp-vnd-sys-own ${own ? 'own' : (sys.faction ? 'foe' : '')}" style="margin-left:4px">${flag}${ownTag}</span></div>
     <div class="hp-vnd-tgtgrid">${cards}</div>`;
 }
+// II.1 · ЦЕЛЬ «СПОЛОХА» — не мир, а флот: берём тепловые сигнатуры, которые
+// видит наша разведка (fleets_visible), и только в выбранной системе. Свои
+// флоты в список не попадают — по себе не стреляем.
+function ecDoomVNFleetSec() {
+  const st = ecDoomVNAimSt();
+  const sys = st.sysId ? (EC.allSystems || []).find(s => s.id === st.sysId) : null;
+  if (!sys) return `<div class="hp-vnd-con-t"><i>II.1</i> тепловые сигнатуры</div>
+    <div class="hp-vnd-tgt-empty">▸ выберите систему в реестре выше — здесь встанут флоты, которые в ней видит разведка</div>`;
+  const fls = (EC.fleetsVisible || []).filter(f => !f.mine && f.system_id === sys.id);
+  if (!fls.length) return `<div class="hp-vnd-con-t"><i>II.1</i> тепловые сигнатуры · «${esc(sys.name || sys.id)}»</div>
+    <div class="hp-vnd-tgt-empty">В этой системе разведка не видит чужих флотов. Сигнатуру надо сначала обнаружить — своим флотом, постом или агентурой.</div>`;
+  const cards = fls.map(f => {
+    const on = st.fleetId === f.id;
+    const sz = f.intel ? `${ecNum(f.ships)} кор.` : 'состав не вскрыт';
+    return `<button type="button" class="hp-vnd-tgt${on ? ' on' : ''}" onclick="event.stopPropagation();ecDoomVNPick('fleet','${esc(f.id)}')">
+      <span class="hp-vnd-tgt-orb"><i>🔥</i></span>
+      <span class="hp-vnd-tgt-tx"><b>${esc(f.name || 'Флот ' + esc(f.faction_name || ''))}</b><small>${esc(f.faction_name || 'держава неизвестна')} · ${sz}</small></span>
+      <span class="hp-vnd-tgt-mk">${on ? '◎ в перекрестье' : '◌'}</span>
+    </button>`;
+  }).join('');
+  return `<div class="hp-vnd-con-t"><i>II.1</i> тепловые сигнатуры · «${esc(sys.name || sys.id)}»</div>
+    <div class="hp-vnd-tgt-note">Снаряд ведёт сигнатуру: уйти из системы цель не сможет. Сбить его может только зенитный огонь самого флота — или Ожерелье Немезиды над системой, где его застанет подлёт.</div>
+    <div class="hp-vnd-tgtgrid">${cards}</div>`;
+}
 // ЗАЛП с пульта новеллы: гейт — цель назначена и все три тумблера взведены.
 async function ecDoomVNFire() {
   if (EC.busy) return;
   const st = ecDoomVNAimSt(), car = ecDoomVNCar();
   const sys = (EC.allSystems || []).find(s => s.id === st.sysId);
+  const shellK = (car && car.kind === 'mza' && EC_BALL_KINDS.includes(st.shell)) ? st.shell : 'doom';
+  // «Сполох» наводится на флот — своя дверь на сервере (mza_fire_fleet).
+  if (ecShellHitsFleet(shellK)) {
+    const fl = (EC.fleetsVisible || []).find(f => f.id === st.fleetId && !f.mine);
+    if (!car || !fl) { toast('Протокол не собран: назначьте носитель и флот-цель', 'err'); return; }
+    if (!(st.tgl.pwr && st.tgl.seal && st.tgl.oath)) { toast('Цепь пуска разомкнута — взведите все три тумблера', 'err'); return; }
+    if (ecShellsOf(shellK) < 1) { toast('Нет снаряда (' + EC_SHELL_LABEL[shellK] + ') — постройте на фабрике снарядов', 'err'); return; }
+    EC.busy = true;
+    try {
+      const r = await ecRpc('mza_fire_fleet', { p_id: car.id, p_fleet_id: fl.id, p_kind: shellK });
+      ecDoomVNSt().aim = null; ecDoomVNSt().tab = 'salvos';
+      const pc = r && r.flak_p != null ? Math.round(+r.flak_p * 100) : null;
+      toast(`Наводчица: «Сигнатура взята. Их зенитки дают ${pc == null ? '—' : pc + '%'}... остальное — арифметика»`, 'ok');
+      await ecReloadPaint();
+    } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+    finally { EC.busy = false; }
+    return;
+  }
   const tgt = sys && ecDoomTargetablePlanets(sys).find(p => p.pid === st.pid && !(p.dead || p.doomed));
   if (!car || !sys || !tgt) { toast('Протокол не собран: назначьте носитель и планету-цель', 'err'); return; }
   if (!(st.tgl.pwr && st.tgl.seal && st.tgl.oath)) { toast('Цепь пуска разомкнута — взведите все три тумблера', 'err'); return; }
@@ -16801,6 +16979,11 @@ function ecDoomVNAim() {
 }
 // Названия сцен для «корешка» новеллы (тонкая полоска-прогресс сверху).
 const EC_DOOM_STEP_NM = { car: 'носитель', sys: 'система', pid: 'мир', shell: 'снаряд', chain: 'пуск' };
+// Имя сцены цели зависит от снаряда: у «Сполоха» в перекрестье не мир, а флот.
+function ecDoomStepNm(id) {
+  if (id === 'pid' && ecShellHitsFleet(ecDoomVNAimSt().shell)) return 'флот';
+  return EC_DOOM_STEP_NM[id];
+}
 // Разворот новеллы: слева — наводчик, справа — реплика и активная сцена.
 function ecDoomVNAimInner() {
   const cars = ecDoomVNCarriers();
@@ -16816,7 +16999,7 @@ function ecDoomVNAimInner() {
   // Корешок-прогресс: пройденные / текущая / грядущие сцены.
   const spine = `<div class="hp-vnd-spine">${steps.map((s, i) => {
     const cls = i < st.step ? ' past' : i === st.step ? ' on' : '';
-    return `<span class="hp-vnd-spine-p${cls}">${EC_DOOM_STEP_NM[s]}</span>`;
+    return `<span class="hp-vnd-spine-p${cls}">${ecDoomStepNm(s)}</span>`;
   }).join('<i class="hp-vnd-spine-ln"></i>')}</div>`;
   // ШАПКА-АРТ (assets/doom/face_<face>.webp) с текстом реплики поверх, плавно
   // растворяющаяся в интерфейс выбора ниже. Нет арта — остаётся тематический фон.
@@ -16917,7 +17100,7 @@ function ecDoomVNScene(stepId, car) {
       </div>
       <div class="hp-vnd-syslist" id="hd-syslist">${ecDoomVNSysList()}</div>`;
   }
-  if (stepId === 'pid') return `<div id="hd-targetsec">${ecDoomVNTargetSec()}</div>`;
+  if (stepId === 'pid') return `<div id="hd-targetsec">${ecShellHitsFleet(st.shell) ? ecDoomVNFleetSec() : ecDoomVNTargetSec()}</div>`;
   if (stepId === 'shell') {
     const cur = EC_BALL_KINDS.includes(st.shell) ? st.shell : 'doom';
     return `<div class="hp-vnd-shelfrow">${EC_SHELL_KINDS.map(k => ecShellCard(k, {
@@ -16937,8 +17120,8 @@ function ecDoomVNNav(stepId, car) {
   let fwd;
   if (stepId === 'chain') fwd = `<span class="hp-vnd-page-hint">цепь пуска — ниже</span>`;
   else if (ecDoomVNStepReady(stepId, car))
-    fwd = `<button type="button" class="hp-vnd-page hp-vnd-page-next" onclick="event.stopPropagation();ecDoomVNGo(1)">${EC_DOOM_STEP_NM[steps[st.step + 1]] || 'дальше'} ▸</button>`;
-  else fwd = `<span class="hp-vnd-page hp-vnd-page-off">выберите ${EC_DOOM_STEP_NM[stepId]} ▸</span>`;
+    fwd = `<button type="button" class="hp-vnd-page hp-vnd-page-next" onclick="event.stopPropagation();ecDoomVNGo(1)">${ecDoomStepNm(steps[st.step + 1]) || 'дальше'} ▸</button>`;
+  else fwd = `<span class="hp-vnd-page hp-vnd-page-off">выберите ${ecDoomStepNm(stepId)} ▸</span>`;
   return `<div class="hp-vnd-pages">${back}${fwd}</div>`;
 }
 // Сцена «цепь пуска»: телеметрия, три тумблера и кнопка ПУСК.
@@ -16948,7 +17131,10 @@ function ecDoomVNProto() {
   const shellKind = (car.kind === 'mza' && EC_BALL_KINDS.includes(st.shell)) ? st.shell : 'doom';
   const shells = ecShellsOf(shellKind);
   const sys = st.sysId ? (EC.allSystems || []).find(s => s.id === st.sysId) : null;
-  const tgt = sys && Number.isInteger(st.pid) ? ecDoomTargetablePlanets(sys).find(p => p.pid === st.pid) : null;
+  const hitsFleet = ecShellHitsFleet(shellKind);
+  const fleet = hitsFleet ? (EC.fleetsVisible || []).find(f => f.id === st.fleetId && !f.mine) : null;
+  const tgt = (!hitsFleet && sys && Number.isInteger(st.pid))
+    ? ecDoomTargetablePlanets(sys).find(p => p.pid === st.pid) : null;
   const fly = sys ? ecDoomFlight({ system_id: car.sys }, sys.id) : null;
   const hops = (car.kind === 'mza' && sys) ? ecMzaHops(car.sys, sys.id) : null;
   const maxHops = ecMzaMaxHops(shellKind);
@@ -16959,7 +17145,7 @@ function ecDoomVNProto() {
     ['seal', 'снять пломбу ствола', ''],
     ['oath', 'принять ответственность', ''],
   ];
-  const canArm = !!tgt && inRange;
+  const canArm = (hitsFleet ? !!fleet : !!tgt) && inRange;
   const tumbs = tglDef.map(([k, lbl, block]) => {
     const dead = !canArm || !!block;
     return `<button type="button" class="hp-vnd-tumb${st.tgl[k] ? ' on' : ''}${dead ? ' off' : ''}" ${dead ? 'disabled' : ''}
@@ -16971,12 +17157,17 @@ function ecDoomVNProto() {
   const armed = canArm && gravOk && st.tgl.pwr && st.tgl.seal && st.tgl.oath;
   return `<div class="hp-vnd-read">
       <span><i>носитель</i><b>${esc(car.nm)}</b></span>
-      <span><i>цель</i><b${tgt ? ' class="hot"' : ''}>${tgt ? esc((sys.name || sys.id) + ' · ' + (tgt.name || 'планета ' + tgt.pid)) : '— не назначена —'}</b></span>
+      <span><i>цель</i><b${(tgt || fleet) ? ' class="hot"' : ''}>${
+        hitsFleet
+          ? (fleet ? esc((sys ? (sys.name || sys.id) + ' · ' : '') + (fleet.name || 'флот ' + (fleet.faction_name || ''))) : '— сигнатура не взята —')
+          : (tgt ? esc((sys.name || sys.id) + ' · ' + (tgt.name || 'планета ' + tgt.pid)) : '— не назначена —')}</b></span>
       <span><i>подлёт</i><b>${fly ? '≈' + fly.hours.toFixed(1) + ' ч' : '···'}</b></span>
       <span><i>снаряд</i><b class="${gravOk ? '' : 'hot'}">${esc(EC_SHELL_LABEL[shellKind])} · ${ecNum(shells)}/1</b></span>
     </div>
     <div class="hp-vnd-tumbs">${tumbs}</div>
     ${!inRange ? `<div class="hp-vnd-warnline">Цель вне радиуса: дальность ${esc(EC_SHELL_LABEL[shellKind])} — ${maxHops} прыжка(ов) по гиперпутям${hops === Infinity ? ' (нет маршрута)' : ' (до цели ' + hops + ')'}. Перебросьте носитель ближе или возьмите Х0414 «Отей».</div>` : ''}
+    ${hitsFleet && fleet && inRange
+      ? `<div class="hp-vnd-warnline">Х77 ведёт тепловую сигнатуру: флот «${esc(fleet.name || '')}» не уйдёт манёвром. Ответить он может только зенитным огнём — плотный ордер лёгких стволов снаряд снимет, голый линейный не снимет.</div>` : ''}
     ${tgt && inRange ? (shellKind === 'doom'
       ? `<div class="hp-vnd-warnline">Залп необратим: «${esc(tgt.name || '')}» станет мёртвым камнем, любая колония на ней — включая столицу — будет стёрта.</div>`
       : `<div class="hp-vnd-warnline">${esc(EC_SHELL_LABEL[shellKind])}: планета уцелеет — ${esc(EC_BALL_INFO[shellKind] || '')}.</div>`)

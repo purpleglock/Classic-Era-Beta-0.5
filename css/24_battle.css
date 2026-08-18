@@ -814,6 +814,26 @@
 }
 .hs-card-loot b { color: #ff8a5c; font-weight: 700; }
 .hs-card-loot span { color: var(--t3); }
+/* Выход с крысиных троп: два узла, где ватагу вообще можно встретить до налёта.
+   Отбито от тела карточки той же чертой, что и счёт стоянки — это тоже не
+   статус, а действие, которое игрок может успеть сделать. */
+.hs-road {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid hsl(200 40% 40% / .26);
+}
+.hs-road-h { font-size: 11.5px; color: #9fd8ea; margin-bottom: 6px; letter-spacing: .02em; }
+.hs-road-r {
+  display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center;
+  font-size: 11.5px; color: var(--t3); margin-bottom: 5px;
+}
+.hs-road-r b { color: var(--t2); font-weight: 600; }
+.hs-road-r .btn { margin-left: auto; align-self: center; }
+.hs-road-sel {
+  flex: 1 1 140px; min-width: 0; font: inherit; font-size: 11.5px;
+  padding: 4px 6px; color: var(--t2);
+  background: hsl(206 28% 12% / .8); border: 1px solid hsl(200 30% 40% / .35);
+}
+.hs-road-n { font-size: 11px; color: var(--t4); line-height: 1.45; margin-top: 4px; }
 .hs-card .btn { align-self: flex-start; }
 .hs-empty { padding: 40px 0; text-align: center; color: var(--t3); font-size: 13px; }
 .hs-empty-ic { font-size: 34px; opacity: 0.3; margin-bottom: 10px; }
@@ -822,6 +842,9 @@
 @media (max-width: 640px) {
   .hs-grid { grid-template-columns: 1fr; gap: 11px; }
   .hs-card .btn { align-self: stretch; text-align: center; }
+  /* ⚠ но не кнопки узлов перехвата: они живут в строке рядом с названием
+     системы, растянутые на всю ширину они рвут строку пополам */
+  .hs-card .hs-road-r .btn { align-self: center; }
 }
 
 /* ── КОЛЕСО ДЕЙСТВИЙ (клавиша «У») ────────────────────────── */

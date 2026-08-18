@@ -72,6 +72,11 @@ const NT_CH = {
   'press.notif':    { nm: 'О вас пишут',           sub: 'сектор назвал вашу державу',        ic: 'ping',    kind: 'new',  dept: 'press', tab: 'notif' },
   'stat.ach':       { nm: 'Новые достижения',      sub: 'держава отличилась',                ic: 'medal',   kind: 'new',  dept: 'stat',  tab: 'ach' },
   'news':           { nm: 'Сводка сектора',        sub: 'новости, которых вы не читали',     ic: 'ledger',  kind: 'new',  home: true },
+  // Правила меняются между сессиями, и узнать об этом было неоткуда. Канал ведёт
+  // в гайдбук, раздел «Что изменилось» (_rules_updates.sql); гасит его сам
+  // гайдбук, когда лента прочитана (gbChangesLoad → ntMark).
+  'rules':          { nm: 'Правила изменились',    sub: 'что поменялось и где про это читать', ic: 'scroll', kind: 'new',
+                      act: () => { if (typeof go === 'function') { go('guide'); setTimeout(() => gbScrollTo('gb-changes'), 400); } } },
   'ticket':         { nm: 'Ответ поддержки',       sub: 'в вашем обращении есть ответ',      ic: 'speech',  kind: 'new',  act: () => { if (typeof tkOpen === 'function') tkOpen(); } },
 };
 

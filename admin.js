@@ -245,7 +245,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['promo', '🎁 Промокоды'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['saga', '📜 Хроника'], ['intelart', '🕵 Разведка'], ['artifacts', '🎒 Артефакты', (AD.artKinds || []).length], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['rules', '↯ Правила'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['promo', '🎁 Промокоды'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['saga', '📜 Хроника'], ['intelart', '🕵 Разведка'], ['artifacts', '🎒 Артефакты', (AD.artKinds || []).length], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -276,6 +276,7 @@ function adPaint() {
     else if (AD.tab === 'mktsim')    tabContent = adMarketSimPanel();
     else if (AD.tab === 'brand')     tabContent = adBrandPanel();
     else if (AD.tab === 'multiacc')  tabContent = adMultiaccPanel();
+    else if (AD.tab === 'rules')     tabContent = adRulesPanel();
     else tabContent = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + stats;
     body = tabBar + `<div style="margin-top:14px">${tabContent}</div>`;
   } catch (e) {
@@ -7309,5 +7310,77 @@ async function adPathDelete(id) {
     await adRpc('admin_path_delete', { p_id: id });
     toast(`Веха ${id} удалена`, 'ok');
     adPromoReset();
+  } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ↯ ПРАВИЛА: объявление правок (_rules_updates.sql)
+//
+// Правки правил доезжали до игрока только тем, что он сам перечитывал гайдбук.
+// Здесь стафф пишет «что поменялось», выбирает РАЗДЕЛ гайдбука (якорь) — и у
+// всех загорается канал «Правила изменились», ведущий ровно туда.
+// Текст самого правила сюда НЕ переносим: он живёт в своём разделе гайдбука,
+// иначе через месяц получим второй, расходящийся свод правил.
+// ══════════════════════════════════════════════════════════════
+function adRulesPanel() {
+  if (AD.rules == null) { AD.rules = []; adRulesLoad(); }
+  const inp = 'width:100%;box-sizing:border-box;padding:6px 8px;font-size:12px;background:var(--b1,#0f141b);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:7px';
+  const secs = (typeof GB_SECTIONS !== 'undefined' && Array.isArray(GB_SECTIONS)) ? GB_SECTIONS : [];
+  const opts = ['<option value="">— без якоря —</option>']
+    .concat(secs.map(s => `<option value="${esc(s.id)}">${esc(s.label)}</option>`)).join('');
+  const rows = (AD.rules || []).map(u => {
+    const d = u.at ? new Date(u.at) : null;
+    const when = d ? d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+    const sec = secs.find(s => s.id === u.anchor);
+    return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--w2,#2a3340)">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:10px;color:var(--t4,#6a7a88)">${esc(when)}${u.tag ? ' · ' + esc(u.tag) : ''}${sec ? ' · → ' + esc(sec.label) : ''}</div>
+        <div style="font-size:13px;font-weight:600">${esc(u.title || '')}</div>
+        <div style="font-size:12px;color:var(--t3,#8aa0b0);white-space:pre-wrap">${esc(u.body || '')}</div>
+      </div>
+      <button class="btn btn-gh btn-sm" onclick="adRulesDelete('${esc(u.id)}')">снять</button>
+    </div>`;
+  }).join('') || `<div style="padding:10px 0;color:var(--t4,#6a7a88);font-size:12px">Объявлений пока нет.</div>`;
+  return `<div style="max-width:760px">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Объявить правку правил</div>
+    <label style="display:block;margin-top:6px"><span style="font-size:10px;color:var(--t4,#6a7a88)">Заголовок</span>
+      <input id="ad-rules-title" type="text" maxlength="120" style="${inp}" placeholder="Логистика флота: заставы, грабёж, сбор у звезды"></label>
+    <label style="display:block;margin-top:6px"><span style="font-size:10px;color:var(--t4,#6a7a88)">Что поменялось (человеческим языком)</span>
+      <textarea id="ad-rules-body" rows="4" style="${inp};resize:vertical" placeholder="Было так — стало так. Коротко и по делу."></textarea></label>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <label style="flex:1"><span style="font-size:10px;color:var(--t4,#6a7a88)">Раздел гайдбука (якорь)</span>
+        <select id="ad-rules-anchor" style="${inp}">${opts}</select></label>
+      <label style="width:180px"><span style="font-size:10px;color:var(--t4,#6a7a88)">Метка</span>
+        <input id="ad-rules-tag" type="text" maxlength="24" style="${inp}" placeholder="Флот"></label>
+    </div>
+    <button class="btn btn-gd btn-sm" style="margin-top:10px" onclick="adRulesPost()">Объявить</button>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin-top:6px">Загорится канал «Правила изменились» у всех, кто не читал ленту. Гаснет, когда игрок открывает гайдбук.</div>
+    <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin:18px 0 4px">Объявленные правки</div>
+    ${rows}
+  </div>`;
+}
+async function adRulesLoad() {
+  try { AD.rules = (await adRpc('rules_updates_list', { p_limit: 50 })) || []; }
+  catch (e) { AD.rules = []; toast('Лента правок: ' + (e.message || e), 'err'); }
+  adPaint();
+}
+async function adRulesPost() {
+  const t = (document.getElementById('ad-rules-title') || {}).value || '';
+  const b = (document.getElementById('ad-rules-body') || {}).value || '';
+  const a = (document.getElementById('ad-rules-anchor') || {}).value || '';
+  const g = (document.getElementById('ad-rules-tag') || {}).value || '';
+  if (!t.trim() || !b.trim()) { toast('Нужны заголовок и описание', 'err'); return; }
+  try {
+    await adRpc('rules_update_post', { p_title: t, p_body: b, p_anchor: a || null, p_tag: g || null });
+    toast('Правка объявлена', 'ok');
+    AD.rules = null; adPaint();
+  } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
+}
+async function adRulesDelete(id) {
+  if (!confirm('Снять это объявление?')) return;
+  try {
+    await adRpc('rules_update_delete', { p_id: id });
+    toast('Объявление снято', 'ok');
+    AD.rules = null; adPaint();
   } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
 }

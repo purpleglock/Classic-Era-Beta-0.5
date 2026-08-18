@@ -1,0 +1,105 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Крысиные тропы: стенд отрисовки</title>
+<!--
+  Стенд под 18.08: как читается маршрут ватаги, разделённый на крысиную тропу
+  и выход. Без Supabase и без входа — GM/GMM подменены руками, вызывается
+  ровно тот же gmmPaintTheatre, что и в бою. Слева — карта, справа — панель
+  режима в мобильном виде (свёрнутый нижний лист и он же раскрытый).
+-->
+<link rel="stylesheet" href="css/01_tokens.css">
+<link rel="stylesheet" href="css/14_map.css">
+<style>
+  body{margin:0;background:#070a10;color:#c8d4e0;font-family:Rajdhani,system-ui,sans-serif}
+  .bar{display:flex;gap:14px;align-items:center;padding:10px 14px;border-bottom:1px solid #1d2735}
+  .bar b{font-size:14px;color:#ff9270}
+  .bar button{background:#151d29;color:#c8d4e0;border:1px solid #2a3849;padding:5px 10px;cursor:pointer}
+  .row{display:flex;gap:16px;padding:16px;align-items:flex-start;flex-wrap:wrap}
+  .stage{position:relative;width:760px;height:460px;background:#05070c;border:1px solid #1d2735}
+  .phone{position:relative;width:375px;height:640px;background:#05070c;border:1px solid #1d2735;overflow:hidden}
+  .cap{font-size:12px;color:#7d8ea1;margin:6px 0 0}
+</style>
+
+<div class="bar">
+  <b>☠ Крысиные тропы</b>
+  <button onclick="STEP(-30)">−30 мин</button>
+  <button onclick="STEP(30)">+30 мин</button>
+  <span id="clk"></span>
+  <button onclick="TOGGLE_MINE()">цель: своя / чужая</button>
+</div>
+
+<div class="row">
+  <div>
+    <div class="stage"><canvas id="cv" width="760" height="460"></canvas></div>
+    <p class="cap">Еле видимая нить слева — тропа (ватага полая, следа нет). Справа два узла с
+      перекрестием — выход; за ними горячий след и цель.</p>
+  </div>
+  <div>
+    <div class="phone">
+      <div id="gm-wrap" class="gm-mobile gm-theatre" style="position:absolute;inset:0">
+        <div id="gm-theatre"></div>
+      </div>
+    </div>
+    <p class="cap">Телефон: лист свёрнут по умолчанию. Тапни «⌃» в шапке — раскроется на 46%.</p>
+  </div>
+</div>
+
+<script>
+// Мелочь из core.js, которой пользуется панель режима. Стенду хватает.
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function toast(m){console.log('toast:',m);}
+</script>
+<script src="galaxy_map.js"></script>
+<script>
+// ── Мир стенда: цепочка из 7 систем, последние два прыжка — выход ──
+const SYS = [
+  { id: 's0', name: 'Логово',    x: 60,  y: 300 },
+  { id: 's1', name: 'Пустошь',   x: 150, y: 250 },
+  { id: 's2', name: 'Хребет',    x: 250, y: 290 },
+  { id: 's3', name: 'Излучина',  x: 350, y: 220 },
+  { id: 's4', name: 'Тектонар',  x: 470, y: 260 },
+  { id: 's5', name: 'Карцерис',  x: 580, y: 200 },
+  { id: 's6', name: 'Рамонь',    x: 690, y: 250 },
+];
+const T0 = Date.now();
+let shift = 0, mine = true;
+function build() {
+  const at = SYS.map((_, i) => new Date(T0 - shift * 60000 + i * 40 * 60000).toISOString());
+  GM.systems = SYS;
+  GM.showTheatre = true;
+  GM.theatre = {
+    ok: true, moves: [{
+      id: 'k1', grade: 'resolved', kind: 'strike', mine, ships: 6,
+      sys: 's2', sys_name: 'Хребет', target_sys: 's6', target_name: 'Рамонь',
+      from_sys: 's0', eta: at[6], route: SYS.map(s => s.id), route_at: at,
+      road_from: 4, stood: false,
+    }],
+    sectors: [], bands: [], lairs: [{ sys: 's0', sys_name: 'Логово' }], grudges: [],
+    wrath: { aggro: 31, band: 'вас метят', reason: 'залп по угодьям' },
+  };
+  gmmBuildTheatre();
+}
+// GMM-камера стенда: без панорамы и зума, мир 1:1 в канвас.
+GMM.s = 1; GMM.tx = 0; GMM.ty = 0; GMM.vw = 760; GMM.vh = 460;
+GMM.tilt = 0;
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+function frame() {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  // звёзды-подложка, чтобы линии читались как на карте
+  SYS.forEach(s => {
+    ctx.fillStyle = 'rgba(180,205,230,.55)';
+    ctx.beginPath(); ctx.arc(s.x, s.y, 2.2, 0, 6.3); ctx.fill();
+    ctx.font = '10px Rajdhani, sans-serif'; ctx.fillStyle = 'rgba(150,175,200,.6)';
+    ctx.textAlign = 'center'; ctx.fillText(s.name, s.x, s.y + 16);
+  });
+  gmmPaintTheatre(ctx);
+  document.getElementById('clk').textContent =
+    'ватага вышла ' + Math.round(shift) + ' мин назад';
+  requestAnimationFrame(frame);
+}
+function STEP(m) { shift += m; build(); }
+function TOGGLE_MINE() { mine = !mine; build(); }
+build();
+gmTheatreRender();
+frame();
+</script>

@@ -627,6 +627,35 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 .gm-th-leg .gm-th-k2{background:#ff8046;border-radius:50%}
 .gm-th-leg .gm-th-k3{border:1px solid #e05c38;transform:rotate(45deg)}
 .gm-th-leg .gm-th-k4{border:1px dashed hsl(38 90% 65% / .8);border-radius:50%}
+/* Тропа: тот же клин, но выцветший — «отметка есть, брать нечего».
+   ⚠ Именно заливкой, а не border: clip-path режет обводку по живому. */
+.gm-th-leg .gm-th-k5{background:hsl(14 72% 55% / .28);clip-path:polygon(100% 50%,0 100%,30% 50%,0 0)}
+/* Узел выхода: кольцо с перекрестием — ровно то, что нарисовано на карте. */
+.gm-th-leg .gm-th-k6{position:relative;border:1px solid #e05c38;border-radius:50%}
+.gm-th-leg .gm-th-k6::before,.gm-th-leg .gm-th-k6::after{
+  content:"";position:absolute;background:#e05c38}
+.gm-th-leg .gm-th-k6::before{left:50%;top:-3px;bottom:-3px;width:1px;margin-left:-.5px}
+.gm-th-leg .gm-th-k6::after{top:50%;left:-3px;right:-3px;height:1px;margin-top:-.5px}
+.gm-th-road{margin-top:8px;line-height:1.5}
+.gm-th-road b{color:var(--t2);font-weight:600}
+
+/* ── Свёртка расклада ────────────────────────────────────────────────────
+   Режим смотрят ради КАРТЫ, а панель — справка к ней. Поэтому её можно
+   сложить в одну строку: заголовок, счётчик ватаг и стрелка. На телефоне это
+   состояние по умолчанию (см. gmTheatreRender), на ПК — по желанию. */
+#gm-theatre .gm-r-bar{gap:8px}
+#gm-theatre .gm-r-title{flex-shrink:0}
+.gm-th-peek{flex:1;min-width:0;text-align:right;font-size:11px;color:#ffb59b;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gm-th-min-btn{flex-shrink:0;background:none;border:none;cursor:pointer;padding:2px 6px;
+  font-size:15px;line-height:1;color:var(--t3);transition:transform .16s ease,color .16s ease}
+.gm-th-min-btn:hover{color:var(--t1)}
+.gm-th-min-btn[aria-expanded="false"]{transform:rotate(180deg)}
+#gm-theatre.gm-th-min{overflow:hidden;padding-bottom:10px}
+/* ⚠ два id в селекторе намеренно: мобильные правила ниже по файлу задают
+   .gm-th-leg собственный display, и при равном весе они бы перебили свёртку */
+#gm-wrap #gm-theatre.gm-th-min > *:not(.gm-r-bar){display:none}
+#gm-theatre.gm-th-min .gm-r-bar{margin-bottom:0}
 
 /* ════════ РЕДАКТОР СЕКТОРА (панель справа, живёт пока режим «Сектора») ════════ */
 #gm-sector{
@@ -913,6 +942,27 @@ textarea.gm-fi{resize:vertical}
   border-left:none;border-right:none;border-bottom:none;
   padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px));
 }
+/* Театр Легиона на телефоне — тот же нижний лист, а не карточка 300 px в углу.
+   Карточкой он занимал пол-экрана и накрывал ровно то, ради чего режим включают:
+   маршруты и узлы выхода. Лист открывается на 46% высоты, а по умолчанию сложен
+   в одну строку (gm-th-min) — карта остаётся видимой целиком. */
+#gm-wrap.gm-mobile #gm-theatre{
+  top:auto;left:0;right:0;bottom:0;width:100%;max-width:none;max-height:46%;
+  border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+  border-left:none;border-right:none;border-bottom:none;
+  padding:10px 14px calc(12px + env(safe-area-inset-bottom,0px));
+  box-shadow:0 -14px 44px rgba(0,0,0,.65);overscroll-behavior:contain;
+}
+#gm-wrap.gm-mobile #gm-theatre.gm-th-min{max-height:none}
+/* пальцевые размеры: стрелка и крестик на листе — цели для пальца, а не для мыши */
+#gm-wrap.gm-mobile .gm-th-min-btn{padding:6px 10px;font-size:18px}
+#gm-wrap.gm-mobile #gm-theatre .gm-r-bar .gm-close{font-size:20px;padding:4px 2px}
+/* легенда в две колонки: в одну строку на 375 px она разъезжается на пять рядов */
+#gm-wrap.gm-mobile .gm-th-leg{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+/* контролы карты не должны нырять под лист */
+#gm-wrap.gm-mobile.gm-theatre #gm-controls{bottom:calc(46% + 12px)}
+#gm-wrap.gm-mobile.gm-theatre:has(#gm-theatre.gm-th-min) #gm-controls{bottom:64px}
+
 /* пальцевые строки: 35 px по высоте мало для тапа по краю списка целей */
 #gm-wrap.gm-mobile .gm-opcmd-btn{padding:11px 12px}
 #gm-wrap.gm-mobile .gm-opcmd-card .gm-close{top:10px;right:12px;font-size:22px;padding:4px}
