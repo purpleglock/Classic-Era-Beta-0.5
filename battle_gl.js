@@ -1192,13 +1192,18 @@ function bgSyncUnits() {
     if (!m) {
       // неопознанный контакт: отметка на радаре без ТТХ и без корпуса —
       // сервер не отдал класс, и рисовать «какой-нибудь» корабль нельзя
-      const L = u.contact ? BB.R * 0.8
+      const ang = bgIsAngel(u);
+      // ◈ ПРЕСТОЛ. Габарит берём НЕ от класса: у ангела нет корпуса, его
+      // размер задаёт свечение — 2.9 радиуса в каждую сторону (см. angel_fx.js).
+      // Полотно строим ровно под него, чтобы halo не срезался кромкой.
+      const L = ang ? BB.R * 1.15 * 2.9 * 2
+        : u.contact ? BB.R * 0.8
         : BB.R * (0.75 + (typeof bbClsSize === 'function' ? bbClsSize(u.cls) : 1) * 1.15) * BG_SHIP_K;
-      m = u.contact ? bgBuildContact() : bgBuildShip(u.cls, bgTone(u), uh);
+      m = ang ? bgBuildAngel() : u.contact ? bgBuildContact() : bgBuildShip(u.cls, bgTone(u), uh);
       m.scale.setScalar(L);
       m.userData.key = key; m.userData.uid = u.id;
-      m.userData.L = L;
-      m.userData.y = u.contact ? BB.R * 0.3 : L * 0.12;   // высота килем над плоскостью
+      m.userData.L = L; m.userData.angel = ang;
+      m.userData.y = ang ? BB.R * 0.9 : u.contact ? BB.R * 0.3 : L * 0.12;   // высота килем над плоскостью
       BG.g.units.add(m);
       BG.units.set(u.id, m);
     }
@@ -1217,6 +1222,12 @@ function bgUnitHull(u) {
 
 function bgDropUnit(id) {
   const m = BG.units.get(id);
+  // Полотно ангела — единственная НЕ общая текстура на доске (у каждого борта
+  // свой кадр), поэтому только её и чистим руками.
+  if (m && m.userData.angel && m.userData.sp) {
+    m.userData.sp.material.map.dispose();
+    m.userData.sp.material.dispose();
+  }
   if (m) { BG.g.units.remove(m); BG.units.delete(id); }   // геометрия/материалы общие — не чистим
   const tr = BG.trail.get(id);
   if (tr) { BG.g.fx.remove(tr); tr.material.dispose(); BG.trail.delete(id); }
@@ -1239,6 +1250,9 @@ function bgPlaceUnits() {
     m.position.set(c.px, m.userData.y, c.py);
     m.rotation.y = -c.ang;                      // 2D-угол по часовой → поворот вокруг Y против
     if (u.contact) return;                      // у отметки нет ни курса, ни дюз, ни следа
+    // ◈ ПРЕСТОЛ: тоже мимо. Он не разворачивается по курсу — он уже смотрит на
+    // тебя, — и след за ним не тянется: летит не он, летит место, где он есть.
+    if (m.userData.angel) return;
     const moving = u.id != null && BB.anim.move.has(u.id);
     if (moving !== m.userData.mv) {
       m.userData.mv = moving;
@@ -1247,6 +1261,87 @@ function bgPlaceUnits() {
     bgTrail(u, m, c.ang, moving);
   });
   bgPlaceStatus();
+}
+
+/* ── ◈ ПРЕСТОЛ В 3D ─────────────────────────────────────────
+ * ПОЧЕМУ БИЛБОРД, А НЕ МОДЕЛЬ. До этой правки 3D-доска о нём не знала вовсе:
+ * bgBuildShip получал cls='angel', не находил такого корпуса в каталоге и
+ * молча выдавал силуэт по умолчанию — игрок видел на доске корвет. Второй
+ * возможный путь, вылепить ангела мешами, здесь неверен по сути: у него нет
+ * позы (крылья бьют вразнобой, кольца идут навстречу, глаза моргают каждый
+ * по-своему и все вместе смотрят на того, кого он сейчас убивает), а меш —
+ * это как раз застывшая поза. Поэтому берём тот же процедурный спрайт, что
+ * рисует 2D-доска и карта, гоним его на своё полотно и вешаем к зрителю.
+ * Один источник облика на все три экрана — правишь angel_fx.js, меняется всё.
+ *
+ * ВЗГЛЯД. Направление на жертву живёт в плоскости доски, а спрайт всегда
+ * развёрнут к камере — значит мировой угол сюда не годится. Проецируем обе
+ * точки камерой и берём угол уже НА ЭКРАНЕ: тогда, как доску ни поверни,
+ * глаза продолжают смотреть на ту же цель.                                  */
+function bgIsAngel(u) {
+  return !!u && !u.contact && u.cls === 'angel' && typeof angelDraw === 'function';
+}
+
+function bgBuildAngel() {
+  const grp = new THREE.Group();
+  // Полотно мельче на телефоне: там и экран меньше, и каждый кадр — заливка
+  // всей этой площади. 256² против 160² — это вчетверо меньше пикселей в кадр.
+  const px = (typeof angelLo === 'function' && angelLo()) ? 160 : 256;
+  const cv = document.createElement('canvas');
+  cv.width = px; cv.height = px;
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    // ⚠️ Смешивание ОБЫЧНОЕ, не аддитивное. Аддитивное съедает всё тёмное, а у
+    // ангела тёмное несёт смысл: обвод глаза, щель зрачка и насечка обода. С
+    // ним он превращался в светящееся пятно — ровно в то, чем НЕ должен быть.
+    map: tex, transparent: true, depthWrite: false }));
+  grp.add(sp);
+  grp.userData.sp = sp; grp.userData.cv = cv; grp.userData.px = px;
+  return grp;
+}
+
+// Перерисовка полотен: раз в кадр, по всем ангелам на сцене. Возвращает true,
+// пока хоть один в кадре, — этим и держится живой цикл bgFrame (иначе крылья
+// замирали бы между действиями игрока: сцена рисуется по флагу dirty).
+function bgStepAngels() {
+  const s = BB.st; if (!s || !BG.scene) return false;
+  let any = false;
+  (s.units || []).forEach(u => {
+    const m = BG.units.get(u.id);
+    if (!m || !m.userData.angel) return;
+    any = true;
+    if (typeof angelSyncHits === 'function') angelSyncHits(u);
+    const cv = m.userData.cv, px = m.userData.px;
+    const x = cv.getContext('2d');
+    x.clearRect(0, 0, px, px);
+    // Радиус подбираем так, чтобы свечение (2.9R) село ровно в полотно.
+    const R = px / 2 / 2.9;
+    const tone = (typeof BB_C !== 'undefined' && BB_C[bgTone(u)]) || '255,220,140';
+    const dim = (u.pk && u.pk.dim != null) ? +u.pk.dim : 1;
+    angelDraw(x, { cx: px / 2, cy: px / 2, R, alpha: 1, tone,
+                   gaze: bgAngelGaze(u, m), id: u.id, seals: dim });
+    m.userData.sp.material.map.needsUpdate = true;
+  });
+  if (any) BG.dirty = true;
+  return any;
+}
+
+// Экранный угол на ближайшего живого врага (см. «ВЗГЛЯД» выше).
+function bgAngelGaze(u, m) {
+  const s = BB.st || {};
+  let best = 1e9, tgt = null;
+  (s.units || []).forEach(t => {
+    if (!t || t.contact || t.alive === false || t.side === u.side) return;
+    const d = (t.x - u.x) * (t.x - u.x) + (t.y - u.y) * (t.y - u.y);
+    if (d < best) { best = d; tgt = t; }
+  });
+  if (!tgt || !BG.cam) return -Math.PI / 2;
+  const c = bbHexCenter(tgt.x, tgt.y);
+  const a = m.position.clone().project(BG.cam);
+  const b = new THREE.Vector3(c.px, m.userData.y, c.py).project(BG.cam);
+  // Y в NDC растёт вверх, а в холсте — вниз, отсюда знак.
+  return Math.atan2(-(b.y - a.y), b.x - a.x);
 }
 
 // Отметка неопознанного контакта: ромб со знаком вопроса, всегда к зрителю
@@ -2600,6 +2695,10 @@ function bgSyncStatus() {
   const live = new Set();
   (s.units || []).forEach(u => {
     if (u.contact) return;                        // у контакта ТТХ нет — нечего показывать
+    // ◈ ПРЕСТОЛ: полосы корпуса нет намеренно (зеркало 2D-доски). Урона по нему
+    // не существует, поэтому шкала показывала бы вечные 100%% и врала бы вдвойне:
+    // и про его состояние, и про то, что по нему вообще можно попасть.
+    if (bgIsAngel(u)) return;
     live.add(u.id);
     let st = BG.stat.get(u.id);
     if (!st) {
@@ -2894,6 +2993,10 @@ function bgAnimStep(now) {
     BG.fx.forEach((node, f) => { if (!seen.has(f)) { node.kill(); BG.fx.delete(f); } });
     BG.dirty = true;
   }
+
+  // ◈ ПРЕСТОЛ живёт непрерывно и сам держит цикл: пока он на доске, кадры идут
+  // даже когда бой стоит и ждёт хода.
+  if (bgStepAngels()) live = true;
   return live;
 }
 
