@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Престол — превью спрайта</title>
+<style>
+  html,body{margin:0;background:#070a0e;color:#8fa;font:13px/1.5 monospace;height:100%}
+  #wrap{display:flex;height:100%}
+  canvas{flex:1;display:block}
+  #ui{width:240px;padding:14px;border-left:1px solid rgba(140,255,220,.18);background:#080c11}
+  label{display:block;margin:12px 0 4px;color:#6c8}
+  input[type=range]{width:100%}
+  b{color:#cfe}
+</style>
+<div id="wrap"><canvas id="cv"></canvas>
+<div id="ui">
+  <div><b>ПРЕСТОЛ</b> — превью</div>
+  <label>Печати: <b id="sv">100%</b></label>
+  <input id="seals" type="range" min="0" max="100" value="100">
+  <label>Размер (R): <b id="rv">34</b></label>
+  <input id="rad" type="range" min="12" max="90" value="34">
+  <label>Взгляд</label>
+  <input id="gz" type="range" min="0" max="628" value="470">
+  <p style="color:#587">Клик по холсту — попадание (вспышка нимба).</p>
+  <p style="color:#587">Слева направо: масштаб доски (R≈16), крупный план, гнездо.</p>
+</div></div>
+<script src="angel_fx.js"></script>
+<script>
+const cv = document.getElementById('cv'), x = cv.getContext('2d');
+let dpr = Math.min(2, window.devicePixelRatio || 1);
+function fit(){ const r = cv.getBoundingClientRect();
+  cv.width = r.width*dpr; cv.height = r.height*dpr; }
+addEventListener('resize', fit); fit();
+const S = { seals:1, R:34, gaze:4.7 };
+const bind=(id,f)=>{const e=document.getElementById(id);e.oninput=()=>f(+e.value);};
+bind('seals',v=>{S.seals=v/100;document.getElementById('sv').textContent=v+'%';});
+bind('rad',  v=>{S.R=v;document.getElementById('rv').textContent=v;});
+bind('gz',   v=>{S.gaze=v/100;});
+cv.onclick = e => { angelHit('a'); angelHit('b'); angelHit('c'); };
+function frame(){
+  x.setTransform(dpr,0,0,dpr,0,0);
+  const W = cv.width/dpr, H = cv.height/dpr;
+  x.fillStyle='#070a0e'; x.fillRect(0,0,W,H);
+  // звёзды
+  x.fillStyle='rgba(200,230,255,.35)';
+  for(let i=0;i<160;i++){const a=(i*97)%W, b=(i*57)%H; x.fillRect(a,b,1,1);}
+  // сетка гексов для масштаба
+  x.strokeStyle='rgba(140,255,220,.06)';
+  for(let gx=0;gx<W;gx+=40){x.beginPath();x.moveTo(gx,0);x.lineTo(gx,H);x.stroke();}
+  for(let gy=0;gy<H;gy+=40){x.beginPath();x.moveTo(0,gy);x.lineTo(W,gy);x.stroke();}
+
+  angelDraw(x,{cx:W*0.20,cy:H*0.5,R:16,alpha:1,tone:'255,90,90',gaze:S.gaze,id:'a',seals:S.seals});
+  angelSealBar(x, W*0.20, H*0.5+30, 40, S.seals);
+
+  angelDraw(x,{cx:W*0.52,cy:H*0.5,R:S.R,alpha:1,tone:'120,255,200',gaze:S.gaze,id:'b',seals:S.seals});
+  angelSealBar(x, W*0.52, H*0.5+S.R*2.6, S.R*2.2, S.seals);
+
+  angelDraw(x,{cx:W*0.83,cy:H*0.5,R:26,alpha:1,tone:'255,220,140',gaze:S.gaze,id:'c',seals:S.seals});
+  angelSealBar(x, W*0.83, H*0.5+70, 60, S.seals);
+
+  ANGEL.live = 0;
+  requestAnimationFrame(frame);
+}
+frame();
+</script>

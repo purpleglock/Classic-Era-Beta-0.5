@@ -4188,6 +4188,7 @@ function bbPaintMovePreview(ctx, sel, r) {
 function bbSideFacing(side) { return side === 'defender' ? 3 : 0; }
 function bbPaintUnits(ctx, s) {
   const forming = s.status === 'forming';
+  if (typeof ANGEL !== 'undefined') ANGEL.live = 0;   // счётчик «ангел в кадре»
   if (forming) {
     const defFacing = bbSideFacing(s.my_side);
     BB.place.forEach(p => bbShip(ctx, { x: p.x, y: p.y, cls: p.cls, name: p.unit_name, mine: true, facing: defFacing, hp: 1, max_hp: 1, shield: 0, max_shield: 0 }, 0.55));
@@ -4202,6 +4203,40 @@ function bbPaintUnits(ctx, s) {
     const uu = (forming || !bbEverMoved(u)) ? Object.assign({}, u, { facing: bbSideFacing(u.side) }) : u;
     bbShip(ctx, uu, spent ? 0.5 : 1);
   });
+}
+
+// ◈ ПРЕСТОЛ на доске. Отдельно от bbShip, потому что у него другое ВСЁ:
+// нет курса (он не разворачивается — он уже смотрит на тебя), нет полосы
+// корпуса (урона не существует), нет шеврона (некуда его вести).
+// Взгляд наводим на ближайшего живого врага: именно общий взгляд десятков
+// глаз превращает россыпь колёс в одно существо, которое тебя ВЫБРАЛО.
+function bbAngel(ctx, u, alpha, cx, cy) {
+  if (typeof angelSyncHits === 'function') angelSyncHits(u);
+  const s = BB.st || {};
+  let gaze = -Math.PI / 2, best = 1e9;
+  (s.units || []).forEach(t => {
+    if (!t || t.contact || !t.alive || t.side === u.side) return;
+    const d = (t.x - u.x) * (t.x - u.x) + (t.y - u.y) * (t.y - u.y);
+    if (d < best) { best = d; const c = bbHexCenter(t.x, t.y); gaze = Math.atan2(c.py - cy, c.px - cx); }
+  });
+  const tone = BB_C[bbTone(u)] || BB_C.foe;
+  // ⚠️ НЕ доля печатей, а ступень яркости (pk.dim, три значения). Точного
+  // состояния клиент не знает и знать не должен: по нему считались бы
+  // оставшиеся залпы. Здесь это только «оно горит тише, чем в прошлый раз».
+  const dim = (u.pk && u.pk.dim != null) ? +u.pk.dim : 1;
+
+  if (u.id && u.id === BB.sel) {
+    bbHexPath(ctx, cx, cy, BB.R * 0.9);
+    ctx.strokeStyle = `rgba(${tone},0.9)`; ctx.lineWidth = Math.max(1, 2 / BB.zoom);
+    ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  angelDraw(ctx, { cx, cy, R: BB.R * 1.15, alpha, tone, gaze, id: u.id, seals: dim });
+  // Полосы состояния под ангелом НЕТ намеренно — см. _angel_board_seal.sql.
+  // Вместо неё строка помех: место, где у любого другого борта стоят цифры,
+  // занято сбоем — и это сообщает ровно то, что нужно сообщить.
+  // Держим rAF живым: без этого крылья замирают между действиями игрока —
+  // доска перерисовывается только по событию, а ангел живёт непрерывно.
+  if (typeof angelWantsFrames === 'function' && angelWantsFrames()) bbAnimKick();
 }
 
 // Неопознанный контакт: тусклый ромб-отметка на радаре, без ТТХ.
@@ -4372,6 +4407,11 @@ function bbSprite(cls, tIdx, side, hull) {
 function bbShip(ctx, u, alpha) {
   const uc = bbUnitCenter(u);
   const cx = uc.px, cy = uc.py, ang = uc.ang;
+  // ◈ ПРЕСТОЛ рисуется НЕ спрайтом. У всех кораблей силуэт кэшируется в
+  // офскрин и дальше только вертится — ангелу это не подходит: у него нет
+  // позы, он живёт каждый кадр (крылья, колёса, моргание). Ветка ранняя,
+  // потому что дальше идёт вся машинерия корпусов, которой у него нет.
+  if (u.cls === 'angel' && typeof angelDraw === 'function') { bbAngel(ctx, u, alpha, cx, cy); return; }
   const moving = u.id != null && BB.anim.move.has(u.id);
   const C = BB.R * 1.72;
   const tone = bbTone(u);

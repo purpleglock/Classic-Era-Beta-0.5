@@ -193,10 +193,11 @@ begin
 
   select name into fname from public.faction_applications
    where faction_id = fid and status='approved' order by updated_at desc limit 1;
-  perform public._doom_news('🜨 ЗАЛП ПО ПРЕСТОЛУ',
-    'Длань Неотвратимости ('||coalesce(fname,'???')||') взяла сигнатуру ковчега и дала залп. ' ||
-    'Подлёт ~'||to_char(fly_h,'FM990.0')||' ч. Уйти оно не может — снаряд идёт за ним, а не в точку. ' ||
-    'Вопрос только один: успеет ли оно отвести взгляд.');
+  perform public._doom_news(public._angel_glitch('🜨 ЗАЛП ПО ОТМЕТКЕ', 0.20),
+    public._angel_glitch(
+      'Длань Неотвратимости ('||coalesce(fname,'???')||') дала залп. Подлёт ~'||
+      to_char(fly_h,'FM990.0')||' ч.', 0.14)
+    ||' '||public._angel_scream(11));
 
   return jsonb_build_object('ok', true, 'ready_at', rdy, 'flight_h', round(fly_h,1),
                             'lock_sys', lock_sys, 'dist', round(dist));
@@ -237,10 +238,13 @@ begin
            set status='intercepted', resolved_at=now(), duel_result='parry',
                victim_fid = ang_fid
          where id = s.id;
-        perform public._doom_news('◈ ОНО ОТВЕЛО ВЗГЛЯД',
-          'Снаряд ('||coalesce(shooter,'???')||') шёл точно и пришёл точно — в то место, где ковчега уже не было. '||
-          'Свидетели говорят, что крылья сместились раньше, чем сработал взрыватель. '||
-          'Печати целы. Расход боекомплекта — полный.');
+        -- ⚠️ Ни слова про «печати целы» и почему промах: стрелявший должен
+        -- увидеть, что снаряд пропал, и не понять причины.
+        perform public._doom_news(public._angel_glitch('◈ ЦЕЛЬ НЕ ПОРАЖЕНА', 0.24),
+          public._angel_glitch(
+            'Снаряд ('||coalesce(shooter,'???')||') шёл точно и пришёл точно — в то место, где цели уже не было.', 0.20)
+          ||' '||public._angel_scream(12)||' '||
+          public._angel_glitch('Расход боекомплекта — полный.', 0.12));
       else
         update public.doom_salvos
            set status='done', resolved_at=now(), duel_result='seal',
@@ -251,18 +255,18 @@ begin
           -- не стояло двух строк об одном событии (см. news-terse)
           null;
         else
+          -- ⚠️ ШКАЛУ СНЯЛИ. Здесь стояло «печати: рвутся / на исходе» — то есть
+          -- ровно та подсказка, ради которой всю затею и стоило прятать: по ней
+          -- считалось, сколько залпов осталось. Теперь попадание видно, а
+          -- ПОСЛЕДСТВИЙ не видно. Понять, работает ли кампания, можно только
+          -- продолжая её.
           perform public._doom_news(
-            case when coalesce(s.kind,'doom') = 'doom' then '🜨 ПЕЧАТЬ СОРВАНА' else '💥 ПОПАДАНИЕ В КОВЧЕГ' end,
-            'Залп ('||coalesce(shooter,'???')||') достал ковчег. '||
-            case when coalesce(s.kind,'doom') = 'doom'
-                 then 'Снаряд судного дня вошёл в тело и вышел с другой стороны. '
-                 else 'Баллистика разошлась по обшивке, не пробив её насквозь. ' end||
-            'Оно не издало ни звука. Печати: '||
-            case when (hit->>'frac')::numeric > 0.85 then 'целы'
-                 when (hit->>'frac')::numeric > 0.6  then 'тронуты'
-                 when (hit->>'frac')::numeric > 0.35 then 'рвутся'
-                 when (hit->>'frac')::numeric > 0.12 then 'на исходе'
-                 else 'последняя' end||'.');
+            public._angel_glitch('◈ ПОПАДАНИЕ ЗАФИКСИРОВАНО', 0.26),
+            public._angel_glitch(
+              'Залп ('||coalesce(shooter,'???')||') дошёл до отметки. Вспышка держалась дольше расчётной.', 0.20)
+            ||' '||public._angel_scream(10)||' '||
+            public._angel_glitch('Оно не издало ни звука. Оценка состояния цели', 0.24)
+            ||' '||public._angel_scream(15));
         end if;
       end if;
       continue;
@@ -465,6 +469,11 @@ declare a record;
 begin
   select * into a from public.angel_state where fell_at is null order by created_at limit 1;
   if a.faction_id is null then return '[]'::jsonb; end if;
+  -- ⚠️ Табло подлёта — только своей державе. Чужому оно показало бы, сколько
+  -- снарядов уже в воздухе, то есть выдало бы чужую кампанию и её темп.
+  begin
+    if public._ec_my_fid_opt() is distinct from a.faction_id then return '[]'::jsonb; end if;
+  exception when others then return '[]'::jsonb; end;
   return coalesce((
     select jsonb_agg(jsonb_build_object(
       'salvo_id', s.id, 'kind', s.kind, 'from', public._fac_name(s.faction_id),

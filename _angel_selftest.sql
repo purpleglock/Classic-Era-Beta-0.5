@@ -11,7 +11,8 @@
 do $$
 declare sysid text; cid uuid; a jsonb; st jsonb; tick jsonb; econ jsonb;
         hit jsonb; i int; parried int := 0; landed int := 0; salvos int := 0;
-        seals numeric; fl uuid; nb int;
+        seals_left numeric;
+        fl uuid; nb int;
 begin
   -- ── чистим следы прошлого прогона
   perform public.angel_descend('fac_angeltest');
@@ -86,9 +87,9 @@ begin
     else landed := landed + 1; end if;
     exit when coalesce((hit->>'fell')::boolean, false) or salvos > 400;
   end loop;
-  select seals into seals from public.angel_state where faction_id='fac_angeltest';
+  select s.seals into seals_left from public.angel_state s where s.faction_id='fac_angeltest';
   raise notice '5) печати: залпов всего %, отбито %, попало %, печатей осталось %',
-    salvos, parried, landed, seals;
+    salvos, parried, landed, seals_left;
   if landed < 25 or landed > 55 then
     raise warning 'ВНИМАНИЕ: попаданий до слома % — вилка задумывалась 30-45', landed;
   end if;

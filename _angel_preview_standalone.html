@@ -1,0 +1,501 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Престол — превью спрайта</title>
+<style>
+  html,body{margin:0;background:#070a0e;color:#8fa;font:13px/1.5 monospace;height:100%}
+  #wrap{display:flex;height:100%}
+  canvas{flex:1;display:block}
+  #ui{width:240px;padding:14px;border-left:1px solid rgba(140,255,220,.18);background:#080c11}
+  label{display:block;margin:12px 0 4px;color:#6c8}
+  input[type=range]{width:100%}
+  b{color:#cfe}
+</style>
+<div id="wrap"><canvas id="cv"></canvas>
+<div id="ui">
+  <div><b>ПРЕСТОЛ</b> — превью</div>
+  <label>Печати: <b id="sv">100%</b></label>
+  <input id="seals" type="range" min="0" max="100" value="100">
+  <label>Размер (R): <b id="rv">34</b></label>
+  <input id="rad" type="range" min="12" max="90" value="34">
+  <label>Взгляд</label>
+  <input id="gz" type="range" min="0" max="628" value="470">
+  <p style="color:#587">Клик по холсту — попадание (вспышка нимба).</p>
+  <p style="color:#587">Слева направо: масштаб доски (R≈16), крупный план, гнездо.</p>
+</div></div>
+<script>
+/* ════════════════════════════════════════════════════════════
+ * «ПРЕСТОЛ» — СПРАЙТ. Процедурный ветхозаветный ангел.
+ * ────────────────────────────────────────────────────────────
+ * ПОЧЕМУ НЕ КАРТИНКА. Все корабли на доске — кэшированный офскрин: нарисовали
+ * раз, дальше только вертим. Ангелу это не подходит по сути: у него нет позы.
+ * Крылья бьют не в такт, кольца идут навстречу друг другу, глаза моргают
+ * вразнобой и все вместе смотрят на того, кого он сейчас убивает. Любой
+ * запечённый кадр это убивает — поэтому здесь всё считается каждый кадр.
+ *
+ * ЧТО ИМЕННО РИСУЕМ (и почему так, а не «ангелочек с крылышками»):
+ *   • ОФАНИМ — колёса в колёсах, усеянные глазами. Два кольца в разных
+ *     наклонах, идут навстречу: получается не вращение, а «глаз не выходит
+ *     из тебя», сколько ни поворачивай.
+ *   • СЕРАФИМ — шесть крыл тремя парами. Верхняя пара закрывает лик, нижняя
+ *     закрывает ноги, средняя — та, которой летают. Они и бьют в разном такте.
+ *   • НИМБ — не кружок над головой, а наклонный обод под углом к плоскости
+ *     доски, с бегущим по нему блеском.
+ *   • ЛИКА НЕТ. Внутри столб света и пустота. Это сознательно: как только у
+ *     него появляется лицо, он перестаёт быть страшным и становится персонажем.
+ *
+ * ЦВЕТ. Тон стороны (свой/союзный/чужой) уходит ТОЛЬКО в дальнее свечение.
+ * Само тело всегда кость и золото: ангел не принадлежит стороне, он ей
+ * временно попутчик.
+ *
+ * ЗАВИСИМОСТИ: ничего. Чистый canvas 2D, наружу — три функции:
+ *   angelDraw(ctx, opt)    — нарисовать в точке
+ *   angelWantsFrames()     — доске: держи rAF живым, пока он на поле
+ *   angelHit(id)           — вспышка нимба на попадании (урона нет)
+ * ════════════════════════════════════════════════════════════ */
+
+var ANGEL = {
+  t0: (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+  live: 0,          // сколько ангелов нарисовали в последнем кадре
+  hits: {},         // id → время последней вспышки
+  seen: {},         // id → прошлый счётчик попаданий (ловим приращение)
+  eyes: null,       // раскладка глаз, считается один раз
+};
+
+// Часы спрайта в секундах. Отдельные от игровых: анимация не должна зависеть
+// ни от хода, ни от задержек сети — оно живёт, даже когда доска ждёт сервер.
+function angelT() {
+  return ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - ANGEL.t0) / 1000;
+}
+
+// Доске: пока ангел в кадре, гоняем rAF. Без этого крылья замирали бы между
+// действиями игрока — доска перерисовывается только по событию.
+function angelWantsFrames() { return ANGEL.live > 0; }
+
+// Вспышка на попадании. Урона у ангела нет, но игрок должен видеть, что его
+// залп ДОШЁЛ и не значил ничего, — иначе доска читается как сломанная.
+function angelHit(id) {
+  ANGEL.hits[id || '_'] = angelT();
+}
+
+// Сервер считает попадания в pk.ang. Сравниваем с прошлым кадром — выросло,
+// значит по нему только что стреляли.
+function angelSyncHits(u) {
+  if (!u || u.id == null) return;
+  var n = (u.pk && +u.pk.ang) || 0;
+  var was = ANGEL.seen[u.id];
+  if (was != null && n > was) angelHit(u.id);
+  ANGEL.seen[u.id] = n;
+}
+
+/* ── РАСКЛАДКА ГЛАЗ ─────────────────────────────────────────
+ * Глаза раскиданы по двум кольцам и по телу. Раскладку считаем ОДИН раз и
+ * держим: если гонять random() каждый кадр, глаза прыгают, и вместо ужаса
+ * получается рябь. Каждому глазу даётся свой ритм моргания и своя фаза —
+ * поэтому они никогда не моргают строем.                                    */
+function angelEyes() {
+  if (ANGEL.eyes) return ANGEL.eyes;
+  var rnd = (function (s) {           // свой генератор: раскладка одна и та же
+    return function () { s = (s * 1664525 + 1013904223) % 4294967296; return s / 4294967296; };
+  })(20250819);
+  var E = [];
+  // кольцо 1 — внешнее колесо
+  for (var i = 0; i < 14; i++) {
+    E.push({ ring: 0, a: (i / 14) * Math.PI * 2, r: 1.0, sz: 0.13 + rnd() * 0.06,
+             blink: 2.4 + rnd() * 5.5, ph: rnd() * 10 });
+  }
+  // кольцо 2 — внутреннее, идёт навстречу
+  for (var j = 0; j < 9; j++) {
+    E.push({ ring: 1, a: (j / 9) * Math.PI * 2, r: 0.62, sz: 0.15 + rnd() * 0.06,
+             blink: 2.0 + rnd() * 5.0, ph: rnd() * 10 });
+  }
+  // глаза на самом теле — те, что не двигаются вовсе
+  for (var k = 0; k < 5; k++) {
+    E.push({ ring: 2, a: (k / 5) * Math.PI * 2 + 0.4, r: 0.26, sz: 0.17 + rnd() * 0.05,
+             blink: 3.0 + rnd() * 6.0, ph: rnd() * 10 });
+  }
+  ANGEL.eyes = E;
+  return E;
+}
+
+/* ── ГЕОМЕТРИЯ ГЛАЗА: SVG-путь, а не эллипсы ────────────────
+ * ПОЧЕМУ ПЕРЕПИСАНО. Первая версия рисовала глаз как ctx.ellipse — круглую
+ * плошку с точкой внутри. На доске это ещё сходило, а на карте превратилось
+ * ровно в то, чем и было: россыпь жёлтых бусин, читаемых как смайлики.
+ * Круг — не глаз. Глаз это МИНДАЛЬ с острыми углами по краям, и именно углы
+ * дают взгляд; без них любая точка внутри круга остаётся точкой внутри круга.
+ *
+ * Поэтому форма задана путём SVG (те же кривые Безье, что в редакторе) и
+ * собрана один раз в Path2D. Дальше её только двигают, вертят и масштабируют
+ * матрицей — это и быстрее (нет пересборки контура на каждый глаз каждый кадр),
+ * и честнее: одна геометрия на все размеры, от карты до крупного плана.
+ *
+ * ВТОРОЕ, ЧТО ЛЕЧИТ «БУСИНЫ»: разворот. Раньше все глаза стояли строго
+ * горизонтально, из-за чего кольцо читалось как ожерелье. Теперь каждый глаз
+ * развёрнут по касательной к своему колесу — колесо смотрит наружу целиком.  */
+var ANGEL_EYE_D = 'M -1 0 C -0.55 -0.70 -0.20 -0.82 0 -0.82'
+                + ' C 0.20 -0.82 0.55 -0.70 1 0'
+                + ' C 0.55 0.70 0.20 0.82 0 0.82'
+                + ' C -0.20 0.82 -0.55 0.70 -1 0 Z';
+// Веко: та же миндалина, но «полная» — ею закрывают глаз сверху вниз.
+var ANGEL_LID_D = 'M -1 0.06 C -0.55 -0.74 -0.20 -0.88 0 -0.88'
+                + ' C 0.20 -0.88 0.55 -0.74 1 0.06'
+                + ' C 0.55 -0.30 -0.55 -0.30 -1 0.06 Z';
+var ANGEL_P = null;
+function angelPaths() {
+  if (!ANGEL_P && typeof Path2D === 'function') {
+    ANGEL_P = { eye: new Path2D(ANGEL_EYE_D), lid: new Path2D(ANGEL_LID_D) };
+  }
+  return ANGEL_P;
+}
+
+/* ── ОДИН ГЛАЗ ──────────────────────────────────────────────
+ * x, y — центр; rad — половина ширины; rot — разворот миндалины;
+ * gaze — куда смотрит зрачок (в мировых радианах, НЕ в местных: весь смысл
+ * в том, что развёрнутые по-разному глаза глядят в одну точку);
+ * lid — 0 открыт, 1 закрыт.                                                  */
+function angelEye(x, ex, ey, rad, gaze, lid, rot) {
+  var P = angelPaths();
+  // МЕЛКИЙ МАСШТАБ (карта). Ниже двух пикселей никакая форма не читается, и
+  // попытка нарисовать там радужку с бликом даёт грязное пятно — то самое,
+  // что выглядело бусиной. Рисуем штрих по касательной: издали это верно
+  // читается как «прорезь», а не как «кружок».
+  if (rad < 2.1 || !P) {
+    if (lid > 0.6) return;
+    x.save();
+    x.translate(ex, ey); x.rotate(rot || 0);
+    x.strokeStyle = 'rgba(255,236,180,' + (0.92 * (1 - lid)) + ')';
+    x.lineWidth = Math.max(0.6, rad * 0.85);
+    x.lineCap = 'round';
+    x.beginPath(); x.moveTo(-rad, 0); x.lineTo(rad, 0); x.stroke();
+    x.restore();
+    return;
+  }
+
+  x.save();
+  x.translate(ex, ey);
+  x.rotate(rot || 0);
+  x.scale(rad, rad);              // путь задан в единичных долях
+
+  // склера
+  x.fillStyle = 'rgba(250,244,224,0.97)';
+  x.fill(P.eye);
+
+  x.save();
+  x.clip(P.eye);                  // всё нутро режем по миндалине
+
+  // РАДУЖКА. Зрачок ведём в МЕСТНЫХ координатах: вычитаем разворот глаза из
+  // мирового направления взгляда — иначе развёрнутые глаза косили бы каждый
+  // в свою сторону, и вместо общего взгляда выходило бы стадо.
+  var ga = (gaze || 0) - (rot || 0);
+  var px = Math.cos(ga) * 0.34, py = Math.sin(ga) * 0.30;
+  var ir = 0.52;
+  var ig = x.createRadialGradient(px, py, 0.04, px, py, ir);
+  ig.addColorStop(0, 'rgba(255,222,128,1)');
+  ig.addColorStop(0.5, 'rgba(206,140,34,1)');
+  ig.addColorStop(1, 'rgba(70,38,8,1)');
+  x.beginPath(); x.arc(px, py, ir, 0, 6.2832);
+  x.fillStyle = ig; x.fill();
+
+  // волокна радужки — то, что отличает глаз от кружка с градиентом
+  x.strokeStyle = 'rgba(120,66,12,0.5)';
+  x.lineWidth = 0.022;
+  for (var f = 0; f < 12; f++) {
+    var fa = f * 0.5236;
+    x.beginPath();
+    x.moveTo(px + Math.cos(fa) * ir * 0.42, py + Math.sin(fa) * ir * 0.42);
+    x.lineTo(px + Math.cos(fa) * ir * 0.96, py + Math.sin(fa) * ir * 0.96);
+    x.stroke();
+  }
+
+  // зрачок — вертикальная щель, а не точка: круглый зрачок читается как
+  // человеческий, а это не человек
+  x.beginPath();
+  x.ellipse(px, py, ir * 0.30, ir * 0.72, ga + Math.PI / 2, 0, 6.2832);
+  x.fillStyle = 'rgba(6,4,2,1)'; x.fill();
+
+  // блик — единственная холодная нота на всём тёплом
+  x.beginPath();
+  x.arc(px - ir * 0.30, py - ir * 0.34, ir * 0.17, 0, 6.2832);
+  x.fillStyle = 'rgba(255,255,255,0.9)'; x.fill();
+
+  // ВЕКО. Не сплющивание миндалины (от него глаз «худеет», как закрывающийся
+  // рот), а настоящая створка, которая ЕДЕТ сверху вниз внутри контура.
+  if (lid > 0.001) {
+    x.save();
+    x.translate(0, -1.72 + lid * 1.72);
+    x.fillStyle = 'rgba(214,176,104,0.99)';
+    x.fill(P.lid);
+    x.fillStyle = 'rgba(150,110,52,0.9)';       // складка на кромке века
+    x.fillRect(-1.05, 0.02, 2.1, 0.07);
+    x.restore();
+  }
+  x.restore();                    // снять клип
+
+  // обвод последним, поверх века — контур глаза не исчезает, когда он закрыт
+  x.lineWidth = 0.075;
+  x.strokeStyle = 'rgba(132,96,36,0.95)';
+  x.stroke(P.eye);
+  x.restore();
+}
+
+/* ── ОДНО КРЫЛО ─────────────────────────────────────────────
+ * Не «птичье крыло с пёрышками», а веер маховых перьев: три-четыре пера
+ * разной длины из одной точки. Так оно читается даже на мелком зуме, где
+ * настоящая детализация превратилась бы в кашу.                              */
+function angelWing(x, R, side, spread, beat, alpha) {
+  var s = side;                    // +1 — правое, -1 — левое
+  var base = spread + beat * 0.42;
+  x.save();
+  x.rotate(s * base);
+  var n = 4;
+  for (var i = 0; i < n; i++) {
+    var f = i / (n - 1);
+    var len = R * (2.15 - f * 0.72);
+    var wid = R * (0.30 - f * 0.10);
+    var curl = s * (0.30 + f * 0.55 + beat * 0.16);
+    x.beginPath();
+    x.moveTo(0, 0);
+    x.quadraticCurveTo(len * 0.45, s * wid * 2.1, len, s * curl * R * 0.5);
+    x.quadraticCurveTo(len * 0.5, s * wid * 0.15, 0, 0);
+    x.closePath();
+    var g = x.createLinearGradient(0, 0, len, 0);
+    g.addColorStop(0, 'rgba(255,250,232,' + (0.90 * alpha) + ')');
+    g.addColorStop(0.5, 'rgba(238,214,150,' + (0.62 * alpha) + ')');
+    g.addColorStop(1, 'rgba(196,140,44,' + (0.05 * alpha) + ')');
+    x.fillStyle = g;
+    x.fill();
+    x.strokeStyle = 'rgba(255,246,214,' + (0.30 * alpha) + ')';
+    x.lineWidth = Math.max(0.4, R * 0.018);
+    x.stroke();
+  }
+  x.restore();
+}
+
+/* ── ГЛАВНОЕ: НАРИСОВАТЬ ПРЕСТОЛ ────────────────────────────
+ * opt: { cx, cy, R, alpha, tone (rgb-строка), gaze (радианы), id, seals (0..1) }
+ * Порядок слоёв снизу вверх: свечение → нижние крылья → колёса с глазами →
+ * тело → верхние крылья → нимб → вспышка. Крылья РАЗНЕСЕНЫ по слоям нарочно:
+ * так тело оказывается «внутри» крыльев, а не поверх них.                    */
+function angelDraw(x, opt) {
+  ANGEL.live++;
+  var cx = opt.cx, cy = opt.cy, R = opt.R || 20;
+  var A = opt.alpha == null ? 1 : opt.alpha;
+  var tone = opt.tone || '255,220,140';
+  var t = angelT();
+  var gaze = opt.gaze == null ? -Math.PI / 2 : opt.gaze;
+  var seals = opt.seals == null ? 1 : Math.max(0, Math.min(1, opt.seals));
+  // Печати ниже — свет тусклее и дыхание чаще: издыхающий ангел ВИДНО,
+  // и это единственная подсказка галактике, что кампания работает.
+  var vigor = 0.45 + seals * 0.55;
+  var breath = Math.sin(t * (1.1 + (1 - seals) * 1.7));
+
+  x.save();
+  x.globalAlpha = A;
+  x.translate(cx, cy);
+
+  // 1) ДАЛЬНЕЕ СВЕЧЕНИЕ — единственное место, где виден цвет стороны
+  var halo = R * (2.9 + breath * 0.12);
+  var ag = x.createRadialGradient(0, 0, R * 0.2, 0, 0, halo);
+  ag.addColorStop(0, 'rgba(255,244,206,' + (0.30 * vigor) + ')');
+  ag.addColorStop(0.45, 'rgba(' + tone + ',' + (0.13 * vigor) + ')');
+  ag.addColorStop(1, 'rgba(' + tone + ',0)');
+  x.beginPath(); x.arc(0, 0, halo, 0, Math.PI * 2);
+  x.fillStyle = ag; x.fill();
+
+  // 2) НИЖНЯЯ ПАРА КРЫЛ — «ими закрывал ноги». Бьют медленно и глубоко.
+  var beatLo = Math.sin(t * 1.5) * 0.5;
+  x.save();
+  x.rotate(Math.PI * 0.62);
+  angelWing(x, R, +1, 0.30, beatLo, 0.55 * vigor);
+  angelWing(x, R, -1, 0.30, beatLo, 0.55 * vigor);
+  x.restore();
+
+  // 3) СРЕДНЯЯ ПАРА — маховая, самая быстрая: ею оно и движется
+  var beatMid = Math.sin(t * 2.7 + 1.2) * 0.72;
+  angelWing(x, R, +1, 0.02, beatMid, 0.95 * vigor);
+  angelWing(x, R, -1, 0.02, beatMid, 0.95 * vigor);
+
+  // 4) ОФАНИМ — два колеса навстречу друг другу.
+  //    Наклон разный, поэтому в любой момент видно оба, и ни одно не сливается
+  //    с плоскостью доски.
+  var E = angelEyes();
+  var rings = [
+    { rot:  t * 0.42, tilt: 0.34, rad: R * 1.55, w: 0.30 },
+    { rot: -t * 0.66, tilt: 1.05, rad: R * 1.00, w: 0.62 },
+  ];
+  rings.forEach(function (rg, ri) {
+    x.save();
+    x.rotate(rg.tilt);
+    x.beginPath();
+    x.ellipse(0, 0, rg.rad, rg.rad * rg.w, 0, 0, Math.PI * 2);
+    x.strokeStyle = 'rgba(226,196,124,' + (0.42 * vigor) + ')';
+    x.lineWidth = Math.max(0.7, R * 0.055);
+    x.stroke();
+    // спицы: без них колесо читается как просто обод
+    for (var sp = 0; sp < 8; sp++) {
+      var sa = rg.rot + sp * Math.PI / 4;
+      x.beginPath();
+      x.moveTo(Math.cos(sa) * rg.rad * 0.30, Math.sin(sa) * rg.rad * rg.w * 0.30);
+      x.lineTo(Math.cos(sa) * rg.rad, Math.sin(sa) * rg.rad * rg.w);
+      x.strokeStyle = 'rgba(214,178,104,' + (0.13 * vigor) + ')';
+      x.lineWidth = Math.max(0.4, R * 0.022);
+      x.stroke();
+    }
+    x.restore();
+
+    // глаза этого колеса
+    E.forEach(function (e) {
+      if (e.ring !== ri) return;
+      var a = e.a + rg.rot;
+      var ex = Math.cos(a) * rg.rad, ey = Math.sin(a) * rg.rad * rg.w;
+      var rot = rg.tilt;
+      var px = ex * Math.cos(rot) - ey * Math.sin(rot);
+      var py = ex * Math.sin(rot) + ey * Math.cos(rot);
+      // моргание: короткий провал в пиле — глаз закрыт малую долю периода
+      var ph = ((t + e.ph) % e.blink) / e.blink;
+      // Моргание: провал занимает 7% периода, но САМ по себе плавный — резкий
+      // щелчок читается как подмигивание, а оно не подмигивает.
+      var lid = ph > 0.93 ? Math.sin((ph - 0.93) / 0.07 * Math.PI) : 0;
+      // разворот по касательной к колесу (см. комментарий у ANGEL_EYE_D)
+      angelEye(x, px, py, R * e.sz, gaze, lid, Math.atan2(py, px) + Math.PI / 2);
+    });
+  });
+
+  // 5) ТЕЛО — столб света, лика нет
+  var bg = x.createLinearGradient(0, -R * 1.15, 0, R * 1.15);
+  bg.addColorStop(0, 'rgba(255,252,238,' + (0.00) + ')');
+  bg.addColorStop(0.35, 'rgba(255,248,224,' + (0.62 * vigor) + ')');
+  bg.addColorStop(0.65, 'rgba(246,224,168,' + (0.55 * vigor) + ')');
+  bg.addColorStop(1, 'rgba(255,252,238,0)');
+  x.beginPath();
+  x.ellipse(0, 0, R * 0.40, R * 1.15, 0, 0, Math.PI * 2);
+  x.fillStyle = bg; x.fill();
+
+  // глаза на теле — неподвижные, самые крупные
+  E.forEach(function (e) {
+    if (e.ring !== 2) return;
+    var ex = Math.cos(e.a) * R * e.r * 1.5, ey = Math.sin(e.a) * R * e.r * 2.4;
+    var ph = ((t + e.ph) % e.blink) / e.blink;
+    var lid = ph > 0.94 ? Math.sin((ph - 0.94) / 0.06 * Math.PI) : 0;
+    // глаза тела стоят вертикально: тело — столб, и они читаются вдоль него
+    angelEye(x, ex, ey, R * e.sz, gaze, lid, Math.PI / 2);
+  });
+
+  // 6) ВЕРХНЯЯ ПАРА КРЫЛ — «ими закрывал лице». Поверх тела, потому и закрывал.
+  var beatHi = Math.sin(t * 2.0 + 2.6) * 0.44;
+  x.save();
+  x.rotate(-Math.PI * 0.58);
+  angelWing(x, R, +1, 0.26, beatHi, 0.78 * vigor);
+  angelWing(x, R, -1, 0.26, beatHi, 0.78 * vigor);
+  x.restore();
+
+  // 7) НИМБ — наклонный обод с бегущим блеском. Не круг над головой:
+  //    круг над головой читается как иконка, а не как объект.
+  x.save();
+  x.rotate(-0.28);
+  var nr = R * 1.28, nw = 0.26;
+  x.beginPath();
+  x.ellipse(0, -R * 0.92, nr, nr * nw, 0, 0, Math.PI * 2);
+  x.strokeStyle = 'rgba(255,236,176,' + (0.85 * vigor) + ')';
+  x.lineWidth = Math.max(1, R * 0.085);
+  x.stroke();
+  x.strokeStyle = 'rgba(255,255,240,' + (0.55 * vigor) + ')';
+  x.lineWidth = Math.max(0.5, R * 0.03);
+  x.stroke();
+  // блеск бежит по ободу
+  var sa2 = (t * 1.35) % (Math.PI * 2);
+  var sx = Math.cos(sa2) * nr, sy = -R * 0.92 + Math.sin(sa2) * nr * nw;
+  var sg = x.createRadialGradient(sx, sy, 0, sx, sy, R * 0.42);
+  sg.addColorStop(0, 'rgba(255,255,245,' + (0.9 * vigor) + ')');
+  sg.addColorStop(1, 'rgba(255,255,245,0)');
+  x.beginPath(); x.arc(sx, sy, R * 0.42, 0, Math.PI * 2);
+  x.fillStyle = sg; x.fill();
+  x.restore();
+
+  // 8) ВСПЫШКА ПОПАДАНИЯ — «ударили, и ничего не произошло»
+  var hitAt = ANGEL.hits[opt.id || '_'];
+  if (hitAt != null) {
+    var dt = t - hitAt;
+    if (dt < 0.55) {
+      var k = 1 - dt / 0.55;
+      x.save();
+      x.globalCompositeOperation = 'lighter';
+      x.beginPath();
+      x.arc(0, 0, R * (1.5 + (1 - k) * 2.2), 0, Math.PI * 2);
+      x.strokeStyle = 'rgba(255,248,220,' + (0.75 * k) + ')';
+      x.lineWidth = Math.max(1, R * 0.16 * k);
+      x.stroke();
+      x.restore();
+    } else { delete ANGEL.hits[opt.id || '_']; }
+  }
+
+  x.restore();
+}
+
+/* ── ПОЛОСА ПЕЧАТЕЙ ─────────────────────────────────────────
+ * Вместо полоски корпуса: корпус у ангела бессмысленен (урона нет), а печати —
+ * единственное, что о нём вообще можно знать. Делений ровно столько, сколько
+ * снарядов Длани примерно осталось: игрок должен считать залпы, а не проценты. */
+function angelSealBar(x, cx, cy, w, seals) {
+  var f = Math.max(0, Math.min(1, seals == null ? 1 : seals));
+  var n = 10, gap = w * 0.012, cw = (w - gap * (n - 1)) / n;
+  x.save();
+  for (var i = 0; i < n; i++) {
+    var bx = cx - w / 2 + i * (cw + gap);
+    var on = (i + 1) / n <= f + 1e-6;
+    x.fillStyle = on
+      ? (f > 0.35 ? 'rgba(255,226,150,0.95)' : 'rgba(255,120,90,0.95)')
+      : 'rgba(255,255,255,0.10)';
+    x.fillRect(bx, cy, cw, 3);
+  }
+  x.restore();
+}
+
+if (typeof window !== 'undefined') {
+  window.angelDraw = angelDraw;
+  window.angelSealBar = angelSealBar;
+  window.angelWantsFrames = angelWantsFrames;
+  window.angelHit = angelHit;
+  window.angelSyncHits = angelSyncHits;
+  window.ANGEL = ANGEL;
+}
+
+</script>
+<script>
+const cv = document.getElementById('cv'), x = cv.getContext('2d');
+let dpr = Math.min(2, window.devicePixelRatio || 1);
+function fit(){ const r = cv.getBoundingClientRect();
+  cv.width = r.width*dpr; cv.height = r.height*dpr; }
+addEventListener('resize', fit); fit();
+const S = { seals:1, R:34, gaze:4.7 };
+const bind=(id,f)=>{const e=document.getElementById(id);e.oninput=()=>f(+e.value);};
+bind('seals',v=>{S.seals=v/100;document.getElementById('sv').textContent=v+'%';});
+bind('rad',  v=>{S.R=v;document.getElementById('rv').textContent=v;});
+bind('gz',   v=>{S.gaze=v/100;});
+cv.onclick = e => { angelHit('a'); angelHit('b'); angelHit('c'); };
+function frame(){
+  x.setTransform(dpr,0,0,dpr,0,0);
+  const W = cv.width/dpr, H = cv.height/dpr;
+  x.fillStyle='#070a0e'; x.fillRect(0,0,W,H);
+  // звёзды
+  x.fillStyle='rgba(200,230,255,.35)';
+  for(let i=0;i<160;i++){const a=(i*97)%W, b=(i*57)%H; x.fillRect(a,b,1,1);}
+  // сетка гексов для масштаба
+  x.strokeStyle='rgba(140,255,220,.06)';
+  for(let gx=0;gx<W;gx+=40){x.beginPath();x.moveTo(gx,0);x.lineTo(gx,H);x.stroke();}
+  for(let gy=0;gy<H;gy+=40){x.beginPath();x.moveTo(0,gy);x.lineTo(W,gy);x.stroke();}
+
+  angelDraw(x,{cx:W*0.20,cy:H*0.5,R:16,alpha:1,tone:'255,90,90',gaze:S.gaze,id:'a',seals:S.seals});
+  angelSealBar(x, W*0.20, H*0.5+30, 40, S.seals);
+
+  angelDraw(x,{cx:W*0.52,cy:H*0.5,R:S.R,alpha:1,tone:'120,255,200',gaze:S.gaze,id:'b',seals:S.seals});
+  angelSealBar(x, W*0.52, H*0.5+S.R*2.6, S.R*2.2, S.seals);
+
+  angelDraw(x,{cx:W*0.83,cy:H*0.5,R:26,alpha:1,tone:'255,220,140',gaze:S.gaze,id:'c',seals:S.seals});
+  angelSealBar(x, W*0.83, H*0.5+70, 60, S.seals);
+
+  ANGEL.live = 0;
+  requestAnimationFrame(frame);
+}
+frame();
+</script>

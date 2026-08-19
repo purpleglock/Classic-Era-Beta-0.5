@@ -146,6 +146,51 @@ returns numeric language sql immutable as $$
 $$;
 
 -- ── 4. ГОЛОС ────────────────────────────────────────────────
+-- ⚠️ ГЛАВНОЕ ПРАВИЛО ЭТОГО ФАЙЛА: игрок НИКОГДА не читает объяснения, как
+-- ангел устроен и чем его берут. Ни в сводках, ни в журнале боя, ни в панели.
+-- Причина не в загадочности ради загадочности: как только правило написано
+-- словами, кризис превращается в задачу с известным ответом, и весь ужас
+-- становится арифметикой. Способ убийства галактика должна НАЩУПАТЬ сама —
+-- заметить, что одиночные выстрелы бесполезны, что пауза всё откатывает,
+-- что вдвоём получается, а поодиночке нет.
+--
+-- Поэтому всё, что оно «говорит», проходит через порчу сигнала: приборы
+-- пишут, датчики врут, половина букв не доезжает. Читается как сбой связи,
+-- а не как справка.
+--
+-- ПОРЧА. Пробелы и длину слов бережём — иначе выходит не испорченный текст,
+-- а каша, и глаз перестаёт его читать вовсе. Меняем ДОЛЮ букв на глифы
+-- помех: рамки, блоки, геометрия. Диакритику не берём — она рвёт строку
+-- на части шрифтов и превращает страх в мусор.
+create or replace function public._angel_glitch(p_text text, p_rate numeric default 0.30)
+returns text language plpgsql immutable as $$
+declare gl text[] := array['▓','░','▒','█','╳','╬','┼','◹','◺','⌁','⟊','⟟','⍜','⏢','⨯','⩫','◈','▚','▞','▟'];
+        out text := ''; ch text; i int;
+begin
+  if p_text is null then return null; end if;
+  for i in 1 .. length(p_text) loop
+    ch := substr(p_text, i, 1);
+    if ch = ' ' or ch = e'\n' then out := out || ch;
+    elsif random() < p_rate then out := out || gl[1 + floor(random() * array_length(gl,1))::int];
+    else out := out || ch;
+    end if;
+  end loop;
+  return out;
+end$$;
+
+-- Чистый шум — туда, где раньше стояло бы объяснение. Именно ПУСТОТА на месте
+-- ответа пугает сильнее, чем страшный ответ.
+create or replace function public._angel_scream(p_len int default 12)
+returns text language plpgsql immutable as $$
+declare gl text[] := array['▓','░','▒','█','╳','╬','┼','⌁','⟊','⟟','⍜','⏢','⨯','⩫','▚','▞','▟'];
+        out text := ''; i int;
+begin
+  for i in 1 .. greatest(1, p_len) loop
+    out := out || gl[1 + floor(random() * array_length(gl,1))::int];
+  end loop;
+  return out;
+end$$;
+
 -- Ангел говорит редко и в сектор: он событие галактики, а не переписка держав.
 create or replace function public._angel_news(p_title text, p_body text)
 returns void language plpgsql security definer set search_path=public as $$
@@ -200,6 +245,11 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare app record; snap jsonb; home text; uid uuid; ecoown uuid;
         cid uuid; flid uuid; ncol int; nbld int; nsys int; nout int;
 begin
+  -- ⚠️ ЗАСОВ. Одних грантов мало: `create or replace` возвращает права по
+  -- умолчанию, и дверь открывается молча (так и вышло — см. _angel_lock.sql).
+  -- Проверка в теле теряется только вместе с самой функцией.
+  perform public._angel_staff_only();
+
   select * into app from public.faction_applications
    where faction_id = p_fid and status = 'approved'
    order by updated_at desc limit 1;
@@ -289,11 +339,14 @@ begin
     values (p_fid, uid, flid, cid,
             public._angel_const('seals_max'), home, home, 'roost');
 
-  perform public._angel_news('◈ ОНО ВСТАЛО',
-    'Держава «' || app.name || '» перестала существовать как держава. Колонии сняты с учёта, ' ||
-    'границы отпущены, гарнизоны сняты — и на месте столицы поднялось одно тело. ' ||
-    'Наблюдатели считают шесть крыл и не берутся считать глаза. ' ||
-    'Оно движется. Планет у него больше нет — планета у него одна, и она идёт вместе с ним.');
+  perform public._angel_news(public._angel_glitch('◈ ОНО ВСТАЛО', 0.22),
+    public._angel_glitch(
+      'Связь с державой «' || app.name || '» оборвалась в 04:11 и больше не восстанавливалась. ' ||
+      'Первыми отказали дальние посты, потом орбита, потом сама столица. ' ||
+      'Последняя телеметрия шла ещё двенадцать минут и не содержала слов.', 0.18) ||
+    ' ' || public._angel_scream(9) || ' ' ||
+    public._angel_glitch('Приборы ведут одну отметку. Классификатор не выдал класса.', 0.34) ||
+    ' ' || public._angel_scream(14));
 
   return jsonb_build_object('ok', true, 'fid', p_fid, 'colony', cid, 'fleet', flid,
     'unit', uid, 'home', home,
@@ -310,6 +363,7 @@ create or replace function public.angel_descend(p_fid text)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare rel record; a record; e jsonb; n int := 0;
 begin
+  perform public._angel_staff_only();   -- ⚠️ см. засов в angel_ascend выше
   select * into rel from public.angel_relic where faction_id = p_fid;
   if rel.faction_id is null then
     return jsonb_build_object('ok', false, 'why', 'слепка нет — восстанавливать нечего');
@@ -420,14 +474,20 @@ begin
     'fell', (a.fell_at is not null), 'fell_at', a.fell_at,
     'stance', a.stance, 'system', sysname,
     'moving', (f.status = 'transit'), 'arrive_at', f.arrive_at,
-    'seals_frac', round(frac, 3),
-    'seals_word', case when a.fell_at is not null then 'пал'
-                       when frac > 0.85 then 'целы'
-                       when frac > 0.6  then 'тронуты'
-                       when frac > 0.35 then 'рвутся'
-                       when frac > 0.12 then 'на исходе'
-                       else 'последняя' end,
-    'salvos_seen', a.salvos_seen, 'salvos_parried', a.salvos_parried,
+    'seals_frac', case when mine then round(frac, 3) end,
+    -- ⚠️ НАРУЖУ — ТОЛЬКО ШУМ. Раньше здесь стояла честная шкала («целы» →
+    -- «на исходе»), и это был готовый калькулятор: враг видел, сколько ещё
+    -- нести залпов, и переставал бояться. Своя держава читает правду ниже.
+    'seals_word', case when mine then
+                    case when a.fell_at is not null then 'пал'
+                         when frac > 0.85 then 'целы'
+                         when frac > 0.6  then 'тронуты'
+                         when frac > 0.35 then 'рвутся'
+                         when frac > 0.12 then 'на исходе'
+                         else 'последняя' end
+                  else public._angel_scream(7) end,
+    'salvos_seen', case when mine then a.salvos_seen end,
+    'salvos_parried', case when mine then a.salvos_parried end,
     -- точные числа — только своим
     'seals', case when mine then round(a.seals, 1) end,
     'press', case when mine then round(a.press, 2) end,
@@ -524,11 +584,15 @@ begin
      set fell_at = now(), seals = 0, awake = false, stance = 'roost'
    where faction_id = p_fid;
 
-  perform public._angel_news('◈ ПОСЛЕДНЯЯ ПЕЧАТЬ',
-    'То, что называли «' || coalesce(nm, p_fid) || '», перестало двигаться. ' ||
-    'Крылья сложились не по порядку, глаза закрылись не одновременно, и нимб гас дольше, чем следовало. ' ||
-    case when kn is not null then 'Последний залп числят за «' || kn || '». ' else '' end ||
-    'В системе осталась пыль, которую нечем взвесить. Считать это победой каждый будет сам.');
+  perform public._angel_news(public._angel_glitch('◈ ОНО ОСТАНОВИЛОСЬ', 0.20),
+    public._angel_glitch(
+      'Отметка перестала двигаться в 19:40 и погасла не сразу. ' ||
+      'Крылья сложились не по порядку. Глаза закрылись не одновременно.', 0.16) ||
+    ' ' || public._angel_scream(11) || ' ' ||
+    case when kn is not null
+         then public._angel_glitch('Последний импульс пришёл со стороны «' || kn || '».', 0.24) || ' '
+         else '' end ||
+    public._angel_glitch('Осталась пыль, которую нечем взвесить. Считать это победой каждый будет сам.', 0.14));
 end$$;
 revoke all on function public._angel_fall(text,text) from public;
 

@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260819rules';
+  var BUILD = '20260819throne5';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -502,7 +502,10 @@
      в пласты редкими вариантами (saga_layers2.js: счёт без восьмого номера,
      выскобленный разворот), следы игроков — в pc_record. Файлов рукописей на
      диске больше нет: всё, что видит игрок, собирается по полкам. -->
-<script src="galaxy_map.js?v=20260819rules"></script>
+<!-- Спрайт «Престола»: процедурный. Грузится ПЕРВЫМ — его зовут и карта
+     галактики (gmmUnitEmblem), и доска боя (bbAngel). -->
+<script src="angel_fx.js?v=20260819throne5"></script>
+<script src="galaxy_map.js?v=20260819throne5"></script>
 <script src="faction_reg.js?v=20260816wiki16"></script>
 <script src="locations.js?v=20260624a"></script>
 <script src="faction_news.js?v=20260809vnmob"></script>
@@ -546,7 +549,7 @@
      ведомства. ⚠️ И КНОПКУ НАВИГАЦИИ снимали тоже, вынося ленты уровней на
      экран. Ни того, ни другого не повторять — разбор в шапке mobile_nav.js. -->
 <script src="mobile_nav.js?v=20260816mnav4"></script>
-<script src="battle_board.js?v=20260818ratline"></script>
+<script src="battle_board.js?v=20260819throne5"></script>
 <!-- Трёхмерная доска боя. Сам three.js тут НЕ подключается: battle_gl.js тянет
      его динамическим import только когда игрок открыл бой (см. bgLoadThree). -->
 <script src="battle_gl.js?v=20260811sidepass"></script>

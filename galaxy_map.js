@@ -194,7 +194,7 @@ function gmExitEdit() {
 // ── Загрузка данных ─────────────────────────────────────────
 async function loadGalaxyData() {
   try {
-    const [sys, lanes, facs, secs, routes, econ, salvos, mines, drones, outposts, opShips, mzaShips, fleets, fleetsVis, mzaVis, armies, guards] = await Promise.all([
+    const [sys, lanes, facs, secs, routes, econ, salvos, mines, drones, outposts, opShips, mzaShips, fleets, fleetsVis, mzaVis, armies, guards, angel] = await Promise.all([
       dbGet('map_systems', 'select=*'),
       dbGet('map_hyperlanes', 'select=*'),
       dbGet('map_factions', 'select=*&order=sort.asc'),
@@ -226,6 +226,9 @@ async function loadGalaxyData() {
       // строка JS: на карте Стражей не было вообще. Видны всем (политика select true),
       // поэтому грузим и гостям — угроза на трассе публична, как и залпы артиллерии.
       apiFetch('rpc/guardian_posts_visible', { method: 'POST', body: '{}' }).catch(() => []),
+      // ПРЕСТОЛ: кто сейчас ангел. Отдаёт только fid и позу — точное состояние
+      // печатей сервер чужим не показывает вовсе (см. _angel_core.sql).
+      apiFetch('rpc/angel_status', { method: 'POST', body: '{}' }).catch(() => null),
     ]);
     GM.systems = (sys || []).map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
     GM._cbox = null; // сброс кэша области звёзд
@@ -243,6 +246,7 @@ async function loadGalaxyData() {
     GM.mzaVis = Array.isArray(mzaVis) ? mzaVis : [];      // ВСКРЫТЫЕ чужие факельщики
     GM.armies = Array.isArray(armies) ? armies : [];      // МАРШ: мои армии (гарнизоны/на марше)
     GM.guardians = Array.isArray(guards) ? guards : [];   // МЕГАСООРУЖЕНИЯ: Посты Древних Стражей (ихор, видны всем)
+    GM.angel = (angel && angel.exists && !angel.fell) ? angel : null;   // ПРЕСТОЛ: ковчег на карте
     GM.sectors = (secs || []).map(s => ({ ...s, system_ids: s.system_ids || [] }));
     GM.econ = {};   // system_id → { status, prosperity } для режима «бедность»
     (econ || []).forEach(e => { if (e && e.system_id) GM.econ[e.system_id] = { status: e.status, prosperity: +e.prosperity }; });
@@ -2170,7 +2174,7 @@ function gmDefRpc(fn, body) {
 async function gmReloadDefense(reopenSysId) {
   if (!user) return;
   try {
-    const [mines, drones, outposts, ships, mzas, fleets, salvos, fleetsVis, mzaVis, armies, legion, guards] = await Promise.all([
+    const [mines, drones, outposts, ships, mzas, fleets, salvos, fleetsVis, mzaVis, armies, legion, guards, angel] = await Promise.all([
       gmDefRpc('minefields_visible').catch(() => GM.minefields || []),
       gmDefRpc('droneposts_visible').catch(() => GM.droneposts || []),
       gmDefRpc('outposts_visible').catch(() => GM.outposts || []),
@@ -2180,6 +2184,7 @@ async function gmReloadDefense(reopenSysId) {
       // залпы в полёте (doomgun + факельщик — общая таблица) для анимации снаряда на карте
       dbGet('doom_salvos', 'status=eq.in_flight&select=origin_system_id,target_system_id,target_pid,target_planet,launched_at,ready_at,faction_id').catch(() => GM.salvos || []),
       gmDefRpc('fleets_visible').catch(() => GM.fleetsVis || []),
+      gmDefRpc('angel_status').catch(() => GM.angel || null),   // ПРЕСТОЛ
       gmDefRpc('mza_visible').catch(() => GM.mzaVis || []),
       gmDefRpc('armies_mine').catch(() => GM.armies || []),   // МАРШ
       // ЛЕГИОН: сигнатуры, просеянные через МОИ сенсоры (_legion_contacts.sql).
@@ -2195,6 +2200,7 @@ async function gmReloadDefense(reopenSysId) {
     GM.mzaShips = Array.isArray(mzas) ? mzas : [];
     GM.fleets = Array.isArray(fleets) ? fleets : [];
     GM.fleetsVis = Array.isArray(fleetsVis) ? fleetsVis : [];
+    GM.angel = (angel && angel.exists && !angel.fell) ? angel : (angel ? null : GM.angel);
     GM.mzaVis = Array.isArray(mzaVis) ? mzaVis : [];
     GM.armies = Array.isArray(armies) ? armies : (GM.armies || []);   // МАРШ
     GM.legion = Array.isArray(legion) ? legion : (GM.legion || []);   // ЛЕГИОН: сигнатуры
@@ -7727,11 +7733,18 @@ function gmmBuildDefense() {
     // Флоты — мобильные соединения: значок СЛЕВА от звезды (side='left'), стальной
     // отблеск, бейдж с числом кораблей. Не путать с носителем (справа) и факельщик.
     const fleetCol = [120, 200, 235];
-    (GM.fleets || []).forEach(fl => pushShip(fl, {
-      fleet: true, side: 'left', col: fleetCol, station: !!fl.is_station,
-      ships: +fl.ships || 0, canRecall: !!fl.can_recall,
-      dry: (fl.fuel != null && +fl.fuel <= 0)     // пустой бак — значок помечаем
-    }));
+    // ◈ ПРЕСТОЛ. Ковчег технически флот, но на карте он не соединение: у него
+    // не бывает численности, его нельзя пересчитать в корветы и незачем красить
+    // в цвет державы. Своя отметка, свой цвет (кость и золото), без бейджа.
+    const angelFid = (GM.angel && GM.angel.fid) || null;
+    const angelCol = [246, 224, 150];
+    (GM.fleets || []).forEach(fl => pushShip(fl, (fl.faction_id === angelFid || (angelFid && GM.myFid === angelFid))
+      ? { fleet: true, angel: true, side: 'left', col: angelCol, ships: null, intel: false }
+      : {
+        fleet: true, side: 'left', col: fleetCol, station: !!fl.is_station,
+        ships: +fl.ships || 0, canRecall: !!fl.can_recall,
+        dry: (fl.fuel != null && +fl.fuel <= 0)     // пустой бак — значок помечаем
+      }));
     // МАРШ: армии — гарнизоны на колониях (idle у звезды колонии, transit по трассам).
     // Оливковый цвет; рисуются/кликабельны только в режиме «Звёздный марш».
     const armyCol = [150, 205, 120];
@@ -7750,6 +7763,15 @@ function gmmBuildDefense() {
     // (ships) приходит null без разведки → бейдж рисует «⚓?». Цвет — фракции.
     (GM.fleetsVis || []).filter(fl => fl.mine === false).forEach(fl => {
       const ff = gmFaction(fl.faction_id); const col = ff ? gmRgb(ff.color) : [150, 160, 175];
+      // ◈ Ковчег видно ВСЕГДА и всем, кто вообще видит эту систему: прятаться
+      // он не умеет и не собирается. Разведка на него не влияет — считать в нём
+      // нечего, «состав» у него один.
+      if (fl.faction_id === ((GM.angel && GM.angel.fid) || null)) {
+        pushShip(fl, { fleet: true, angel: true, side: 'left', col: [246, 224, 150],
+                       enemy: true, fid: fl.faction_id, ships: null, intel: false,
+                       facName: fl.faction_name });
+        return;
+      }
       pushShip(fl, {
         fleet: true, side: 'left', col, enemy: true, fid: fl.faction_id,
         ships: (fl.intel && fl.ships != null) ? +fl.ships : null,
@@ -8069,6 +8091,43 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
   // читается «соединение», а не одиночный носитель/орудие.
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = sz * 0.4; ctx.shadowOffsetY = sz * 0.1;
+  if (o.type === 'angel') {
+    // ◈ ПРЕСТОЛ: тот же процедурный спрайт, что и на доске боя (angel_fx.js) —
+    // одно существо должно выглядеть одинаково везде, иначе на карте это будет
+    // «ещё какой-то значок», а не оно же.
+    //
+    // РАЗМЕР. Первая версия шла общим калибром значков (sz·1.35) и терялась
+    // среди флотов и факельщиков — на дальнем зуме это была искра рядом со
+    // звездой. Так нельзя: остальные отметки это ЕДИНИЦЫ, за которыми стоит
+    // держава, а эта — событие галактики, и его не должно быть возможно
+    // проглядеть. Даём вчетверо больший калибр и НИЖНИЙ ПОРОГ в пикселях
+    // экрана: как бы далеко ни отъехали, оно остаётся крупнее любой отметки
+    // и сравнимо со звездой.
+    ctx.restore();                       // тени спрайту не нужны, он сам светится
+    // Верхний предел тоже нужен: на глубоком зуме без него ковчег закрывает
+    // собой всю систему вместе с орбитами, и смотреть становится не на что.
+    const AR = Math.min(Math.max(sz * 4.2, 22), 58);
+    // Тревожный обод: медленный пульс вокруг. У чужого факельщика такой же
+    // приём означает «обнаружен», здесь — «оно здесь», и он крупнее.
+    const pulse = 0.5 + 0.5 * Math.sin((o.t || 0) * 1.6);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,232,168,${0.13 + 0.17 * pulse})`;
+    ctx.lineWidth = Math.max(1.5, AR * 0.07);
+    ctx.beginPath(); ctx.arc(0, 0, AR * (1.15 + 0.22 * pulse), 0, 6.2832); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,214,120,${0.10 + 0.10 * (1 - pulse)})`;
+    ctx.lineWidth = Math.max(1, AR * 0.045);
+    ctx.beginPath(); ctx.arc(0, 0, AR * (1.55 + 0.30 * (1 - pulse)), 0, 6.2832); ctx.stroke();
+    ctx.restore();
+
+    if (typeof angelDraw === 'function') {
+      angelDraw(ctx, { cx: 0, cy: 0, R: AR, alpha: 1,
+                       tone: '246,224,150', gaze: -Math.PI / 2,
+                       id: 'gm', seals: 1 });
+    }
+    ctx.restore();
+    return AR * 1.35;                    // радиус клик-зоны/подписи — по новому калибру
+  }
   if (o.type === 'fleet') {
     // Соединение = три КОРАБЛЯ (флагман + 2 эскорта), нос ВВЕРХ. Силуэт — узкий
     // стреловидный корпус с заострённым носом, парой коротких крыльев у кормы и
@@ -8465,9 +8524,28 @@ function gmmPaintDefense(ctx) {
         const sel = (GMM.opCmd && GMM.opCmd.id === d.id) || (GMM.fleetCmd && GMM.fleetCmd.id === d.id) || (GMM.armyCmd && GMM.armyCmd.id === d.id);
         // Корабль с флагом-штандартом за спиной (герб фракции — прямо на карте).
         const ER = gmmUnitEmblem(ctx, cX, cY, csz, d.fid || GM.myFid, d.col,
-          { type: d.mza ? 'mza' : (d.army ? 'army' : (d.fleet ? 'fleet' : 'carrier')), hot: !!(d.mza && d.canFire), sel, t });
+          { type: d.angel ? 'angel' : (d.mza ? 'mza' : (d.army ? 'army' : (d.fleet ? 'fleet' : 'carrier'))),
+            hot: !!(d.mza && d.canFire), sel, t });
         // Флот: бейдж с числом кораблей у нижнего края значка.
-        if (d.fleet) {
+        if (d.angel) {
+          // ⚠️ На месте, где у каждого флота стоит число кораблей, у ковчега
+          // стоит СБОЙ. Не «?» (вопрос читается как «разведай и узнаешь»), а
+          // помеха: считать тут нечего, и прибор это признаёт.
+          ctx.save();
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          const gl = '▓░▒█╳╬┼⌁⟊⟟';
+          let noise = '';
+          const seed = Math.floor((t || 0) * 7);
+          for (let i = 0; i < 3; i++) noise += gl[(seed * 7 + i * 13 + (d.id ? d.id.length : 0)) % gl.length];
+          const fs2 = Math.max(8, csz * 1.5);
+          ctx.font = '700 ' + fs2.toFixed(0) + 'px ui-monospace, "Consolas", monospace';
+          ctx.lineWidth = Math.max(1, csz * 0.45); ctx.lineJoin = 'round';
+          ctx.strokeStyle = 'rgba(4,9,16,0.92)';
+          ctx.strokeText(noise, cX, cY + ER * 0.64);
+          ctx.fillStyle = 'rgba(250,238,196,0.95)';
+          ctx.fillText(noise, cX, cY + ER * 0.64);
+          ctx.restore();
+        } else if (d.fleet) {
           ctx.save();
           // В стопке суммируем корабли всех флотов державы; «известно», только если
           // состав каждого вскрыт разведкой (иначе «?»).
@@ -8542,7 +8620,10 @@ function gmmPaintDefense(ctx) {
           ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3;
           ctx.fillStyle = d.enemy ? 'rgba(255,180,170,0.98)' : (d.mza ? 'rgba(255,210,200,0.98)' : (d.fleet ? 'rgba(205,232,255,0.98)' : 'rgba(222,236,255,0.96)'));
           const enemyTag = d.enemy && d.facName ? ` · ${d.facName}` : '';
-          const fleetLbl = d.army ? (stacked ? `Армии · ${n}` : '🪖 Армия')
+          // ⚠️ Ковчег не подписываем ни классом, ни державой: подпись — это
+          // уже классификация, а его никто не классифицировал.
+          const fleetLbl = d.angel ? '◈ ▓░▒ ▚'
+            : d.army ? (stacked ? `Армии · ${n}` : '🪖 Армия')
             : d.station ? '🛰 Станция'
             : d.enemy ? 'Чужой флот' + enemyTag : (stacked ? `Флоты · ${n}` : 'Флот');
           const lbl = d.mza ? (d.enemy ? '☣ Чужой факельщик · обнаружен' + enemyTag : (d.canFire ? '☣ Факельщик · залп' : '☣ Факельщик'))
@@ -8592,8 +8673,45 @@ function gmmPaintDefense(ctx) {
       // раньше он тянулся за зумом без потолка (s*1.1+2) и на глубоком зуме челнок
       // раздувался в гигантскую «стрелку» во весь экран.
       if (onScreen(hX, hY)) {
-        const tsz = Math.max(2.6, Math.min(9, 2.2 + s * 0.5)) * zf;
-        gmmCarrierGlyph(ctx, hX, hY, tsz, d.col, 0.95, ang);
+        // ◈ ПРЕСТОЛ В ПОЛЁТЕ. Раньше сюда не глядя падал gmmCarrierGlyph —
+        // стрелка-челнок, одинаковая для носителей, факельщиков и ковчега. На
+        // перегоне ангел превращался в чужой значок, и шесть часов перелёта он
+        // выглядел не собой, а «какой-то хуйнёй, которая ещё и не шевелится».
+        // Он не челнок: у него нет носа, который надо доворачивать по курсу,
+        // он всегда развёрнут к смотрящему. Разворачиваем только ВЗГЛЯД — по
+        // направлению движения, чтобы было видно, куда оно идёт.
+        if (d.angel) {
+          // Калибр ТОТ ЖЕ, что у стоящего (clamp 22..58): иначе на перегоне
+          // ковчег заметно мельчал — базу транзита ограничивает Math.min(9,…)
+          // под обычный челнок, и после умножения он всю дорогу лежал на
+          // нижнем пороге. Одно существо не должно менять размер оттого, что
+          // сдвинулось с места.
+          const AR = Math.min(Math.max(Math.max(2.6, Math.min(14, 2.2 + s * 1.6)) * zf * 4.2, 22), 58);
+          const pulse = 0.5 + 0.5 * Math.sin((t || 0) * 1.6);
+          ctx.save();
+          ctx.translate(hX, hY);
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.strokeStyle = `rgba(255,232,168,${0.12 + 0.16 * pulse})`;
+          ctx.lineWidth = Math.max(1.4, AR * 0.07);
+          ctx.beginPath(); ctx.arc(0, 0, AR * (1.15 + 0.22 * pulse), 0, 6.2832); ctx.stroke();
+          ctx.restore();
+          if (typeof angelDraw === 'function') {
+            angelDraw(ctx, { cx: hX, cy: hY, R: AR, alpha: 1, tone: '246,224,150',
+                             gaze: ang, id: 'gm-transit', seals: 1 });
+          }
+          if (deep) {
+            ctx.save();
+            ctx.font = '600 11px system-ui, sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3;
+            ctx.fillStyle = 'rgba(250,238,196,0.98)';
+            ctx.fillText('◈ ▓░▒ ▚', hX, hY + AR * 1.35);
+            ctx.restore();
+          }
+        } else {
+          const tsz = Math.max(2.6, Math.min(9, 2.2 + s * 0.5)) * zf;
+          gmmCarrierGlyph(ctx, hX, hY, tsz, d.col, 0.95, ang);
+        }
       }
     } catch (e) { if (!GMM._unitErrLogged) { GMM._unitErrLogged = true; console.error('gmm unit draw failed', e); } }
   });

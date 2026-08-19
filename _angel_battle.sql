@@ -131,9 +131,9 @@ begin
   if sd = 'attacker' then update public.battles set att_ready = true where id = p_battle;
   else                     update public.battles set def_ready = true where id = p_battle; end if;
 
-  perform public._bt_log(p_battle,
-    '◈ Оно вошло в систему. Крылья развернулись на весь ордер, и первые расчёты ' ||
-    'сообщили, что прицелы держат цель, но дальномер отказывается верить в её размер.');
+  perform public._bt_log(p_battle, public._angel_glitch(
+    '◈ Оно вошло в систему. Прицелы держат цель. Дальномер отказывается верить в её размер.', 0.26)
+    || ' ' || public._angel_scream(10));
 
   select * into b from public.battles where id = p_battle;
   if b.att_ready and b.def_ready then perform public._fc_kick_off(p_battle); end if;
@@ -170,9 +170,12 @@ begin
      where id = p_target;
     -- Раз в пять попаданий пишем строку в журнал: каждое сообщение — это спам,
     -- а полное молчание читается как «доска сломалась».
+    -- ⚠️ НЕ ПИШЕМ «урона нет»: это готовая инструкция «флотом не пытайся».
+    -- Пишем сбой телеметрии — пусть штаб сам сообразит, что происходит.
     if nseen % 5 = 1 then
-      perform public._bt_log(t.battle_id,
-        '◈ Попадание в Престол зафиксировано. Нимб не сместился. Урон: нет.');
+      perform public._bt_log(t.battle_id, public._angel_glitch(
+        '◈ Попадание подтверждено оптикой. Оценка ущерба ', 0.22)
+        || public._angel_scream(13));
     end if;
     return jsonb_build_object('hull', 0, 'shield_absorbed', 0, 'killed', false,
                               'angel', true);

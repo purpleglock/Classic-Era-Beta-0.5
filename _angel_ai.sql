@@ -126,10 +126,18 @@ begin
        and c.faction_id is not null;
     select coalesce(nullif(name,''), id) into sysname from public.map_systems where id = sys;
     if victims is not null then
-      perform public._angel_tell(v, '◈ Оно висит над системой',
-        'Над системой «' || coalesce(sysname,'???') || '» стоит ковчег. Он ничего не требует и ни с кем не говорит. ' ||
-        'Заводы работают вполсилы, склады пустеют, люди не выходят на смену. ' ||
-        'Достаток системы падает, пока оно там. Флот его не тронет — только Длань и Гиперпейсер.')
+      -- ⚠️ ЗДЕСЬ СТОЯЛА ПРЯМАЯ ИНСТРУКЦИЯ: «флот его не тронет — только Длань
+      -- и Гиперпейсер». Одна строка отменяла весь кризис: игроку не надо было
+      -- ничего понимать, ему выдали ответ. Снято. Осталось то, что человек
+      -- действительно может заметить, — что жить стало хуже.
+      perform public._angel_tell(v, public._angel_glitch('◈ Над системой', 0.20),
+        public._angel_glitch(
+          'Над «' || coalesce(sysname,'???') || '» стоит отметка. Она ничего не требует и ни с чем не выходит на связь.', 0.18) ||
+        ' ' || public._angel_scream(9) || ' ' ||
+        public._angel_glitch(
+          'Заводы работают вполсилы. Склады пустеют. Люди не выходят на смену. ' ||
+          'Наблюдение с орбиты сворачивается: расчёты отказываются смотреть вверх.', 0.16) ||
+        ' ' || public._angel_scream(13))
         from unnest(victims) v;
     end if;
   end if;
@@ -417,10 +425,13 @@ begin
      sh.system_id, lock_sys, null, coalesce(tgt.name,'флот'), tgt.id,
      public._fleet_flak_p(public._fleet_flak(tgt.id)), rdy, 'ball_hunter', tgt.faction_id);
 
-  perform public._angel_tell(tgt.faction_id, '◈ Оно посмотрело на ваш флот',
-    'С ковчега ушёл снаряд по флоту «' || coalesce(tgt.name,'???') || '». ' ||
-    'Он ведёт тепловую сигнатуру — уходить из системы бесполезно. Подлёт ~' ||
-    to_char(fly,'FM990.0') || ' ч. Остаётся зенитный огонь.');
+  -- ⚠️ Убрано «ведёт сигнатуру, уходить бесполезно, остаётся зенитный огонь» —
+  -- это инструкция по обороне. Пусть узнают, попробовав уйти.
+  perform public._angel_tell(tgt.faction_id, public._angel_glitch('◈ Оно посмотрело на ваш флот', 0.22),
+    public._angel_glitch(
+      'С отметки ушёл снаряд по флоту «' || coalesce(tgt.name,'???') || '». Подлёт ~' ||
+      to_char(fly,'FM990.0') || ' ч.', 0.16) ||
+    ' ' || public._angel_scream(12));
 
   return jsonb_build_object('ok', true, 'act', 'hunter', 'target', tgt.name,
                             'ships', tgt.ships, 'ready_at', rdy);
@@ -500,10 +511,11 @@ begin
      (select owner_id from public.faction_economy where faction_id = a.faction_id),
      g.system_id, tgt.system_id, tgt.planet_pid, tgt.planet_name, rdy, 'doom', tgt.faction_id);
 
-  perform public._angel_tell(tgt.faction_id, '◈ Оно выбрало планету',
-    'С ковчега ушёл снаряд судного дня по планете «' || coalesce(tgt.planet_name,'???') ||
-    '». Подлёт ~' || to_char(fly,'FM990.0') || ' ч. Планетарная ПРО может успеть. ' ||
-    'Если не успеет — планеты не будет.');
+  perform public._angel_tell(tgt.faction_id, public._angel_glitch('◈ Оно выбрало планету', 0.22),
+    public._angel_glitch(
+      'С отметки ушёл снаряд судного дня по планете «' || coalesce(tgt.planet_name,'???') ||
+      '». Подлёт ~' || to_char(fly,'FM990.0') || ' ч.', 0.16) ||
+    ' ' || public._angel_scream(14));
 
   return jsonb_build_object('ok', true, 'act', 'doom', 'planet', tgt.planet_name, 'ready_at', rdy);
 end$$;
@@ -636,11 +648,12 @@ begin
     values (w, af, 'attacker'), (w, p_target, 'defender');
 
   perform public._war_news(
-    '◈ Оно пришло: ' || public._war_nm(af) || ' → ' || public._war_nm(p_target),
-    'Ноты не поступало. Требований не выдвинуто. Над системой державы ' ||
-    public._war_nm(p_target) || ' встал ковчег, и штаб считает это объявлением войны, ' ||
-    'потому что иначе это назвать нечем. Переговорщиков не отправляли: ' ||
-    'предыдущие вернулись без вопросов и без ответов.',
+    public._angel_glitch('◈ Оно пришло: ' || public._war_nm(af) || ' → ' || public._war_nm(p_target), 0.18),
+    public._angel_glitch(
+      'Ноты не поступало. Требований не выдвинуто. Штаб считает это объявлением войны, ' ||
+      'потому что иначе это назвать нечем.', 0.16) ||
+    ' ' || public._angel_scream(10) || ' ' ||
+    public._angel_glitch('Переговорщиков не отправляли: предыдущие вернулись без вопросов и без ответов.', 0.20),
     jsonb_build_array(af, p_target));
   return jsonb_build_object('ok', true, 'war_id', w);
 end$$;
@@ -682,13 +695,16 @@ begin
   end if;
   if st is distinct from a.stance then
     update public.angel_state set stance = st where faction_id = af;
+    -- ⚠️ Причину смены курса не называем ни в одну, ни в другую сторону:
+    -- «оно ранено» и «оно залечилось» — это и есть шкала здоровья словами.
     if st = 'roost' then
-      perform public._angel_news('◈ ОНО ПОВЕРНУЛО НАЗАД',
-        'Ковчег сменил курс и уходит. Наблюдатели впервые отмечают у него что-то похожее на осторожность: ' ||
-        'часть глаз закрыта, одно крыло идёт с задержкой. Оно ещё вернётся — но не сегодня.');
+      perform public._angel_news(public._angel_glitch('◈ ОНО СМЕНИЛО КУРС', 0.24),
+        public._angel_glitch('Отметка развернулась и уходит. Причина манёвра', 0.18)
+        || ' ' || public._angel_scream(16));
     else
-      perform public._angel_news('◈ ОНО ПОДНЯЛОСЬ СНОВА',
-        'Печати заросли. Ковчег снялся с места и снова идёт в галактику. Перерыв кончился.');
+      perform public._angel_news(public._angel_glitch('◈ ОНО СНОВА ДВИЖЕТСЯ', 0.24),
+        public._angel_glitch('Отметка снялась с места. Пауза длилась', 0.18)
+        || ' ' || public._angel_scream(11));
     end if;
   end if;
 
