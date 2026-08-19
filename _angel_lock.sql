@@ -44,9 +44,17 @@
 -- Всё остальное — машинерия: её зовут крон и другие security definer функции,
 -- которым права роли вызывающего не нужны вовсе.
 do $$
+-- ⚠️ ПРЕДИКАТЫ ЧТЕНИЯ ЗАКРЫВАТЬ НЕЛЬЗЯ. 19.08 отзыв прав на _angel_is положил
+-- сайт на час: её зовёт public._bt_is_machine, которая НЕ security definer, то
+-- есть исполняется с правами ИГРОКА. Каждое обращение к боевой доске и каждый
+-- прогон legion_ai_tick падали с «permission denied for function _angel_is».
+-- Права проверяются по ЭФФЕКТИВНОМУ пользователю в момент вызова — перед любым
+-- revoke смотреть не только клиент, но и НЕ-definer функции среди вызывающих.
+-- Эти четыре ничего не делают и ничего не скрывают (всё есть в angel_status).
 declare f record; kept text[] := array['angel_status', 'angel_incoming', 'doom_fire_angel',
                                        'admin_angel_ascend', 'admin_angel_descend',
-                                       'admin_angel_seals', 'admin_angel_tick'];
+                                       'admin_angel_seals', 'admin_angel_tick',
+                                       '_angel_is', '_angel_alive', '_angel_fid', '_angel_const'];
         n int := 0;
 begin
   for f in
@@ -72,6 +80,11 @@ grant execute on function public.admin_angel_tick() to authenticated;
 grant execute on function public.angel_status() to authenticated, anon;
 grant execute on function public.angel_incoming() to authenticated;
 grant execute on function public.doom_fire_angel(uuid) to authenticated;
+-- Горячий путь боевой доски: см. предупреждение у списка kept выше.
+grant execute on function public._angel_is(text)    to authenticated, anon;
+grant execute on function public._angel_alive(text) to authenticated, anon;
+grant execute on function public._angel_fid()       to authenticated, anon;
+grant execute on function public._angel_const(text) to authenticated, anon;
 
 -- ── 2. ЗАСОВ ВНУТРИ ─────────────────────────────────────────
 -- Права можно потерять по неосторожности одним `create or replace`. Проверка в
