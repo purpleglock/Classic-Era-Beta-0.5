@@ -16972,12 +16972,15 @@ function ecDoomVNAngelRow(car) {
   const hops = (car && car.kind === 'mza' && a.system_id) ? ecMzaHops(car.sys, a.system_id) : null;
   const meta = [a.moving ? 'в пути' : 'стоит', 'система «' + esc(a.system || '???') + '»']
     .concat(hops == null ? [] : [hops === Infinity ? 'нет маршрута' : hops + ' прыж.']).join(' · ');
-  return `<div class="hp-vnd-sysrow hp-vnd-pinrow${st.angel ? ' on' : ''} foe" onclick="event.stopPropagation();ecDoomVNPick('angel')">
-    <div class="hp-vnd-sysrow-hd">
-      <span class="hp-vnd-sys-flag">◈</span>
-      <span class="hp-vnd-sys-nm">ПРЕСТОЛ</span>
-      <span class="hp-vnd-sys-own">${esc(a.name || 'держава-ангел')}</span>
-      <span class="hp-vnd-sys-meta">${meta}${st.angel ? ' · ▾' : ''}</span>
+  return `<div class="hp-vnd-pin${st.angel ? ' on' : ''}" onclick="event.stopPropagation();ecDoomVNPick('angel')">
+    <div class="hp-vnd-pin-cap">цель особого порядка · вне реестра систем</div>
+    <div class="hp-vnd-pin-bd">
+      <span class="hp-vnd-pin-mk">◈</span>
+      <span class="hp-vnd-pin-tx">
+        <b>ПРЕСТОЛ</b>
+        <small>${esc(a.name || 'держава-ангел')} · ${meta}</small>
+      </span>
+      <span class="hp-vnd-pin-go">${st.angel ? '◎ в перекрестье' : 'взять в перекрестье ▸'}</span>
     </div>
   </div>`;
 }
@@ -17128,7 +17131,9 @@ function ecDoomVNDialog(stepId, car) {
   }
   if (stepId === 'sys') return { who, mood: 'uneasy', lines: [
     'Развернула реестр систем. ',
-    'Подтвердите систему для обстрела.'] };
+    ecDoomAngel()
+      ? 'И… сверху отметка вне реестра. ◈ Престол. По нему тоже можно, командующий.'
+      : 'Подтвердите систему для обстрела.'] };
   if (stepId === 'pid') return { who, mood: 'shaken', lines: [
     `Т-теперь… укажите конкретный мир. В системе «${sysNm}» их несколько.`,
     'Вы д-должны выбрать, кого именно… простите...'] };
