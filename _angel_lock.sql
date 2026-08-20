@@ -52,6 +52,7 @@ do $$
 -- revoke смотреть не только клиент, но и НЕ-definer функции среди вызывающих.
 -- Эти четыре ничего не делают и ничего не скрывают (всё есть в angel_status).
 declare f record; kept text[] := array['angel_status', 'angel_incoming', 'doom_fire_angel',
+                                       'angel_target',
                                        'admin_angel_ascend', 'admin_angel_descend',
                                        'admin_angel_seals', 'admin_angel_tick',
                                        '_angel_is', '_angel_alive', '_angel_fid', '_angel_const'];
@@ -80,6 +81,8 @@ grant execute on function public.admin_angel_tick() to authenticated;
 grant execute on function public.angel_status() to authenticated, anon;
 grant execute on function public.angel_incoming() to authenticated;
 grant execute on function public.doom_fire_angel(uuid) to authenticated;
+-- Отметка Престола для пульта штаба (_doom_shell_throne.sql): только «где он».
+grant execute on function public.angel_target() to authenticated, anon;
 -- Горячий путь боевой доски: см. предупреждение у списка kept выше.
 grant execute on function public._angel_is(text)    to authenticated, anon;
 grant execute on function public._angel_alive(text) to authenticated, anon;

@@ -5327,6 +5327,16 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   padding:1px 6px;border:1px solid rgba(160,140,135,.4);color:#a08880;
 }
 .hp-vnd-sysrow.own .hp-vnd-sys-own{border-color:rgba(120,200,150,.5);color:#8fd8ab}
+/* ◈ Престол — закреплённая отметка поверх реестра целей: не строка списка,
+   а всегда доступная цель, поэтому холодный тон и подпись «закреплено». */
+.hp-vnd-pinrow{position:sticky;top:0;z-index:2;background:rgba(24,20,26,.96);
+  border-bottom:1px solid rgba(150,120,255,.35)}
+.hp-vnd-pinrow:hover{background:rgba(150,120,255,.10)}
+.hp-vnd-pinrow.on{background:rgba(150,120,255,.14);border-left:3px solid #9a7bff;padding-left:7px}
+.hp-vnd-pinrow .hp-vnd-sys-flag{align-items:center;justify-content:center;width:22px;height:22px;
+  color:#b9a0ff;font-size:14px}
+.hp-vnd-pinrow .hp-vnd-sys-nm{color:#d9caff;letter-spacing:.12em}
+.hp-vnd-pinrow.foe .hp-vnd-sys-own{border-color:rgba(150,120,255,.55);color:#b9a0ff}
 .hp-vnd-sysrow.foe .hp-vnd-sys-own{border-color:rgba(255,74,60,.55);color:#ff8d7c}
 .hp-vnd-sys-meta{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:#8f7d78}
 .hp-vnd-plts{display:flex;gap:6px;flex-wrap:wrap;padding:8px 0 3px}

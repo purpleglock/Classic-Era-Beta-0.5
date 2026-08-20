@@ -2467,6 +2467,11 @@ async function _ecLoadRestImpl() {
   // Снаряды судного дня: склад + арсеналы + Немезиды (best-effort — SQL может быть не накатан).
   const shells = await ecRpc('shell_status').catch(() => null);
   EC.shells = (shells && typeof shells === 'object') ? shells : { stock: {}, forges: [], nemesis: [] };
+  // ◈ ПРЕСТОЛ: отметка держав-ангела для пульта штаба (_doom_shell_throne.sql).
+  // Ковчег — не планета: в реестре систем его нет, и целится он только этой
+  // закреплённой строкой. Нет ангела / срез не накатан — просто null.
+  const angelTgt = await ecRpc('angel_target').catch(() => null);
+  EC.angelTgt = (angelTgt && angelTgt.exists && !angelTgt.mine) ? angelTgt : null;
   // ПРО: входящие отметки по моим планетам (best-effort — _abm_duel.sql может быть не накатан).
   const abmIn = await ecRpc('abm_incoming').catch(() => null);
   EC.abmIncoming = Array.isArray(abmIn) ? abmIn : [];
@@ -7961,6 +7966,12 @@ function ecErr(m) {
   const day = m.match(/daily volume limit for (.+?):\s*(\d+)\s*used of\s*(\d+)/i);
   if (day) return `Дневной лимит торговли «${day[1]}» исчерпан: ${day[2]} из ${day[3]} ед. за сутки. Лимит обнулится в 00:00 UTC`;
   if (m.includes('daily volume limit')) return 'Дневной лимит торговли этим ресурсом исчерпан (сброс в 00:00 UTC)';
+  // Судный день: у залпа своя валюта — ПОСТРОЕННЫЙ снаряд. Без этих двух строк
+  // «нет снаряда» и «нет гравиядра» падали в общее «Недостаточно средств»,
+  // и игрок искал деньги там, где кончился боекомплект.
+  if (m.includes('shell in stock')) return 'Нет построенного снаряда: закажите его на фабрике — ☢ Арсенал Судного Дня (Х67 «Ада») или 🏭 Баллистический военпромзавод (1 снаряд в сутки)';
+  if (m.includes('gravity cores')) return 'Не хватает Гравиядра на складе';
+  if (m.includes('not enough programmable matter')) return 'Не хватает Программируемой материи на складе';
   if (m.includes('not enough resource')) return 'Недостаточно ресурса на складе';
   if (m.includes('not enough on market')) return 'На рынке нет столько ресурса';
   if (m.includes('not enough GC') || m.includes('not enough gc')) return 'Недостаточно ГС';
@@ -16677,7 +16688,7 @@ function ecShellArsenalSection() {
    Стреляет боевыми RPC: doom_fire (стационар) / mza_fire (носитель). */
 function ecDoomVNAimSt() {
   const vn = ecDoomVNSt();
-  return vn.aim = vn.aim || { car: null, sysId: null, pid: null, q: '', shell: 'doom', step: 0, zoneOnly: true, tgl: { pwr: false, seal: false, oath: false } };
+  return vn.aim = vn.aim || { car: null, sysId: null, pid: null, angel: false, q: '', shell: 'doom', step: 0, zoneOnly: true, tgl: { pwr: false, seal: false, oath: false } };
 }
 // Все носители приговора одним списком (боеготовые и нет — с причиной).
 function ecDoomVNCarriers() {
@@ -16705,6 +16716,15 @@ function ecDoomVNCar() {
   st.car = c ? c.key : null;
   return c;
 }
+// ◈ Престол доступен как цель? Ковчег виден всем (сигнатуру не спрятать),
+// но по своему собственному Престолу не стреляют — сервер такое отвергает.
+function ecDoomAngel() { return EC.angelTgt && EC.angelTgt.exists && !EC.angelTgt.mine ? EC.angelTgt : null; }
+// Чем стреляем по ковчегу: стационарная Длань несёт только Х67, Гиперпейсер —
+// что выбрали (баллистика давит парирование, Х67 рвёт печати).
+function ecDoomAngelShell(car) {
+  const st = ecDoomVNAimSt();
+  return (car && car.kind === 'mza' && EC_BALL_KINDS.includes(st.shell)) ? st.shell : 'doom';
+}
 /* ── НАВЕДЕНИЕ как новелла: сцены-страницы перелистываются, наводчик у пульта
    говорит и с каждой страницей всё меньше владеет собой. Порядок сцен зависит
    от носителя: у стационарной Длани снаряд один (Длань), сцена выбора снаряда
@@ -16725,6 +16745,9 @@ function ecDoomVNStepId(car) {
 function ecDoomVNStepReady(stepId, car) {
   const st = ecDoomVNAimSt();
   if (stepId === 'car') return !!(car && car.ready);
+  // ◈ Престол закреплён отдельной строкой: у ковчега нет планеты, и сцена
+  // цели для него сразу готова — выбирать в системе нечего.
+  if (st.angel) return stepId === 'shell' ? ecShellsOf(ecDoomAngelShell(car)) >= 1 : true;
   if (stepId === 'sys') return !!st.sysId;
   if (stepId === 'pid') return ecShellHitsFleet(st.shell) ? !!st.fleetId : Number.isInteger(st.pid);
   if (stepId === 'shell') return ecShellsOf((car && car.kind === 'mza' && EC_BALL_KINDS.includes(st.shell)) ? st.shell : 'doom') >= 1;
@@ -16744,7 +16767,14 @@ function ecDoomVNPick(part, val) {
   const st = ecDoomVNAimSt();
   if (part === 'car') {
     if (st.car !== val) { st.car = val; st.sysId = null; st.pid = null; }
+  } else if (part === 'angel') {
+    // Закреплённая отметка: снимает обычную наводку и наоборот.
+    const a = ecDoomAngel();
+    st.angel = !st.angel;
+    st.pid = null; st.fleetId = null;
+    st.sysId = st.angel ? ((a && a.system_id) || null) : null;
   } else if (part === 'sys') {
+    st.angel = false;
     st.sysId = (st.sysId === val ? null : val); st.pid = null;
   } else if (part === 'pid') {
     st.pid = (st.pid === +val ? null : +val);
@@ -16840,9 +16870,14 @@ function ecDoomVNSysList() {
     .filter(x => inZone(x.s))
     .map(x => ({ ...x, fly: car ? ecDoomFlight({ system_id: car.sys }, x.s.id) : null }))
     .sort((a, b) => (a.fly ? a.fly.dist : 1e9) - (b.fly ? b.fly.dist : 1e9));
-  if (!rows.length) return `<div class="hp-vnd-con-none">— ${zone ? 'в зоне поражения нет целей — расширьте фильтр или перебросьте носитель ближе' : 'в реестре пусто: нет систем с живыми планетами-целями'} —</div>`;
-  return rows.map(({ s, alive, fly }) => {
-    const on = st.sysId === s.id;
+  // ◈ ПРЕСТОЛ — закреплённая отметка ПОВЕРХ реестра. Ковчег не планета: в
+  // обычные строки он не попадает никогда, а бить по нему нужно и Длани, и
+  // Гиперпейсеру. Фильтр зоны его не прячет — вместо этого пишем расстояние
+  // в прыжках, а вне радиуса цепь пуска не взведётся (см. ecDoomVNProto).
+  const pin = ecDoomVNAngelRow(car);
+  if (!rows.length) return pin + `<div class="hp-vnd-con-none">— ${zone ? 'в зоне поражения нет целей — расширьте фильтр или перебросьте носитель ближе' : 'в реестре пусто: нет систем с живыми планетами-целями'} —</div>`;
+  return pin + rows.map(({ s, alive, fly }) => {
+    const on = !st.angel && st.sysId === s.id;
     const own = s.faction === EC.fid;
     const ownTag = s.faction ? (own ? 'ВАША' : esc(ecFacName(s.faction))) : 'НИЧЬЯ';
     // Флаг державы-владельца (герб или инициалы на цвете); у ничьих — прочерк-знак.
@@ -16929,12 +16964,64 @@ function ecDoomVNFleetSec() {
     <div class="hp-vnd-tgt-note">Снаряд ведёт сигнатуру: уйти из системы цель не сможет. Сбить его может только зенитный огонь самого флота — или Ожерелье Немезиды над системой, где его застанет подлёт.</div>
     <div class="hp-vnd-tgtgrid">${cards}</div>`;
 }
+// ◈ ПРЕСТОЛ · закреплённая строка над реестром систем. Дистанция считается
+// в прыжках только для Гиперпейсера — стационарная Длань достаёт куда угодно.
+function ecDoomVNAngelRow(car) {
+  const a = ecDoomAngel(); if (!a) return '';
+  const st = ecDoomVNAimSt();
+  const hops = (car && car.kind === 'mza' && a.system_id) ? ecMzaHops(car.sys, a.system_id) : null;
+  const meta = [a.moving ? 'в пути' : 'стоит', 'система «' + esc(a.system || '???') + '»']
+    .concat(hops == null ? [] : [hops === Infinity ? 'нет маршрута' : hops + ' прыж.']).join(' · ');
+  return `<div class="hp-vnd-sysrow hp-vnd-pinrow${st.angel ? ' on' : ''} foe" onclick="event.stopPropagation();ecDoomVNPick('angel')">
+    <div class="hp-vnd-sysrow-hd">
+      <span class="hp-vnd-sys-flag">◈</span>
+      <span class="hp-vnd-sys-nm">ПРЕСТОЛ</span>
+      <span class="hp-vnd-sys-own">${esc(a.name || 'держава-ангел')}</span>
+      <span class="hp-vnd-sys-meta">${meta}${st.angel ? ' · ▾' : ''}</span>
+    </div>
+  </div>`;
+}
+// II.1 · ЦЕЛЬ — ковчег. Планет тут нет: цель одна, и она сама себе система.
+function ecDoomVNAngelSec(car) {
+  const a = ecDoomAngel();
+  if (!a) return `<div class="hp-vnd-con-t"><i>II.1</i> отметка</div>
+    <div class="hp-vnd-tgt-empty">Престола на карте нет — цель снята.</div>`;
+  const hops = (car && car.kind === 'mza' && a.system_id) ? ecMzaHops(car.sys, a.system_id) : null;
+  return `<div class="hp-vnd-con-t"><i>II.1</i> отметка · ◈ ПРЕСТОЛ</div>
+    <div class="hp-vnd-tgt-note">Ковчег держит одна держава: «${esc(a.name || '???')}». Он не планета и не флот — попадание не топит корабли, оно рвёт печати. Баллистика их почти не берёт, зато копит давление и гасит парирование; Х67 «Ада» рвёт печати всерьёз. Пять часов без попаданий — печати зарастают, и кампанию придётся начинать заново.</div>
+    <div class="hp-vnd-tgtgrid">
+      <button type="button" class="hp-vnd-tgt on" onclick="event.stopPropagation()">
+        <span class="hp-vnd-tgt-orb"><i>◈</i></span>
+        <span class="hp-vnd-tgt-tx"><b>Престол</b><small>система «${esc(a.system || '???')}» · ${a.moving ? 'ковчег в пути' : 'ковчег стоит'}${hops == null ? '' : ' · ' + (hops === Infinity ? 'нет маршрута' : hops + ' прыж.')}</small></span>
+        <span class="hp-vnd-tgt-mk">◎ в перекрестье</span>
+      </button>
+    </div>`;
+}
 // ЗАЛП с пульта новеллы: гейт — цель назначена и все три тумблера взведены.
 async function ecDoomVNFire() {
   if (EC.busy) return;
   const st = ecDoomVNAimSt(), car = ecDoomVNCar();
   const sys = (EC.allSystems || []).find(s => s.id === st.sysId);
   const shellK = (car && car.kind === 'mza' && EC_BALL_KINDS.includes(st.shell)) ? st.shell : 'doom';
+  // ◈ ПРЕСТОЛ — своя дверь: у ковчега нет planet_pid, наводка по сигнатуре.
+  // Длань бьёт через doom_fire_angel, Гиперпейсер — через mza_fire_angel.
+  if (st.angel) {
+    const a = ecDoomAngel();
+    if (!car || !a) { toast('Протокол не собран: отметка Престола потеряна', 'err'); return; }
+    if (!(st.tgl.pwr && st.tgl.seal && st.tgl.oath)) { toast('Цепь пуска разомкнута — взведите все три тумблера', 'err'); return; }
+    if (ecShellsOf(shellK) < 1) { toast('Нет снаряда (' + EC_SHELL_LABEL[shellK] + ') — постройте на фабрике снарядов', 'err'); return; }
+    EC.busy = true;
+    try {
+      const r = car.kind === 'gun'
+        ? await ecRpc('doom_fire_angel', { p_gun_id: car.id })
+        : await ecRpc('mza_fire_angel', { p_id: car.id, p_kind: shellK });
+      ecDoomVNSt().aim = null; ecDoomVNSt().tab = 'salvos';
+      toast(`Наводчица: «Отметка взята. Подлёт ~${(r && r.flight_h) || '?'} ч... а что там на той стороне — нам знать не положено»`, 'ok');
+      await ecReloadPaint();
+    } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+    finally { EC.busy = false; }
+    return;
+  }
   // «Сполох» наводится на флот — своя дверь на сервере (mza_fire_fleet).
   if (ecShellHitsFleet(shellK)) {
     const fl = (EC.fleetsVisible || []).find(f => f.id === st.fleetId && !f.mine);
@@ -17100,7 +17187,7 @@ function ecDoomVNScene(stepId, car) {
       </div>
       <div class="hp-vnd-syslist" id="hd-syslist">${ecDoomVNSysList()}</div>`;
   }
-  if (stepId === 'pid') return `<div id="hd-targetsec">${ecShellHitsFleet(st.shell) ? ecDoomVNFleetSec() : ecDoomVNTargetSec()}</div>`;
+  if (stepId === 'pid') return `<div id="hd-targetsec">${st.angel ? ecDoomVNAngelSec(car) : ecShellHitsFleet(st.shell) ? ecDoomVNFleetSec() : ecDoomVNTargetSec()}</div>`;
   if (stepId === 'shell') {
     const cur = EC_BALL_KINDS.includes(st.shell) ? st.shell : 'doom';
     return `<div class="hp-vnd-shelfrow">${EC_SHELL_KINDS.map(k => ecShellCard(k, {
@@ -17131,7 +17218,8 @@ function ecDoomVNProto() {
   const shellKind = (car.kind === 'mza' && EC_BALL_KINDS.includes(st.shell)) ? st.shell : 'doom';
   const shells = ecShellsOf(shellKind);
   const sys = st.sysId ? (EC.allSystems || []).find(s => s.id === st.sysId) : null;
-  const hitsFleet = ecShellHitsFleet(shellKind);
+  const hitsFleet = !st.angel && ecShellHitsFleet(shellKind);
+  const angel = st.angel ? ecDoomAngel() : null;
   const fleet = hitsFleet ? (EC.fleetsVisible || []).find(f => f.id === st.fleetId && !f.mine) : null;
   const tgt = (!hitsFleet && sys && Number.isInteger(st.pid))
     ? ecDoomTargetablePlanets(sys).find(p => p.pid === st.pid) : null;
@@ -17140,12 +17228,14 @@ function ecDoomVNProto() {
   const maxHops = ecMzaMaxHops(shellKind);
   const inRange = !(car.kind === 'mza' && hops != null && hops > maxHops);
   const gravOk = shells >= 1;
+  // ◈ Престол: цель назначена самой закреплённой строкой — своя ветка гейта.
+  if (st.angel && !angel) { st.angel = false; }
   const tglDef = [
     ['pwr', 'питание накопителей', gravOk ? '' : 'нет снаряда'],
     ['seal', 'снять пломбу ствола', ''],
     ['oath', 'принять ответственность', ''],
   ];
-  const canArm = (hitsFleet ? !!fleet : !!tgt) && inRange;
+  const canArm = (st.angel ? !!angel : hitsFleet ? !!fleet : !!tgt) && inRange;
   const tumbs = tglDef.map(([k, lbl, block]) => {
     const dead = !canArm || !!block;
     return `<button type="button" class="hp-vnd-tumb${st.tgl[k] ? ' on' : ''}${dead ? ' off' : ''}" ${dead ? 'disabled' : ''}
@@ -17157,8 +17247,10 @@ function ecDoomVNProto() {
   const armed = canArm && gravOk && st.tgl.pwr && st.tgl.seal && st.tgl.oath;
   return `<div class="hp-vnd-read">
       <span><i>носитель</i><b>${esc(car.nm)}</b></span>
-      <span><i>цель</i><b${(tgt || fleet) ? ' class="hot"' : ''}>${
-        hitsFleet
+      <span><i>цель</i><b${(tgt || fleet || angel) ? ' class="hot"' : ''}>${
+        st.angel
+          ? (angel ? '◈ ПРЕСТОЛ · ' + esc(angel.system || '???') : '— отметка потеряна —')
+          : hitsFleet
           ? (fleet ? esc((sys ? (sys.name || sys.id) + ' · ' : '') + (fleet.name || 'флот ' + (fleet.faction_name || ''))) : '— сигнатура не взята —')
           : (tgt ? esc((sys.name || sys.id) + ' · ' + (tgt.name || 'планета ' + tgt.pid)) : '— не назначена —')}</b></span>
       <span><i>подлёт</i><b>${fly ? '≈' + fly.hours.toFixed(1) + ' ч' : '···'}</b></span>
@@ -17168,6 +17260,8 @@ function ecDoomVNProto() {
     ${!inRange ? `<div class="hp-vnd-warnline">Цель вне радиуса: дальность ${esc(EC_SHELL_LABEL[shellKind])} — ${maxHops} прыжка(ов) по гиперпутям${hops === Infinity ? ' (нет маршрута)' : ' (до цели ' + hops + ')'}. Перебросьте носитель ближе или возьмите Х0414 «Отей».</div>` : ''}
     ${hitsFleet && fleet && inRange
       ? `<div class="hp-vnd-warnline">Х77 ведёт тепловую сигнатуру: флот «${esc(fleet.name || '')}» не уйдёт манёвром. Ответить он может только зенитным огнём — плотный ордер лёгких стволов снаряд снимет, голый линейный не снимет.</div>` : ''}
+    ${st.angel && angel && inRange
+      ? `<div class="hp-vnd-warnline">Отметка ведётся по сигнатуре: ковчег не уйдёт из-под залпа манёвром. ${shellKind === 'doom' ? 'Х67 рвёт печати — это единственный калибр, который его действительно убивает.' : esc(EC_SHELL_LABEL[shellKind]) + ' печати почти не берёт, но копит давление и гасит парирование — под ним Длани работают в разы результативнее.'} Оценки состояния цели не будет.</div>` : ''}
     ${tgt && inRange ? (shellKind === 'doom'
       ? `<div class="hp-vnd-warnline">Залп необратим: «${esc(tgt.name || '')}» станет мёртвым камнем, любая колония на ней — включая столицу — будет стёрта.</div>`
       : `<div class="hp-vnd-warnline">${esc(EC_SHELL_LABEL[shellKind])}: планета уцелеет — ${esc(EC_BALL_INFO[shellKind] || '')}.</div>`)
