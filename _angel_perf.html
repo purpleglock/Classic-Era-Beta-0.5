@@ -1,0 +1,20 @@
+<!doctype html><meta charset=utf-8><title>◈ замер спрайта</title>
+<body style="background:#0b0d12;color:#cfd8e6;font:13px ui-monospace">
+<canvas id=c width=400 height=400></canvas><pre id=o>считаю…</pre>
+<script src="angel_fx.js?v=perf"></script>
+<script>
+const x = document.getElementById('c').getContext('2d');
+function bench(R, detail, n){
+  // прогрев (кэши градиентов)
+  for(let i=0;i<20;i++){ x.clearRect(0,0,400,400); angelDraw(x,{cx:200,cy:200,R,detail,tone:'246,224,150',id:'p'+detail,seals:1}); }
+  const t0=performance.now();
+  for(let i=0;i<n;i++){ x.clearRect(0,0,400,400); angelDraw(x,{cx:200,cy:200,R,detail,tone:'246,224,150',id:'p'+detail,seals:1}); }
+  return (performance.now()-t0)/n;
+}
+const N=120, out=[];
+ANGEL.lo=false;
+[[58,null],[58,1],[58,0],[30,null],[30,1]].forEach(([R,d])=>{
+  out.push('R='+R+' detail='+(d===null?'auto(=' + angelDetail(R) + ')':d)+'  →  '+bench(R,d,N).toFixed(2)+' мс/кадр');
+});
+document.getElementById('o').textContent = out.join('\n') + '\n\ndpr='+devicePixelRatio;
+</script></body>

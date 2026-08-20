@@ -5296,10 +5296,30 @@ function gmmFrameBody(ts) {
   // Аналогично — пока виден трафик караванов по гиперпутям.
   if (gmmDeepA() > 0.01) { GMM.dirty = true; again = true; }
   else if (gmmLaneA() > 0.01 && GMM.caravans && GMM.caravans.length) { GMM.dirty = true; again = true; }
-  // залпы артиллерии живут на любом зуме — гоним кадры, пока есть снаряды в полёте
-  if (GMM.salvos && GMM.salvos.length) { GMM.dirty = true; again = true; }
-  // корабли-носители аванпостов в полёте — тоже анимируем на любом зуме
-  if (GMM.defense && GMM.defense.ships && GMM.defense.ships.some(d => d.kind === 'transit')) { GMM.dirty = true; again = true; }
+  // ── МЕДЛЕННЫЕ ОТМЕТКИ: ЧАСЫ ПОЛЁТА, А НЕ КАДРЫ АНИМАЦИИ ──
+  // Снаряды и корабли в пути идут по трассам ЧАСАМИ: за кадр такая отметка
+  // сдвигается на тысячные доли пикселя, и перерисовывать ради неё весь
+  // оверлей 60 раз в секунду незачем. Раньше это сходило с рук, потому что
+  // перегоны редки и коротки. С ◈ Престолом перестало: ковчег марширует
+  // НЕПРЕРЫВНО, то есть карта попала в вечные 60 fps — на телефоне и на ПК
+  // одинаково. Держим для них свой такт (9 fps, ковчегу 30); жесты, зум и пульс
+  // выбранного юнита по-прежнему идут полным ходом.
+  const slowT = performance.now();
+  let slowWant = false, angelWant = false;
+  if (GMM.salvos && GMM.salvos.length) slowWant = true;
+  if (GMM.defense && GMM.defense.ships) {
+    const sp = GMM.defense.ships;
+    if (sp.some(d => d.kind === 'transit')) slowWant = true;
+    // ◈ Престол — исключение: у него ЖИВАЯ поза (крылья, колёса, взгляд), её
+    // надо показывать, а не подмораживать. Ему даём 30 fps — на глаз это
+    // ровное движение, а не 60 кадров ради полутора пикселей сдвига отметки.
+    if (GMM._angelDrawn) { angelWant = true; slowWant = true; }
+  }
+  if (slowWant) {
+    again = true;
+    const step = angelWant ? 33 : 110;
+    if (slowT - (GMM._slowT || 0) > step) { GMM.dirty = true; GMM._slowT = slowT; }
+  }
   if (GMM.opCmd || GMM.mzaCmd || GMM.fleetCmd) { GMM.dirty = true; again = true; }   // пульс кольца выбранного юнита
   if (GMM.dirty) { GMM.dirty = false; gmmBlit(); }
   if (gmmNeedRaster()) {
@@ -5320,6 +5340,10 @@ function gmmFrameBody(ts) {
 }
 function gmmBlit() {
   const ctx = GMM.ctx, dpr = GMM.dpr;
+  // ◈ Престол попал в кадр? Ставится самой отрисовкой ковчега (обе ветки —
+  // стоянка и перегон). По этому флагу цикл решает, гнать ли 30 fps ради его
+  // живой позы: ангел за краем экрана не повод жечь кадры.
+  GMM._angelDrawn = false;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#04060c';
   ctx.fillRect(0, 0, GMM.vw, GMM.vh);
@@ -8039,6 +8063,12 @@ function gmmCarrierGlyph(ctx, x, y, sz, col, a, ang) {
 // herald фракции (gmmFlagImg; нет картинки → заливка цветом). Тип различается формой/
 // цветом корпуса: mza — красный с реактором, носитель — корпус цвета фракции с дюзами.
 // Возвращает R (полуразмер герба) для внешней раскладки. opts:{type,hot,sel,t,integrity}.
+// Потолок подробности ангела НА КАРТЕ. Телефону — силуэт (0), десктопу —
+// первая ступень: тот же облик, но без слоёв крупного плана. Доски боя это
+// не касается, там ковчег по-прежнему во всей подробности.
+function gmAngelDetail() {
+  return (typeof angelLo === 'function' && angelLo()) ? 0 : 1;
+}
 function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
   const o = opts || {};
   const mza = o.type === 'mza';
@@ -8120,8 +8150,16 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
     ctx.beginPath(); ctx.arc(0, 0, AR * (1.55 + 0.30 * (1 - pulse)), 0, 6.2832); ctx.stroke();
     ctx.restore();
 
+    // ПОДРОБНОСТЬ — С ПОТОЛКОМ. Крылья, колёса, взгляд и моргание живые, как и
+    // были: считать позу дёшево. Дорого — слои, которыми она рисуется, а их
+    // ступень бралась от радиуса. Карта просит крупный R, чтобы ковчег было
+    // ВИДНО, и невольно заказывала ступень 3 (28 глаз с радужками, три обода
+    // с зубьями, 16 перьев с градиентами) — в оверлее, который перерисовывается
+    // целиком на каждый кадр панорамы. Отсюда и просадка на ПК, и на телефоне.
+    // На карте нужен силуэт, который движется, а не крупный план: ставим 1.
+    GMM._angelDrawn = true;
     if (typeof angelDraw === 'function') {
-      angelDraw(ctx, { cx: 0, cy: 0, R: AR, alpha: 1,
+      angelDraw(ctx, { cx: 0, cy: 0, R: AR, alpha: 1, detail: gmAngelDetail(),
                        tone: '246,224,150', gaze: -Math.PI / 2,
                        id: 'gm', seals: 1 });
     }
@@ -8695,9 +8733,10 @@ function gmmPaintDefense(ctx) {
           ctx.lineWidth = Math.max(1.4, AR * 0.07);
           ctx.beginPath(); ctx.arc(0, 0, AR * (1.15 + 0.22 * pulse), 0, 6.2832); ctx.stroke();
           ctx.restore();
+          GMM._angelDrawn = true;
           if (typeof angelDraw === 'function') {
-            angelDraw(ctx, { cx: hX, cy: hY, R: AR, alpha: 1, tone: '246,224,150',
-                             gaze: ang, id: 'gm-transit', seals: 1 });
+            angelDraw(ctx, { cx: hX, cy: hY, R: AR, alpha: 1, detail: gmAngelDetail(),
+                             tone: '246,224,150', gaze: ang, id: 'gm-transit', seals: 1 });
           }
           if (deep) {
             ctx.save();
