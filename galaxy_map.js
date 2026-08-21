@@ -205,7 +205,7 @@ async function loadGalaxyData() {
       dbGet('system_econ', 'select=system_id,status,prosperity').catch(() => []),
       // межзвёздная артиллерия: залпы в полёте (видны всем — угроза публична).
       // Таблицы может не быть (_interstellar_artillery.sql ещё не применён) → []
-      dbGet('doom_salvos', 'status=eq.in_flight&select=origin_system_id,target_system_id,target_pid,target_planet,launched_at,ready_at,faction_id').catch(() => []),
+      dbGet('doom_salvos', 'status=eq.in_flight&select=origin_system_id,target_system_id,target_pid,target_planet,target_fleet_id,launched_at,ready_at,faction_id').catch(() => []),
       // ОБОРОНА: видимые мне минные поля, аванпосты и мои корабли-носители аванпостов.
       // RPC требуют авторизации и фракции игрока → для гостей/без фракции вернут
       // ошибку, а если _defense_*.sql ещё не применён — функции нет. Везде → [].
@@ -2182,7 +2182,7 @@ async function gmReloadDefense(reopenSysId) {
       gmDefRpc('mza_ships_mine').catch(() => GM.mzaShips || []),
       gmDefRpc('fleets_mine').catch(() => GM.fleets || []),
       // залпы в полёте (doomgun + факельщик — общая таблица) для анимации снаряда на карте
-      dbGet('doom_salvos', 'status=eq.in_flight&select=origin_system_id,target_system_id,target_pid,target_planet,launched_at,ready_at,faction_id').catch(() => GM.salvos || []),
+      dbGet('doom_salvos', 'status=eq.in_flight&select=origin_system_id,target_system_id,target_pid,target_planet,target_fleet_id,launched_at,ready_at,faction_id').catch(() => GM.salvos || []),
       gmDefRpc('fleets_visible').catch(() => GM.fleetsVis || []),
       gmDefRpc('angel_status').catch(() => GM.angel || null),   // ПРЕСТОЛ
       gmDefRpc('mza_visible').catch(() => GM.mzaVis || []),
@@ -7566,8 +7566,20 @@ function gmmBuildSalvos() {
   GMM.salvos = [];
   if (!GM.salvos || !GM.salvos.length) return;
   const byId = Object.fromEntries((GM.systems || []).map(s => [s.id, s]));
+  // ◈ ЗАЛП ПО ФЛОТУ ВЕДЁТ СИГНАТУРУ. У «Сполоха» и у «Длани» по ковчегу цель —
+  // не координата, а борт: резолв берёт его там, где он есть на момент подлёта.
+  // Значит и конец дуги должен стоять на ФЛОТЕ, а не на звезде, записанной при
+  // пуске: иначе трасса упирается в систему, которую цель давно покинула.
+  // ⚠️ Точку в базе при этом НЕ трогаем (пробовали — см. _shell_track_off.sql):
+  // запись о залпе хранит факт пуска, по ней написана сводка, а «за кем он
+  // сейчас летит» — вопрос отрисовки и считается здесь, каждый кадр данных.
+  const fleetSys = {};
+  [].concat(GM.fleets || [], GM.fleetsVis || []).forEach(f => {
+    if (f && f.id) fleetSys[f.id] = f.system_id || f.dest_sys || f.from_sys || null;
+  });
   GM.salvos.forEach(s => {
-    const tgt = byId[s.target_system_id];
+    const chase = s.target_fleet_id ? byId[fleetSys[s.target_fleet_id]] : null;
+    const tgt = chase || byId[s.target_system_id];
     if (!tgt) return;                         // цель не на карте — нечего рисовать
     const ori = byId[s.origin_system_id];     // источник может быть неизвестен/вне карты
     const la = s.launched_at ? Date.parse(s.launched_at) : null;
