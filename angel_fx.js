@@ -549,13 +549,21 @@ function angelDrawCore(x, opt) {
   var t = opt.t == null ? angelT() : opt.t;
   var gaze = opt.gaze == null ? -Math.PI / 2 : opt.gaze;
   var seals = opt.seals == null ? 1 : Math.max(0, Math.min(1, opt.seals));
-  var D = angelDetail(R, opt.detail);
+  // ◈ СТРАЖА (opt.guard). Не отдельный рисунок, а ЭТОТ, снятый на ступень вниз:
+  // подобия делал он сам и делал по себе, значит и облик у них его — только
+  // беднее. Что снимаем: третье колесо (гироскоп схлопывается в два обода),
+  // верхнюю пару крыл (лица они не закрывают — им нечего закрывать), нимб и
+  // огонь между колёс. Что оставляем: глаза, ободья, маховые крылья, свечение.
+  // ⚠️ Подробность режем потолком, а не радиусом: на доске стража стоит рядом с
+  // ковчегом, и разница должна читаться в ОБЛИКЕ, а не в том, что «мельче».
+  var gd = !!opt.guard;
+  var D = angelDetail(R, gd ? Math.min(1, opt.detail == null ? 1 : opt.detail) : opt.detail);
   // Раскладку глаз берём В НАЧАЛЕ: ею пользуются и тело, и все три колеса, а
   // тело теперь рисуется РАНЬШЕ колёс — между ними легла заслонка.
   var E = angelEyes();
   // Печати ниже — свет тусклее и дыхание чаще: издыхающий ангел ВИДНО,
   // и это единственная подсказка галактике, что кампания работает.
-  var vigor = 0.45 + seals * 0.55;
+  var vigor = (0.45 + seals * 0.55) * (gd ? 0.72 : 1);
   var breath = Math.sin(t * (1.1 + (1 - seals) * 1.7));
 
   x.save();
@@ -565,7 +573,7 @@ function angelDrawCore(x, opt) {
   // 1) ДАЛЬНЕЕ СВЕЧЕНИЕ — единственное место, где виден цвет стороны.
   // Свечение «дышит», но квантованного шага в 2 px глазу хватает — иначе на
   // каждый кадр заводился новый радиальный градиент во всю ширину борта.
-  var halo = Math.max(2, angelQ(R * (2.9 + breath * 0.12), 2));
+  var halo = Math.max(2, angelQ(R * (gd ? 1.9 : 2.9) * (1 + breath * 0.04), 2));
   var qv = angelQ(vigor, 0.1);
   x.beginPath(); x.arc(0, 0, halo, 0, Math.PI * 2);
   x.fillStyle = angelGrad('h' + halo + '_' + qv.toFixed(1) + '_' + tone, function () {
@@ -609,6 +617,7 @@ function angelDrawCore(x, opt) {
   ];
   rings.forEach(function (rg) {
     if (rg.only && D < rg.only) return;
+    if (gd && rg.k === 1) return;      // у стражи колеса в колесе нет
     x.save();
     x.rotate(rg.tilt);
 
@@ -699,7 +708,7 @@ function angelDrawCore(x, opt) {
   //    лампад… и из огня выходила молния». Это единственное движение, которое
   //    происходит РЫВКОМ: всё остальное у него плавно, и на ровном плавном фоне
   //    рывок читается как чужая воля, а не как анимация.
-  if (D >= 2) {
+  if (D >= 2 && !gd) {
     var bolt = Math.floor(t / 1.9);               // номер вспышки
     var into = t - bolt * 1.9;
     if (into < 0.16) {
@@ -776,16 +785,19 @@ function angelDrawCore(x, opt) {
   // 7) ВЕРХНЯЯ ПАРА КРЫЛ — «ими закрывал лице». Поверх тела, потому и закрывал.
   var beatHi = Math.sin(t * 2.0 + 2.6) * 0.44;
   var rotHi = -Math.PI * 0.58;
-  x.save();
-  x.rotate(rotHi);
-  angelWing(x, R, +1, 0.26, beatHi, 0.78 * vigor, D, gaze - rotHi);
-  angelWing(x, R, -1, 0.26, beatHi, 0.78 * vigor, D, gaze - rotHi);
-  x.restore();
+  if (!gd) {
+    x.save();
+    x.rotate(rotHi);
+    angelWing(x, R, +1, 0.26, beatHi, 0.78 * vigor, D, gaze - rotHi);
+    angelWing(x, R, -1, 0.26, beatHi, 0.78 * vigor, D, gaze - rotHi);
+    x.restore();
+  }
 
   // 8) НИМБ — наклонный обод с бегущим блеском. Не круг над головой:
   //    круг над головой читается как иконка, а не как объект.
   x.save();
   x.rotate(-0.28);
+  if (gd) { x.restore(); } else {
   var nr = R * 1.28, nw = 0.26, ny = -R * 0.92;
   x.beginPath();
   x.ellipse(0, ny, nr, nr * nw, 0, 0, Math.PI * 2);
@@ -824,6 +836,7 @@ function angelDrawCore(x, opt) {
     x.fillStyle = sg; x.fill();
   }
   x.restore();
+  }
 
   // 9) ЗАСЛОНКА. Поверх ВСЕГО, кроме вспышки. Пробовали убрать её под кольца,
   //    чтобы не закрывала ювелирку, — стало хуже: заслонка утонула между

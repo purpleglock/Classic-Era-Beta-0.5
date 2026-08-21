@@ -3524,6 +3524,7 @@ function gmOpenFleetCmd(id) {
       ${comp ? `<div class="gm-opcmd-hint">${comp}</div>` : ''}
       ${gmFleetTankHtml(fl)}
       <button class="gm-opcmd-btn" onclick="gmFleetCmdSend()">➤ Перебросить — выберите систему</button>
+      ${gmAngelEngageHtml(fl)}
       ${fl.can_recall ? `<button class="gm-opcmd-btn" onclick="gmFleetCmdRecall()">↩ Вернуть на базу</button>` : ''}
       <div id="gm-fleet-raid"></div>
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetCmdDisband()">✕ Распустить флот</button>
@@ -3531,6 +3532,44 @@ function gmOpenFleetCmd(id) {
   el.classList.remove('gm-hidden');
   gmFleetRaidLoad(id, fl.system_id);   // подтягиваем чужие караваны на пути флота
 }
+// ── ◈ ВЫЙТИ НАВСТРЕЧУ ──────────────────────────────────────────
+// На доску с Престолом и его стражей выходят ДОБРОВОЛЬНО: ни прилёт, ни обход
+// стоящих флотов боя не заводят (см. _angel_no_conscript.sql). Значит должна
+// быть кнопка — без неё правило «только по своей воле» означает «никогда».
+// Кнопку показываем, когда в системе флота стоит хоть один его борт: тело или
+// стража. Что именно там стоит, разбирает сервер.
+function gmAngelHere(sysId) {
+  const a = GM.angel; if (!a || !a.fid || a.fell) return null;
+  if (GM.myFid === a.fid) return null;                       // сам себе навстречу не выходят
+  const all = (GM.fleetsVis || []).concat(GM.fleets || []);
+  const f = all.find(x => x && x.faction_id === a.fid && x.system_id === sysId
+                       && (x.status === 'idle' || !x.status));
+  if (!f) return null;
+  return { ark: !(a.fleet && f.id !== a.fleet), guards: +a.guards || 0 };
+}
+function gmAngelEngageHtml(fl) {
+  if (!fl || fl.status !== 'idle' || !fl.system_id) return '';
+  const h = gmAngelHere(fl.system_id); if (!h) return '';
+  return `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetEngageAngel()">◈ Выйти навстречу</button>
+      <div class="gm-opcmd-hint">Оно не нападает первым. Бой начнётся только этой кнопкой, и выйти из него будет нельзя.</div>`;
+}
+async function gmFleetEngageAngel() {
+  if (!GMM.fleetCmd) return; const id = GMM.fleetCmd.id;
+  if (GM._defBusy) return; GM._defBusy = true;
+  try {
+    const r = await gmDefRpc('angel_engage', { p_fleet: id });
+    if (r && r.ok) {
+      toast('◈ Курс на сближение. Бой начат — доска в разделе «Бои».', 'ok');
+      gmCloseFleetCmd();
+      await gmReloadDefense();
+    } else {
+      toast('◈ ' + ((r && r.why) || 'сойтись не вышло'), 'err');
+    }
+  } catch (e) {
+    toast('Ошибка: ' + (e.message || e), 'err');
+  } finally { GM._defBusy = false; }
+}
+
 // ── ПИРАТСТВО: грабёж чужого каравана, чья трасса проходит через систему флота ──
 // Единственная проверка на сервере — заметили/нет. Список целей грузим лениво.
 async function gmFleetRaidLoad(id, sysId) {
@@ -7762,8 +7801,15 @@ function gmmBuildDefense() {
     // в цвет державы. Своя отметка, свой цвет (кость и золото), без бейджа.
     const angelFid = (GM.angel && GM.angel.fid) || null;
     const angelCol = [246, 224, 150];
+    // ◈ СТРАЖА. Флот ангела, который НЕ ковчег, — это подобия у порога: их
+    // можно пересчитать (они корабли), и бейдж с числом им полагается. Отличаем
+    // по id флота тела, а не по составу: состав у стражи убывает по мере боёв.
+    const angelFleet = (GM.angel && GM.angel.fleet) || null;
     (GM.fleets || []).forEach(fl => pushShip(fl, (fl.faction_id === angelFid || (angelFid && GM.myFid === angelFid))
-      ? { fleet: true, angel: true, side: 'left', col: angelCol, ships: null, intel: false }
+      ? (angelFleet && fl.id !== angelFleet
+        ? { fleet: true, angel: true, guard: true, side: 'left', col: angelCol,
+            ships: +fl.ships || 0, intel: false }
+        : { fleet: true, angel: true, side: 'left', col: angelCol, ships: null, intel: false })
       : {
         fleet: true, side: 'left', col: fleetCol, station: !!fl.is_station,
         ships: +fl.ships || 0, canRecall: !!fl.can_recall,
@@ -7791,8 +7837,10 @@ function gmmBuildDefense() {
       // он не умеет и не собирается. Разведка на него не влияет — считать в нём
       // нечего, «состав» у него один.
       if (fl.faction_id === ((GM.angel && GM.angel.fid) || null)) {
-        pushShip(fl, { fleet: true, angel: true, side: 'left', col: [246, 224, 150],
-                       enemy: true, fid: fl.faction_id, ships: null, intel: false,
+        const gdF = !!(GM.angel && GM.angel.fleet && fl.id !== GM.angel.fleet);
+        pushShip(fl, { fleet: true, angel: true, guard: gdF, side: 'left', col: [246, 224, 150],
+                       enemy: true, fid: fl.faction_id,
+                       ships: gdF ? (fl.ships == null ? null : +fl.ships) : null, intel: false,
                        facName: fl.faction_name });
         return;
       }
@@ -8136,10 +8184,14 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
     ctx.restore();                       // тени спрайту не нужны, он сам светится
     // Верхний предел тоже нужен: на глубоком зуме без него ковчег закрывает
     // собой всю систему вместе с орбитами, и смотреть становится не на что.
-    const AR = Math.min(Math.max(sz * 4.2, 22), 58);
+    // Страже — свой калибр: вдвое мельче тела и без нижнего порога-события.
+    // Она отметка флота, пусть и странного, а событие галактики здесь одно.
+    const AR = o.guard ? Math.min(Math.max(sz * 2.1, 13), 30)
+                       : Math.min(Math.max(sz * 4.2, 22), 58);
     // Тревожный обод: медленный пульс вокруг. У чужого факельщика такой же
     // приём означает «обнаружен», здесь — «оно здесь», и он крупнее.
     const pulse = 0.5 + 0.5 * Math.sin((o.t || 0) * 1.6);
+    if (!o.guard) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.strokeStyle = `rgba(255,232,168,${0.13 + 0.17 * pulse})`;
@@ -8149,6 +8201,7 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
     ctx.lineWidth = Math.max(1, AR * 0.045);
     ctx.beginPath(); ctx.arc(0, 0, AR * (1.55 + 0.30 * (1 - pulse)), 0, 6.2832); ctx.stroke();
     ctx.restore();
+    }
 
     // ПОДРОБНОСТЬ — С ПОТОЛКОМ. Крылья, колёса, взгляд и моргание живые, как и
     // были: считать позу дёшево. Дорого — слои, которыми она рисуется, а их
@@ -8160,8 +8213,8 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
     GMM._angelDrawn = true;
     if (typeof angelDraw === 'function') {
       angelDraw(ctx, { cx: 0, cy: 0, R: AR, alpha: 1, detail: gmAngelDetail(),
-                       tone: '246,224,150', gaze: -Math.PI / 2,
-                       id: 'gm', seals: 1 });
+                       tone: '246,224,150', gaze: -Math.PI / 2, guard: !!o.guard,
+                       id: o.guard ? 'gm-guard' : 'gm', seals: 1 });
     }
     ctx.restore();
     return AR * 1.35;                    // радиус клик-зоны/подписи — по новому калибру
@@ -8563,9 +8616,9 @@ function gmmPaintDefense(ctx) {
         // Корабль с флагом-штандартом за спиной (герб фракции — прямо на карте).
         const ER = gmmUnitEmblem(ctx, cX, cY, csz, d.fid || GM.myFid, d.col,
           { type: d.angel ? 'angel' : (d.mza ? 'mza' : (d.army ? 'army' : (d.fleet ? 'fleet' : 'carrier'))),
-            hot: !!(d.mza && d.canFire), sel, t });
+            guard: !!d.guard, hot: !!(d.mza && d.canFire), sel, t });
         // Флот: бейдж с числом кораблей у нижнего края значка.
-        if (d.angel) {
+        if (d.angel && !d.guard) {
           // ⚠️ На месте, где у каждого флота стоит число кораблей, у ковчега
           // стоит СБОЙ. Не «?» (вопрос читается как «разведай и узнаешь»), а
           // помеха: считать тут нечего, и прибор это признаёт.
@@ -8660,7 +8713,7 @@ function gmmPaintDefense(ctx) {
           const enemyTag = d.enemy && d.facName ? ` · ${d.facName}` : '';
           // ⚠️ Ковчег не подписываем ни классом, ни державой: подпись — это
           // уже классификация, а его никто не классифицировал.
-          const fleetLbl = d.angel ? '◈ ▓░▒ ▚'
+          const fleetLbl = (d.angel && !d.guard) ? '◈ ▓░▒ ▚'
             : d.army ? (stacked ? `Армии · ${n}` : '🪖 Армия')
             : d.station ? '🛰 Станция'
             : d.enemy ? 'Чужой флот' + enemyTag : (stacked ? `Флоты · ${n}` : 'Флот');
@@ -8718,7 +8771,7 @@ function gmmPaintDefense(ctx) {
         // Он не челнок: у него нет носа, который надо доворачивать по курсу,
         // он всегда развёрнут к смотрящему. Разворачиваем только ВЗГЛЯД — по
         // направлению движения, чтобы было видно, куда оно идёт.
-        if (d.angel) {
+        if (d.angel && !d.guard) {
           // Калибр ТОТ ЖЕ, что у стоящего (clamp 22..58): иначе на перегоне
           // ковчег заметно мельчал — базу транзита ограничивает Math.min(9,…)
           // под обычный челнок, и после умножения он всю дорогу лежал на

@@ -4210,8 +4210,10 @@ function bbPaintUnits(ctx, s) {
 // корпуса (урона не существует), нет шеврона (некуда его вести).
 // Взгляд наводим на ближайшего живого врага: именно общий взгляд десятков
 // глаз превращает россыпь колёс в одно существо, которое тебя ВЫБРАЛО.
-function bbAngel(ctx, u, alpha, cx, cy) {
-  if (typeof angelSyncHits === 'function') angelSyncHits(u);
+// Взгляд на ближайшего живого врага. Общий и для ковчега, и для стражи:
+// именно общий взгляд десятков глаз превращает россыпь колёс в существо,
+// которое тебя ВЫБРАЛО, — и у подобий он ровно тот же.
+function bbGazeAt(u, cx, cy) {
   const s = BB.st || {};
   let gaze = -Math.PI / 2, best = 1e9;
   (s.units || []).forEach(t => {
@@ -4219,6 +4221,12 @@ function bbAngel(ctx, u, alpha, cx, cy) {
     const d = (t.x - u.x) * (t.x - u.x) + (t.y - u.y) * (t.y - u.y);
     if (d < best) { best = d; const c = bbHexCenter(t.x, t.y); gaze = Math.atan2(c.py - cy, c.px - cx); }
   });
+  return gaze;
+}
+
+function bbAngel(ctx, u, alpha, cx, cy) {
+  if (typeof angelSyncHits === 'function') angelSyncHits(u);
+  const gaze = bbGazeAt(u, cx, cy);
   const tone = BB_C[bbTone(u)] || BB_C.foe;
   // ⚠️ НЕ доля печатей, а ступень яркости (pk.dim, три значения). Точного
   // состояния клиент не знает и знать не должен: по нему считались бы
@@ -4457,12 +4465,24 @@ function bbShip(ctx, u, alpha) {
     ctx.restore();
   }
 
-  // спрайт корпуса: нос смотрит вправо → поворот на угол курса
-  ctx.translate(cx, cy);
-  ctx.rotate(ang);
-  ctx.drawImage(spr, -(g.padL + g.hullW / 2) * sc, -dh / 2, dw, dh);
-  ctx.rotate(-ang);
-  ctx.translate(-cx, -cy);
+  // ◈ СТРАЖА ПРЕСТОЛА. Класс у неё честный (dreadnought), и всё остальное —
+  // курс, шеврон, след, полоса корпуса — считается как у обычного борта. Своя
+  // здесь только КАРТИНКА: вместо кэшированного силуэта тот же процедурный
+  // спрайт, что и у ковчега, но на ступень ниже (opt.guard в angel_fx.js).
+  // Метку ставит сервер (pk.gd), класс для этого не трогаем — см. _angel_guard.sql.
+  if (u.pk && u.pk.gd && typeof angelDraw === 'function') {
+    if (typeof angelSyncHits === 'function') angelSyncHits(u);
+    angelDraw(ctx, { cx, cy, R: BB.R * 0.78, alpha, tone: col,
+                     gaze: bbGazeAt(u, cx, cy), id: u.id, guard: true });
+    if (typeof angelWantsFrames === 'function' && angelWantsFrames()) bbAnimKick();
+  } else {
+    // спрайт корпуса: нос смотрит вправо → поворот на угол курса
+    ctx.translate(cx, cy);
+    ctx.rotate(ang);
+    ctx.drawImage(spr, -(g.padL + g.hullW / 2) * sc, -dh / 2, dw, dh);
+    ctx.rotate(-ang);
+    ctx.translate(-cx, -cy);
+  }
 
   // полоски состояния под гексом
   const bw = BB.R * 1.15, bx = cx - bw / 2, by = cy + BB.R * 0.92;

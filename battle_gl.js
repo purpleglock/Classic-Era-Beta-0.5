@@ -1193,16 +1193,18 @@ function bgSyncUnits() {
       // неопознанный контакт: отметка на радаре без ТТХ и без корпуса —
       // сервер не отдал класс, и рисовать «какой-нибудь» корабль нельзя
       const ang = bgIsAngel(u);
+      const gdn = bgIsGuard(u);
       // ◈ ПРЕСТОЛ. Габарит берём НЕ от класса: у ангела нет корпуса, его
       // размер задаёт свечение — 2.9 радиуса в каждую сторону (см. angel_fx.js).
       // Полотно строим ровно под него, чтобы halo не срезался кромкой.
-      const L = ang ? BB.R * 1.15 * 2.9 * 2
+      const L = gdn ? BB.R * 0.78 * 1.9 * 2
+        : ang ? BB.R * 1.15 * 2.9 * 2
         : u.contact ? BB.R * 0.8
         : BB.R * (0.75 + (typeof bbClsSize === 'function' ? bbClsSize(u.cls) : 1) * 1.15) * BG_SHIP_K;
       m = ang ? bgBuildAngel() : u.contact ? bgBuildContact() : bgBuildShip(u.cls, bgTone(u), uh);
       m.scale.setScalar(L);
       m.userData.key = key; m.userData.uid = u.id;
-      m.userData.L = L; m.userData.angel = ang;
+      m.userData.L = L; m.userData.angel = ang; m.userData.gd = gdn;
       m.userData.y = ang ? BB.R * 0.9 : u.contact ? BB.R * 0.3 : L * 0.12;   // высота килем над плоскостью
       BG.g.units.add(m);
       BG.units.set(u.id, m);
@@ -1279,8 +1281,12 @@ function bgPlaceUnits() {
  * точки камерой и берём угол уже НА ЭКРАНЕ: тогда, как доску ни поверни,
  * глаза продолжают смотреть на ту же цель.                                  */
 function bgIsAngel(u) {
-  return !!u && !u.contact && u.cls === 'angel' && typeof angelDraw === 'function';
+  return !!u && !u.contact && typeof angelDraw === 'function'
+      && (u.cls === 'angel' || !!(u.pk && u.pk.gd));
 }
+// ◈ СТРАЖА: тот же билборд, что и у ковчега, но спрайт беднее и габарит меньше.
+// Отличаем по метке сервера (pk.gd), а НЕ по классу: класс у них честный.
+function bgIsGuard(u) { return !!u && !u.contact && !!(u.pk && u.pk.gd) && u.cls !== 'angel'; }
 
 function bgBuildAngel() {
   const grp = new THREE.Group();
@@ -1316,11 +1322,12 @@ function bgStepAngels() {
     const x = cv.getContext('2d');
     x.clearRect(0, 0, px, px);
     // Радиус подбираем так, чтобы свечение (2.9R) село ровно в полотно.
-    const R = px / 2 / 2.9;
+    const gdn = !!m.userData.gd;
+    const R = px / 2 / (gdn ? 1.9 : 2.9);
     const tone = (typeof BB_C !== 'undefined' && BB_C[bgTone(u)]) || '255,220,140';
     const dim = (u.pk && u.pk.dim != null) ? +u.pk.dim : 1;
-    angelDraw(x, { cx: px / 2, cy: px / 2, R, alpha: 1, tone,
-                   gaze: bgAngelGaze(u, m), id: u.id, seals: dim });
+    angelDraw(x, { cx: px / 2, cy: px / 2, R, alpha: 1, tone, guard: gdn,
+                   gaze: bgAngelGaze(u, m), id: u.id, seals: gdn ? 1 : dim });
     m.userData.sp.material.map.needsUpdate = true;
   });
   if (any) BG.dirty = true;

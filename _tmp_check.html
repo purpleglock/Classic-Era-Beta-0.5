@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8"><title>check</title>
+<body style="background:#04060c;margin:0">
+<canvas id="cv" width="1600" height="900" style="display:block"></canvas>
+<pre id="r" style="color:#8899b0;font:12px monospace"></pre>
+<script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6/dist/d3-delaunay.min.js"></script>
+<script>window.GM_GEO_DEBUG=1;</script>
+<script src="galaxy_gen.js"></script>
+<script src="galaxy_map.js"></script>
+<script src="_tmp_probe.js"></script>
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+function mkN(id,x,y){return {id,x,y,name:'Сосед',star_type:'yellow',is_giant:false,faction:null,stars:[],multi:true,planets:[],_bodies:null};}
+const p=window.SL_PROBE;
+const main=Object.assign({},p.sys,{x:5000,y:3000,is_giant:false,faction:null,multi:true,_bodies:null});
+const ring=[],lanes=[];
+for(let i=0;i<6;i++){const a=i*6.2832/6+0.3;const id='n'+i;
+ ring.push(mkN(id,Math.round(5000+Math.cos(a)*900),Math.round(3000+Math.sin(a)*900)));
+ if(i%2===0)lanes.push({id:'l'+i,a_id:main.id,b_id:id});}
+GM.systems=[main,...ring];GM.lanes=lanes;GM.colonies=[];GM.capitals={};GM.capPlanet={};GM.factions=[];
+GMM.paths=null;
+try{gmmBuildWorld();}catch(e){console.warn(e);}
+function draw(z){const s=z;Object.assign(GMM,{s,vw:cv.width,vh:cv.height,dpr:1,imgs:GMM.imgs||{},colonyXY:{}});
+ GMM.ctx=ctx;GMM.tx=cv.width/2-5000*s;GMM.ty=cv.height/2-3000*s;
+ ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#04060c';ctx.fillRect(0,0,cv.width,cv.height);
+ gmmRaster();
+ ctx.save();ctx.setTransform(s,0,0,s,GMM.tx,GMM.ty);
+ try{gmmPaintVector(ctx,s,true);}catch(e){document.getElementById('r').textContent='ERR '+e.message;}
+ ctx.restore();
+ gmmPaintOrbits(ctx);
+ ctx.save();ctx.setTransform(s,0,0,s,GMM.tx,GMM.ty);gmmPaintStars(ctx,s);ctx.restore();
+ const g=gmBuildGeo();
+ document.getElementById('r').textContent='подпутей: '+g.lanes.filter(l=>String(l.id).startsWith('in:')).length+
+  ' / всего трасс '+g.lanes.length+'\nграниц: '+g.edges.length+
+  '\nраскладка главной: '+JSON.stringify((gmSysLayout(main,gmmCellPolys(main)).rw||[]).map(v=>Math.round(v)));}
+window.draw=draw;draw(4.6);
+</script></body>
