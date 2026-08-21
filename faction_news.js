@@ -1673,6 +1673,7 @@ async function fnRenderNewsTab(b, only) {
         <span>📰 Новости фракции «${esc(fac.name || '')}»</span>
         <button class="btn btn-gd btn-sm" onclick="fnOpenComposer()">✚ Написать новость</button>
       </div>
+      ${fnTomeBar(mine)}
       <div class="fn-mine-list">${rows}</div>
       <div class="fn-tab-note">Новость уходит на проверку администрации. После одобрения она появится на главной в «Вестнике фракций».</div>
     </div>`;
@@ -2429,4 +2430,42 @@ async function fnAdminDelete(id, ev) {
     toast('Удалено', 'ok');
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
   finally { FN.busy = false; }
+}
+
+// ── Строка «Собрание сочинений»: сколько всего знаков написала держава ──
+// Счёт идёт по ВСЕМ депешам державы (заголовок + тело), включая ждущие
+// модерации и отклонённые: писали — значит писали. Вместо уровня подставляем
+// реальную книгу сопоставимого объёма.
+const FN_TOMES = [
+  { n: 0,        t: 'Чистый лист',                    a: '' },
+  { n: 4500,     t: 'Толстый и тонкий',               a: 'А. Чехов' },
+  { n: 40000,    t: 'Каштанка',                       a: 'А. Чехов' },
+  { n: 90000,    t: 'Маленький принц',                a: 'А. де Сент-Экзюпери' },
+  { n: 120000,   t: 'Превращение',                    a: 'Ф. Кафка' },
+  { n: 300000,   t: 'Евгений Онегин',                 a: 'А. Пушкин' },
+  { n: 380000,   t: 'Солярис',                        a: 'С. Лем' },
+  { n: 400000,   t: 'Пикник на обочине',              a: 'А. и Б. Стругацкие' },
+  { n: 570000,   t: '1984',                           a: 'Дж. Оруэлл' },
+  { n: 900000,   t: 'Мастер и Маргарита',             a: 'М. Булгаков' },
+  { n: 1400000,  t: 'Преступление и наказание',       a: 'Ф. Достоевский' },
+  { n: 2700000,  t: 'Властелин колец',                a: 'Дж. Р. Р. Толкин' },
+  { n: 3100000,  t: 'Война и мир',                    a: 'Л. Толстой' },
+  { n: 7500000,  t: 'В поисках утраченного времени',  a: 'М. Пруст' },
+];
+function fnTomeChars(list) {
+  return (list || []).reduce((s, n) => s + ((n.title || '').length + (n.body || '').length), 0);
+}
+function fnTomeNum(v) { return String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+function fnTomeName(t) { return t.a ? `«${t.t}», ${t.a}` : t.t; }
+// Строка-крючок + раскрывающаяся полка. Вся разметка статична, состояние —
+// класс .open на обёртке, поэтому перерисовка секции ничего не ломает.
+function fnTomeBar(list) {
+  const total = fnTomeChars(list);
+  let i = 0;
+  while (i + 1 < FN_TOMES.length && total >= FN_TOMES[i + 1].n) i++;
+  const cur = FN_TOMES[i];
+  const what = total < FN_TOMES[1].n
+    ? 'короче самого короткого рассказа на полке'
+    : `с книгу <i>${esc(fnTomeName(cur))}</i>`;
+  return `<div class="fn-tome"><span>Написано <b>${fnTomeNum(total)}</b> ${fnPlural(total, 'знак', 'знака', 'знаков')}</span><span class="fn-tome-sep">|</span><span>${what}</span></div>`;
 }

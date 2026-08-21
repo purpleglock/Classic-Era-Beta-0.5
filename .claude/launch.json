@@ -230,6 +230,16 @@
         "8241"
       ],
       "port": 8241
+    },
+    {
+      "name": "wpn-fx",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8247"
+      ],
+      "port": 8247
     }
   ]
 }

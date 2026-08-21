@@ -401,13 +401,18 @@ function bbDiffAnimate(prev, cur) {
         // лучом, ракетный шлёт дугу с дымом, кинетика сыплет очередью
         const a = bbHexCenter(sh.x, sh.y), col = bbShooterCol(sh);
         const w = bbShotKind(sh, ev.x, ev.y);
-        const prof = bbFxWProf(w.k, w.shots);
+        const prof = bbFxWProf(w.k, w.shots, w.fx);
         foeAct.push(a);
-        const at = bbFxVolley(a, c, prof, start, col);
+        // цвет выстрела: у энергетики свой (по технологии), у болванок и
+        // ракет — тон стороны, иначе теряется, кто ведёт огонь
+        const at = bbFxVolley(a, c, prof, start, prof.col || col);
+        const shotAng = Math.atan2(c.py - a.py, c.px - a.px);
         const kind = ev.kind === 'boom' ? (prof.impact === 'nova' ? 'nova' : 'boom')
                    : (prof.impact === 'mend' ? 'hit' : prof.impact);
+        // гибель — всегда огонь стороны; живое попадание красит технология
         bbFxAdd({ kind, px: c.px, py: c.py, t0: at, dur: bbFxImpDur(kind),
-                  col: ev.col, dmg: ev.dmg, big: prof.big || 1, shk: prof.shake || 0 });
+                  col: ev.kind === 'boom' ? ev.col : (prof.col || ev.col),
+                  ang: shotAng, dmg: ev.dmg, big: prof.big || 1, shk: prof.shake || 0 });
       } else {
         bbFxAdd({ kind: ev.kind, px: c.px, py: c.py, t0: start, dur: bbFxImpDur(ev.kind),
                   col: ev.col, dmg: ev.dmg, shk: ev.kind === 'boom' ? 5 : 2 });
@@ -420,7 +425,8 @@ function bbDiffAnimate(prev, cur) {
       if (cl && ev.kind !== 'boom') kind = (cl.kind === 'mend' || cl.kind === 'wave') ? 'hit' : cl.kind;
       if (cl && ev.kind === 'boom' && cl.kind === 'nova') kind = 'nova';
       bbFxAdd({ kind, px: c.px, py: c.py, t0: start, dur: bbFxImpDur(kind),
-                col: ev.col, dmg: ev.dmg, shk: ev.kind === 'boom' ? 5 : 1 });
+                col: (cl && ev.kind !== 'boom' && cl.col) || ev.col,
+                ang: cl && cl.ang, dmg: ev.dmg, shk: ev.kind === 'boom' ? 5 : 1 });
     }
   });
   // Камера магнитится к действиям противника: наводится на них И зумит,
@@ -1321,16 +1327,68 @@ const BBFX_M = {
   pdup:      { aura: 1, ring: 'buff',  impact: 'mend', shake: 0 },
   aboost:    { aura: 1, ring: 'shield', impact: 'mend', shake: 0 },
 };
+// ── ПОДПИСЬ ОРУДИЯ (fx) ─────────────────────────────────────
+// Каналов урона три и трогать их нельзя — на них висят стойкости брони. Но
+// на доске из-за этого рельсотрон, лазер, плазма, ионник, грав-орудие и
+// аннигилятор были одним из трёх мазков. Паспорт группы теперь несёт второй
+// ключ 'fx' (его считает _cn_wpn_fx/_tg_wpn_fx на сервере) — он ни на что не
+// влияет в расчёте, зато у каждой технологии свой снаряд, след, цвет и
+// характер попадания. Чего в словаре нет — падает в канал (BBFX_W).
+//   col — цвет ВЫСТРЕЛА: у энергетики он свой, у болванок и ракет остаётся
+//         тон стороны, чтобы не терять «кто стреляет».
+const BBFX_S = {
+  // болванки: очередь, злые короткие искры, цвет — стороны
+  ballistic: { shot: 'slug', n: 3, gap: 75, fly: 230, impact: 'spark', shake: 2 },
+  // картечь и осколки: рой мелких вспышек по площади, а не одна точка
+  flak:      { shot: 'slug', n: 6, gap: 45, fly: 250, impact: 'shred', shake: 2,
+               spread: 0.8, col: '255,205,130' },
+  // рельсотрон: белая игла почти без времени полёта, насквозь
+  rail:      { shot: 'rail', n: 1, gap: 0, fly: 70, impact: 'pierce', shake: 4,
+               col: '190,225,255', big: 1.15 },
+  // лазер: мгновенный луч, выжженное добела пятно, без крошки
+  laser:     { shot: 'lance', n: 1, gap: 0, fly: 90, impact: 'bloom', shake: 1,
+               col: '255,120,60' },
+  // плазма: медленный тяжёлый сгусток, за ним — горящая рана
+  plasma:    { shot: 'bolt', n: 2, gap: 130, fly: 460, impact: 'melt', shake: 3,
+               col: '130,255,205', arc: 0.06, big: 1.3 },
+  // ионное/ЭМ: разряд бьёт по системам — ветвистые дуги, а не огонь
+  ion:       { shot: 'lance', n: 1, gap: 0, fly: 120, impact: 'emp', shake: 2,
+               col: '150,180,255' },
+  // грав-орудие: борт сминает внутрь, свет затягивает в точку
+  grav:      { shot: 'bolt', n: 1, gap: 0, fly: 520, impact: 'crush', shake: 5,
+               col: '190,140,255', arc: 0.10, big: 1.2 },
+  // аннигилятор: холодный разрез, обшивку не жжёт — вычитает
+  void:      { shot: 'lance', n: 1, gap: 0, fly: 80, impact: 'rend', shake: 4,
+               col: '255,90,220', big: 1.25 },
+  // ракеты: дуга с дымом и настоящий взрыв, цвет — стороны
+  missile:   { shot: 'rocket', n: 2, gap: 140, fly: 620, impact: 'boom', shake: 4, arc: 0.16 },
+  // торпеда: одна, долго, тяжело
+  torpedo:   { shot: 'rocket', n: 1, gap: 0, fly: 900, impact: 'boom', shake: 7,
+               arc: 0.42, big: 1.6 },
+  // ударные дроны: рой мелких заходов вразнобой
+  swarm:     { shot: 'rocket', n: 5, gap: 90, fly: 520, impact: 'boom', shake: 2,
+               arc: 0.22, spread: 0.7, big: 0.7, col: '255,200,120' },
+  // нанорой: не бьёт, а сшивает
+  nano:      { shot: 'nanite', n: 1, gap: 0, fly: 520, impact: 'mend', shake: 0, arc: 0.28 },
+};
 // Профиль оружейной группы. shots из паспорта умножает очередь: рой из шести
 // стволов и один тяжёлый удар обязаны звучать по-разному.
-function bbFxWProf(k, shots) {
-  const base = BBFX_W[k] || BBFX_W.kinetic;
+function bbFxWProf(k, shots, fx) {
+  const base = (fx && BBFX_S[fx]) || BBFX_W[k] || BBFX_W.kinetic;
   const p = Object.assign({}, base);
   const s = Math.max(1, Math.min(8, Math.round(+shots || 0)));
-  if (s > 1 && k !== 'repair') {
-    p.n = k === 'energy' ? Math.min(4, s) : Math.min(8, Math.max(p.n, s));
-    p.gap = Math.max(35, Math.round((k === 'missile' ? 140 : 75) * 3 / p.n));
-    if (k === 'missile') p.spread = 0.35;
+  // Очередь множим только тому, у кого она есть по смыслу: у луча, иглы и
+  // грав-удара скорострельность — это яркость и толщина, а не число копий.
+  const many = p.shot === 'slug' || p.shot === 'rocket' || p.shot === 'bolt';
+  if (s > 1 && k !== 'repair' && p.shot !== 'nanite') {
+    if (many) {
+      p.n = Math.min(8, Math.max(p.n || 1, s));
+      p.gap = Math.max(35, Math.round((p.shot === 'rocket' ? 140 : 75) * 3 / p.n));
+      if (p.shot === 'rocket') p.spread = Math.max(p.spread || 0, 0.35);
+    } else {
+      p.n = Math.min(3, Math.max(p.n || 1, Math.ceil(s / 2)));
+      p.gap = Math.max(60, p.gap || 90);
+    }
   }
   return p;
 }
@@ -1348,7 +1406,7 @@ function bbFxMProf(key) {
 // корабля есть, и почерк по нему угадывается честнее, чем «всегда трассер».
 function bbShotKind(u, x, y) {
   const gs = ((u && Array.isArray(u.wpn)) ? u.wpn : []).filter(g => !bbIsHeal(g));
-  if (!gs.length) return { k: 'kinetic', shots: 1 };
+  if (!gs.length) return { k: 'kinetic', fx: null, shots: 1 };
   const L = (x != null && u.x != null) ? bbDist(u, { x, y }) : null;
   let best = null, bw = -1;
   gs.forEach(g => {
@@ -1358,16 +1416,17 @@ function bbShotKind(u, x, y) {
     if (w > bw) { bw = w; best = g; }
   });
   if (!best) best = gs[0];
-  return { k: best.k || 'kinetic', shots: +best.shots || 1 };
+  // fx может не прийти со старого снимка — тогда почерк берётся по каналу
+  return { k: best.k || 'kinetic', fx: best.fx || null, shots: +best.shots || 1 };
 }
 
 // ── Заявка на попадание ─────────────────────────────────────
 // Свой выстрел рисуется по клику, а урон приходит следующим снимком. Чтобы
 // вспышка попадания не опережала снаряд, стрелок «бронирует» гекс на момент
 // прилёта, а дифф снимков берёт это время и тип удара.
-function bbFxClaim(x, y, at, kind) {
+function bbFxClaim(x, y, at, kind, col, ang) {
   if (!BB.fxClaim) BB.fxClaim = new Map();
-  BB.fxClaim.set(x + ':' + y, { at, kind });
+  BB.fxClaim.set(x + ':' + y, { at, kind, col, ang });
 }
 function bbFxTake(x, y, now) {
   if (!BB.fxClaim) return null;
@@ -1378,6 +1437,11 @@ function bbFxTake(x, y, now) {
   return c;
 }
 function bbFxImpDur(kind) {
+  if (kind === 'melt') return 900;      // рана горит дольше вспышки
+  if (kind === 'crush') return 760;     // схлопывание идёт медленно
+  if (kind === 'rend')  return 560;
+  if (kind === 'pierce') return 520;
+  if (kind === 'shred') return 620;
   return kind === 'nova' ? 1600 : kind === 'boom' ? 950 : kind === 'emp' ? 620
        : kind === 'mend' ? 700 : kind === 'frost' ? 700 : kind === 'wave' ? 620
        : kind === 'bloom' ? 460 : kind === 'drainx' ? 640 : 480;
@@ -1408,6 +1472,14 @@ function bbFxVolley(a, b, prof, t0, col, opt) {
       bbFxAdd({ kind: 'warp', px: a.px, py: a.py, x1, y1, t0: st, dur: fly + 260, col });
     } else if (prof.shot === 'lunge') {
       bbFxAdd({ kind: 'lunge', x0: a.px, y0: a.py, x1, y1, t0: st, dur: fly + 200, col, big });
+    } else if (prof.shot === 'rail') {
+      // рельса: разгонная вспышка у ствола шире дульной и уходит НАЗАД
+      bbFxAdd({ kind: 'flash', px: a.px, py: a.py, t0: st, dur: 260, col, big: 1.4 });
+      bbFxAdd({ kind: 'rail', x0: a.px, y0: a.py, x1, y1, t0: st, dur: fly + 260, col, big, seed });
+    } else if (prof.shot === 'bolt') {
+      bbFxAdd({ kind: 'flash', px: a.px, py: a.py, t0: st, dur: 300, col, soft: 1 });
+      bbFxAdd({ kind: 'bolt', x0: a.px, y0: a.py, x1, y1, t0: st, dur: fly, col,
+                arc: (prof.arc || 0) * (i % 2 ? -1 : 1), big, seed });
     } else if (prof.shot === 'rocket') {
       bbFxAdd({ kind: 'flash', px: a.px, py: a.py, t0: st, dur: 420, col, soft: 1 });
       bbFxAdd({ kind: 'rocket', x0: a.px, y0: a.py, x1, y1, t0: st, dur: fly, col,
@@ -1923,10 +1995,19 @@ const BB_KIND = { kinetic: 'кинетик', energy: 'лазер', missile: 'р�
 // Ремонтная группа (нанотехнологии): бьёт не по врагу, а латает СОЮЗНЫЙ корабль.
 function bbIsHeal(g) { return g && g.k === 'repair'; }
 function bbKindLabel(k) { return BB_KIND[k] || k; }
+// Технология группы — человеческим словом. Канал (kinetic/energy/missile)
+// говорит, по какой стойкости брони считается урон; ЭТО говорит, что игрок
+// увидит на доске. Показываем именно технологию: игроку важнее узнать свой
+// рельсотрон в залпе, чем прочитать «кинетик» третий раз подряд.
+const BBFX_RU = {
+  ballistic: 'болванки', flak: 'картечь', rail: 'рельсотрон', laser: 'лазер',
+  plasma: 'плазма', ion: 'ионное', grav: 'грав-орудие', void: 'аннигилятор',
+  missile: 'ракеты', torpedo: 'торпеда', swarm: 'ударные дроны', nano: 'нанорой',
+};
 // Имя огневой группы: ручная батарея игрока — буквой, авто — по каналу.
 // Тир залпа (shots) идёт отдельной пометкой: 1 = один тяжёлый удар, 6 = рой.
 function bbGroupLabel(g) {
-  const kind = g.k ? bbKindLabel(g.k) : 'орудия';
+  const kind = (g.fx && BBFX_RU[g.fx]) || (g.k ? bbKindLabel(g.k) : 'орудия');
   return g.bat ? `Группа ${esc(g.bat)} · ${kind}` : kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 // Модель урона группы по дистанции — словами. Плоский профиль (арта, ракеты)
@@ -2901,7 +2982,7 @@ function bbClick(x, y) {
     if (!r.ok) { toast(r.why, 'err'); return; }
     const a = bbHexCenter(sel.x, sel.y), b = bbHexCenter(tgt.x, tgt.y);
     const t0 = performance.now();
-    const at = bbFxVolley(a, b, bbFxWProf('repair', 1), t0, BB_C.heal);
+    const at = bbFxVolley(a, b, bbFxWProf('repair', 1, 'nano'), t0, BB_C.heal);
     bbFxImpact(b.px, b.py, at, 'mend', BB_C.heal, null);
     bbAnimKick();
     BB.heal = false;
@@ -2938,9 +3019,10 @@ function bbClick(x, y) {
     // почерк — из паспорта своей же батареи; попадание дорисует дифф снимков,
     // но время прилёта бронируем прямо сейчас, чтобы вспышка не обгоняла снаряд
     const w = bbShotKind(sel, tgt.x, tgt.y);
-    const prof = bbFxWProf(w.k, w.shots);
-    const at = bbFxVolley(a, b, prof, t0, BB_C.mine);
-    bbFxClaim(tgt.x, tgt.y, at, prof.impact);
+    const prof = bbFxWProf(w.k, w.shots, w.fx);
+    const at = bbFxVolley(a, b, prof, t0, prof.col || BB_C.mine);
+    bbFxClaim(tgt.x, tgt.y, at, prof.impact, prof.col,
+              Math.atan2(b.py - a.py, b.px - a.px));
     bbAnimKick();
     bbFire(sel.id, tgt.id);
     return;
@@ -3142,6 +3224,11 @@ const BBFX_DUST = {
   frost:  { s: 10, sp: 0.6, deb: 0 },
   mend:   { s: 10, sp: 0.5, deb: 0 },
   drainx: { s: 10, sp: 0.7, deb: 0 },
+  pierce: { s: 12, sp: 1.6, deb: 3 },   // навылет: крошка уходит ЗА борт
+  melt:   { s: 9,  sp: 0.45, deb: 1 },  // капли стекают, далеко не летят
+  rend:   { s: 6,  sp: 0.8, deb: 0 },   // разрез не даёт крошки
+  crush:  { s: 12, sp: 0.9, deb: 3 },   // обломки затягивает обратно
+  shred:  { s: 18, sp: 1.1, deb: 2 },
 };
 function bbFxAdd(fx) {
   // искры/обломки/дым — заранее, чтобы разлёт был детерминирован и не «кипел»
@@ -3294,6 +3381,60 @@ function bbFxSlug(ctx, f, t, R, iz, now) {
   const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, hr);
   g.addColorStop(0, `rgba(255,255,255,${0.95 * fade})`);
   g.addColorStop(0.6, `rgba(${f.col},${0.5 * fade})`);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, hr, 0, 6.2832); ctx.fill();
+}
+
+// Рельса: болванки не видно — видно КАНАЛ, который она прожгла. Игла
+// вспыхивает на всю линию сразу и гаснет, оставляя дрожащий контур ионизации.
+// Так гиперскорость читается мгновенностью, а не быстрым трассером.
+function bbFxRail(ctx, f, t, R, iz) {
+  const big = f.big || 1;
+  const a = t < 0.12 ? 1 : Math.max(0, 1 - (t - 0.12) / 0.88);
+  const dx = f.x1 - f.x0, dy = f.y1 - f.y0, L = Math.hypot(dx, dy) || 1;
+  const nx = -dy / L, ny = dx / L;
+  // канал: широкий холодный ореол
+  ctx.strokeStyle = `rgba(${f.col},${0.22 * a})`;
+  ctx.lineWidth = Math.max(3, 8 * iz * big);
+  ctx.beginPath(); ctx.moveTo(f.x0, f.y0); ctx.lineTo(f.x1, f.y1); ctx.stroke();
+  // игла: добела раскалённая нить, тоньше всего в игре
+  ctx.strokeStyle = `rgba(255,255,255,${0.95 * a})`;
+  ctx.lineWidth = Math.max(0.6, 1.3 * iz * big);
+  ctx.beginPath(); ctx.moveTo(f.x0, f.y0); ctx.lineTo(f.x1, f.y1); ctx.stroke();
+  // ионизация: линия дрожит и расходится в стороны по мере угасания
+  ctx.strokeStyle = `rgba(${f.col},${0.5 * a * a})`;
+  ctx.lineWidth = Math.max(0.4, 0.9 * iz);
+  for (const sg of [1, -1]) {
+    ctx.beginPath();
+    for (let i = 0; i <= 12; i++) {
+      const k = i / 12;
+      const w = sg * R * 0.10 * big * (1 - t) * Math.sin(k * Math.PI) * (1 + t * 2);
+      const x = f.x0 + dx * k + nx * w, y = f.y0 + dy * k + ny * w;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+// Плазменный сгусток: тяжёлый ком, который ЛЕТИТ и виден весь путь. Ядро
+// пульсирует, за ним тянется остывающая нитка капель — не трассер и не луч.
+function bbFxBolt(ctx, f, t, R, iz, now) {
+  const big = f.big || 1;
+  const fade = t > 0.85 ? (1 - t) / 0.15 : 1;
+  const p = bbFxPt(f, t);
+  // шлейф: капли отстают и гаснут
+  for (let i = 1; i <= 5; i++) {
+    const k = Math.max(0, t - i * 0.045);
+    if (k <= 0) break;
+    const c = bbFxPt(f, k), rr = R * 0.10 * big * (1 - i / 6);
+    ctx.fillStyle = `rgba(${f.col},${0.30 * fade * (1 - i / 6)})`;
+    ctx.beginPath(); ctx.arc(c.x, c.y, rr, 0, 6.2832); ctx.fill();
+  }
+  const pul = 1 + 0.14 * Math.sin(now * 0.02 + (f.seed || 0));
+  const hr = R * 0.24 * big * pul;
+  const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, hr);
+  g.addColorStop(0, `rgba(255,255,255,${0.95 * fade})`);
+  g.addColorStop(0.35, `rgba(${f.col},${0.8 * fade})`);
   g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, hr, 0, 6.2832); ctx.fill();
 }
@@ -3550,6 +3691,8 @@ function bbPaintFx(ctx) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
     if (f.kind === 'slug')        { bbFxSlug(ctx, f, t, R, iz, now);   ctx.restore(); return; }
+    if (f.kind === 'rail')        { bbFxRail(ctx, f, t, R, iz);        ctx.restore(); return; }
+    if (f.kind === 'bolt')        { bbFxBolt(ctx, f, t, R, iz, now);   ctx.restore(); return; }
     if (f.kind === 'rocket')      { bbFxRocket(ctx, f, t, R, iz, now); ctx.restore(); return; }
     if (f.kind === 'lance')       { bbFxLance(ctx, f, t, R, iz, now);  ctx.restore(); return; }
     if (f.kind === 'tether')      { bbFxTether(ctx, f, t, R, iz, now); ctx.restore(); return; }
@@ -3633,6 +3776,137 @@ function bbPaintFx(ctx) {
         ctx.beginPath();
         ctx.arc(f.px + Math.cos(s.a) * d, f.py + Math.sin(s.a) * d, Math.max(0.5, R * 0.04), 0, 6.2832);
         ctx.fill();
+      });
+    } else if (f.kind === 'pierce') {
+      // рельса: болванка прошла НАСКВОЗЬ. Читается это не шаром, а осью —
+      // входная точка, выброс материала с ТЫЛЬНОЙ стороны и обжатый конус.
+      const big = f.big || 1, ang = (f.ang == null ? 0 : f.ang);
+      const cs = Math.cos(ang), sn = Math.sin(ang);
+      const ir = R * 0.16 * big * (1 - t * 0.5);
+      const g = ctx.createRadialGradient(f.px, f.py, 0, f.px, f.py, ir);
+      g.addColorStop(0, `rgba(255,255,255,${0.95 * a})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.px, f.py, ir, 0, 6.2832); ctx.fill();
+      // выброс: всё уходит вперёд по вектору, узким веером
+      ctx.lineWidth = Math.max(0.5, 1.2 * iz);
+      (f.spark || []).forEach(sp => {
+        const off = (sp.a % 1 - 0.5) * 0.7;             // разброс ±20°
+        const d0 = R * 0.2 + R * 1.5 * sp.sp * bbEase(t);
+        const d1 = d0 + R * 0.3 * sp.sp * a;
+        const ca = ang + off, cc = Math.cos(ca), ss = Math.sin(ca);
+        ctx.strokeStyle = sp.hot ? `rgba(235,245,255,${a})` : `rgba(${f.col},${0.8 * a})`;
+        ctx.beginPath();
+        ctx.moveTo(f.px + cc * d0, f.py + ss * d0);
+        ctx.lineTo(f.px + cc * d1, f.py + ss * d1);
+        ctx.stroke();
+      });
+      // сама пробоина: короткая яркая черта вдоль оси
+      ctx.strokeStyle = `rgba(255,255,255,${0.8 * a * a})`;
+      ctx.lineWidth = Math.max(1, 2.4 * iz * big);
+      const hl = R * 0.55 * big;
+      ctx.beginPath();
+      ctx.moveTo(f.px - cs * hl * 0.4, f.py - sn * hl * 0.4);
+      ctx.lineTo(f.px + cs * hl, f.py + sn * hl);
+      ctx.stroke();
+    } else if (f.kind === 'melt') {
+      // плазма: не взрыв, а РАНА. Пятно расплава растекается, темнеет к краю
+      // и роняет капли; жар держится дольше, чем любая вспышка.
+      const big = f.big || 1;
+      const rr = R * (0.22 + bbEase(Math.min(1, t * 1.6)) * 0.5) * big;
+      const g = ctx.createRadialGradient(f.px, f.py, 0, f.px, f.py, rr);
+      g.addColorStop(0, `rgba(255,255,255,${0.85 * a * a})`);
+      g.addColorStop(0.35, `rgba(${f.col},${0.7 * a})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.px, f.py, rr, 0, 6.2832); ctx.fill();
+      // рваная кромка расплава — по ней пятно читается прожогом, а не шаром
+      ctx.strokeStyle = `rgba(${f.col},${0.55 * a})`;
+      ctx.lineWidth = Math.max(0.5, 1.4 * iz);
+      ctx.beginPath();
+      for (let i = 0; i <= 18; i++) {
+        const an = i / 18 * 6.2832;
+        const j = rr * (0.82 + 0.18 * Math.sin(an * 5 + (f.px % 3)));
+        const x = f.px + Math.cos(an) * j, y = f.py + Math.sin(an) * j;
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.closePath(); ctx.stroke();
+      // капли: стекают недалеко и гаснут в тёмное
+      (f.spark || []).forEach(sp => {
+        const d = R * (0.15 + sp.sp * 0.7 * bbEase(t));
+        const x = f.px + Math.cos(sp.a) * d, y = f.py + Math.sin(sp.a) * d;
+        ctx.fillStyle = `rgba(${f.col},${0.85 * a * a})`;
+        ctx.beginPath(); ctx.arc(x, y, Math.max(0.6, R * 0.06 * sp.r * a), 0, 6.2832); ctx.fill();
+      });
+    } else if (f.kind === 'rend') {
+      // аннигилятор: материю не жжёт, а ВЫЧИТАЕТ. Поперёк оси удара
+      // раскрывается щель, внутри неё — пустота, по кромке — холодный свет.
+      const big = f.big || 1, ang = (f.ang == null ? 0 : f.ang) + Math.PI / 2;
+      const k = t < 0.35 ? t / 0.35 : 1 - (t - 0.35) / 0.65;   // раскрылась и схлопнулась
+      const hl = R * 0.95 * big * Math.max(0, k);
+      const hw = R * 0.16 * big * Math.max(0, k);
+      const cs = Math.cos(ang), sn = Math.sin(ang);
+      // сама щель — ЧЁРНАЯ, обычным режимом: дыра не светится
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = `rgba(6,4,10,${0.9 * a})`;
+      ctx.beginPath();
+      ctx.ellipse(f.px, f.py, hl, hw, ang, 0, 6.2832);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      // кромка разреза
+      ctx.strokeStyle = `rgba(${f.col},${0.95 * a})`;
+      ctx.lineWidth = Math.max(0.8, 1.8 * iz);
+      ctx.beginPath(); ctx.ellipse(f.px, f.py, hl, hw, ang, 0, 6.2832); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.7 * a * a})`;
+      ctx.lineWidth = Math.max(0.5, 1 * iz);
+      ctx.beginPath();
+      ctx.moveTo(f.px - cs * hl, f.py - sn * hl);
+      ctx.lineTo(f.px + cs * hl, f.py + sn * hl);
+      ctx.stroke();
+    } else if (f.kind === 'crush') {
+      // грав-удар: единственный эффект, который идёт ВНУТРЬ. Кольцо
+      // сжимается, крошку затягивает к центру, свет уходит в точку.
+      const big = f.big || 1, k = bbEase(t);
+      const rr = R * 1.5 * big * (1 - k * 0.92);
+      ctx.strokeStyle = `rgba(${f.col},${0.8 * a})`;
+      ctx.lineWidth = Math.max(1, (1.4 + 2.5 * k) * iz);
+      ctx.beginPath(); ctx.arc(f.px, f.py, rr, 0, 6.2832); ctx.stroke();
+      ctx.strokeStyle = `rgba(${f.col},${0.4 * a})`;
+      ctx.lineWidth = Math.max(0.5, 1 * iz);
+      ctx.beginPath(); ctx.arc(f.px, f.py, rr * 1.45, 0, 6.2832); ctx.stroke();
+      // обломки: летят к центру и там пропадают
+      (f.spark || []).forEach(sp => {
+        const d = R * 1.4 * big * sp.sp * (1 - k);
+        const an = sp.a + k * 2.2;                     // закручивает по спирали
+        ctx.fillStyle = `rgba(${f.col},${0.9 * a})`;
+        ctx.beginPath();
+        ctx.arc(f.px + Math.cos(an) * d, f.py + Math.sin(an) * d,
+                Math.max(0.6, R * 0.05 * sp.r), 0, 6.2832);
+        ctx.fill();
+      });
+      // схлопнувшийся свет — яркая точка в самом конце
+      if (t > 0.7) {
+        const fl = (t - 0.7) / 0.3, pr = R * 0.3 * big * (1 - fl);
+        const g = ctx.createRadialGradient(f.px, f.py, 0, f.px, f.py, Math.max(0.1, pr));
+        g.addColorStop(0, `rgba(255,255,255,${0.95 * (1 - fl)})`);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(f.px, f.py, Math.max(0.1, pr), 0, 6.2832); ctx.fill();
+      }
+    } else if (f.kind === 'shred') {
+      // картечь: не одна точка, а РОССЫПЬ. Десяток мелких вспышек по борту,
+      // каждая со своим сроком — залп читается как град, а не как удар.
+      const big = f.big || 1;
+      (f.spark || []).forEach((sp, i) => {
+        const born = (i % 5) * 0.12;                   // прилетают вразнобой
+        const k = (t - born) / (1 - born);
+        if (k <= 0) return;
+        const d = R * 0.75 * big * sp.r;
+        const x = f.px + Math.cos(sp.a) * d, y = f.py + Math.sin(sp.a) * d;
+        const rr = R * 0.13 * big * (1 - k * 0.6);
+        const g = ctx.createRadialGradient(x, y, 0, x, y, rr);
+        g.addColorStop(0, `rgba(255,255,255,${0.9 * (1 - k)})`);
+        g.addColorStop(0.5, `rgba(${f.col},${0.6 * (1 - k)})`);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rr, 0, 6.2832); ctx.fill();
       });
     } else if (f.kind === 'emp') {
       // подавитель: разряды по борту и схлопывающееся кольцо помех

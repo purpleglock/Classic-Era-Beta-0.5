@@ -1777,9 +1777,13 @@ function bgFxNode(objs, step) {
 // готовые эффекты. Наша задача: не свести их обратно к одной линии. Луч —
 // лучом, болванка и ракета — летящим телом, импульс — расходящимся кольцом.
 function bgFxBuild(f) {
-  if (f.kind === 'beam' || f.kind === 'lance' || f.kind === 'tether') return bgFxBeam(f);
-  if (f.kind === 'slug' || f.kind === 'rocket' || f.kind === 'nanite' || f.kind === 'lunge')
+  if (f.kind === 'beam' || f.kind === 'lance' || f.kind === 'tether' || f.kind === 'rail')
+    return bgFxBeam(f);
+  if (f.kind === 'slug' || f.kind === 'rocket' || f.kind === 'nanite' || f.kind === 'lunge'
+      || f.kind === 'bolt')
     return bgFxShot(f);
+  if (f.kind === 'pierce' || f.kind === 'melt' || f.kind === 'rend'
+      || f.kind === 'crush' || f.kind === 'shred') return bgFxMark(f);
   if (f.kind === 'wave' || f.kind === 'warp') return bgFxWave(f);
   if (f.kind === 'flash') return bgFxFlash(f);
   if (f.kind === 'hit' || f.kind === 'boom') return bgFxBlast(f);
@@ -1800,7 +1804,7 @@ function bgFxShot(f) {
   const head = bgSprite(bgTexGlow(), 0xffffff, 0);
   const objs = [tail, core, halo, head];
   const rocket = f.kind === 'rocket';
-  const slow = rocket || f.kind === 'nanite';
+  const slow = rocket || f.kind === 'nanite' || f.kind === 'bolt';
   // хвост меряем в мире, а не в долях пути: иначе на длинной дистанции
   // снаряд растягивается в мазок через полдоски
   const L = Math.hypot(f.x1 - f.x0, f.y1 - f.y0) || 1;
@@ -1849,6 +1853,107 @@ function bgFxShot(f) {
       puff.forEach((s2, i) => { if (s2.at > k) { arr[i * 3] = f.x0; arr[i * 3 + 1] = y - 1e4; arr[i * 3 + 2] = f.y0; } });
       sg.attributes.position.needsUpdate = true;
       smoke.material.opacity = 0.32 * a;
+    }
+  });
+}
+
+// Почерк технологии на прилёте. Пять ударов, которые НЕЛЬЗЯ свести к шару:
+// прокол идёт по оси, расплав остаётся раной, разрез вычитает материю,
+// грав-удар идёт внутрь, картечь рассыпается по борту. Числа урона рисует
+// общий блок ниже — он один на все попадания.
+function bgFxMark(f) {
+  const y = bgFxY(), R = BB.R * BG_FX_K, c = bgCol(f.col), big = f.big || 1;
+  const ang = (f.ang == null ? 0 : f.ang);
+  const objs = [];
+  const core = bgSprite(bgTexGlow(), 0xffffff, 0);
+  core.position.set(f.px, y, f.py); objs.push(core);
+  const ring = bgSprite(bgTexRing(), c, 0);
+  ring.position.set(f.px, y, f.py); objs.push(ring);
+
+  // Частицы: у каждого удара свой закон разлёта, но геометрия одна — точки.
+  const n = f.kind === 'shred' ? 16 : f.kind === 'melt' ? 8 : 12;
+  const dir = new Float32Array(n * 2), spd = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    // прокол выбрасывает материал ВПЕРЁД по вектору, узким веером
+    const th = f.kind === 'pierce' ? ang + (Math.random() - 0.5) * 0.7
+                                   : Math.random() * 6.2832;
+    dir[i * 2] = Math.cos(th); dir[i * 2 + 1] = Math.sin(th);
+    spd[i] = 0.35 + Math.random();
+  }
+  const sg = new THREE.BufferGeometry();
+  sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  const pts = new THREE.Points(sg, new THREE.PointsMaterial({
+    map: bgTexGlow(), color: c, size: R * (f.kind === 'shred' ? 0.26 : 0.18),
+    sizeAttenuation: true, transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  pts.userData.ownGeo = true; pts.frustumCulled = false;
+  objs.push(pts);
+
+  // Разрез: тёмная полоса поперёк оси удара. Обычным блендингом — дыра не светится.
+  let slit = null;
+  if (f.kind === 'rend') {
+    slit = bgRibbon(bgTexBeam(), 0x0a0610, 0);
+    slit.material.blending = THREE.NormalBlending;
+    objs.push(slit);
+  }
+  let num = null;
+  if (f.dmg > 0) { num = bgTextSprite('−' + Math.round(f.dmg), 0xffffff, R * 0.42, 0); objs.push(num); }
+
+  return bgFxNode(objs, t => {
+    const al = 1 - t, k = bbEase(t);
+    // ── ядро и кольцо: у грав-удара всё идёт ВНУТРЬ, у остальных наружу
+    let cs, rs, ca, ra;
+    if (f.kind === 'crush') {
+      cs = R * 0.3 * big * Math.max(0.05, 1 - k);       // свет схлопывается в точку
+      rs = R * 3.0 * big * (1 - k * 0.92);
+      ca = t > 0.7 ? (t - 0.7) / 0.3 : 0.15; ra = 0.8 * al;
+    } else if (f.kind === 'melt') {
+      cs = R * (0.4 + k * 1.0) * big;                   // пятно растекается и стынет
+      rs = R * (0.5 + k * 1.4) * big * 2;
+      ca = 0.85 * al * al; ra = 0.45 * al;
+    } else if (f.kind === 'rend') {
+      cs = R * 0.35 * big; rs = R * 1.2 * big;
+      ca = 0.7 * al; ra = 0.3 * al;
+    } else if (f.kind === 'shred') {
+      cs = R * 0.28 * big; rs = R * (0.6 + k * 1.6) * big * 2;
+      ca = 0.5 * al * al; ra = 0.35 * al;
+    } else {                                            // pierce
+      cs = R * 0.34 * big * (1 - t * 0.4); rs = R * (0.3 + k * 0.9) * big * 2;
+      ca = 0.95 * al; ra = 0.4 * al * al;
+    }
+    core.scale.set(cs, cs, 1); core.material.opacity = ca;
+    ring.scale.set(rs, rs, 1); ring.material.opacity = ra;
+
+    const sp = sg.attributes.position.array;
+    for (let i = 0; i < n; i++) {
+      let d;
+      if (f.kind === 'crush') d = R * 1.4 * big * spd[i] * (1 - k);      // затягивает к центру
+      else if (f.kind === 'melt') d = R * (0.15 + spd[i] * 0.7 * k) * big;
+      else if (f.kind === 'shred') d = R * 0.8 * big * spd[i];           // стоят на месте, гаснут
+      else if (f.kind === 'pierce') d = R * (0.2 + 1.6 * spd[i] * k) * big;
+      else d = R * (0.2 + 0.8 * spd[i] * k) * big;
+      // грав закручивает крошку по спирали — это единственный «водоворот» в бою
+      const sw = f.kind === 'crush' ? k * 2.2 : 0;
+      const dx = dir[i * 2] * Math.cos(sw) - dir[i * 2 + 1] * Math.sin(sw);
+      const dz = dir[i * 2] * Math.sin(sw) + dir[i * 2 + 1] * Math.cos(sw);
+      sp[i * 3] = f.px + dx * d; sp[i * 3 + 1] = y; sp[i * 3 + 2] = f.py + dz * d;
+    }
+    sg.attributes.position.needsUpdate = true;
+    pts.material.opacity = f.kind === 'shred' ? Math.max(0, 1 - t * 1.3) : al;
+
+    if (slit) {
+      // щель раскрывается и схлопывается: поперёк оси удара
+      const q = t < 0.35 ? t / 0.35 : 1 - (t - 0.35) / 0.65;
+      const hl = R * 0.95 * big * Math.max(0, q);
+      const nx = Math.cos(ang + Math.PI / 2), nz = Math.sin(ang + Math.PI / 2);
+      bgAimRibbon(slit, f.px - nx * hl, y, f.py - nz * hl,
+                        f.px + nx * hl, y, f.py + nz * hl, R * 0.3 * big * Math.max(0, q));
+      slit.material.opacity = 0.9 * al;
+    }
+    if (num) {
+      num.position.set(f.px, y + R * (0.55 + t * 1.6), f.py);
+      num.material.opacity = t < 0.15 ? t / 0.15 : Math.max(0, 1 - (t - 0.15) / 0.85);
     }
   });
 }
@@ -1905,6 +2010,9 @@ function bgFxWave(f) {
 // во время залпа, и лента обязана держаться ребром к объективу.
 function bgFxBeam(f) {
   const y = bgFxY(), R = BB.R * BG_FX_K, c = bgCol(f.col);
+  // рельса — не луч: канал широкий и холодный, а нить тоньше всего в игре
+  const rail = f.kind === 'rail';
+  const wG = rail ? 0.20 : 0.30, wC = rail ? 0.035 : 0.075;
   const glow = bgRibbon(bgTexBeam(), c, 0);
   const core = bgRibbon(bgTexBeam(), 0xffffff, 0);
   const objs = [glow, core];
@@ -1916,10 +2024,10 @@ function bgFxBeam(f) {
   }
   return bgFxNode(objs, t => {
     const a = 1 - t;
-    bgAimRibbon(glow, f.x0, y, f.y0, f.x1, y, f.y1, R * 0.30);
-    bgAimRibbon(core, f.x0, y, f.y0, f.x1, y, f.y1, R * 0.075);
-    glow.material.opacity = 0.5 * a;
-    core.material.opacity = 0.95 * a;
+    bgAimRibbon(glow, f.x0, y, f.y0, f.x1, y, f.y1, R * wG);
+    bgAimRibbon(core, f.x0, y, f.y0, f.x1, y, f.y1, R * wC);
+    glow.material.opacity = (rail ? 0.3 : 0.5) * a * a;
+    core.material.opacity = 0.95 * (rail ? Math.max(0, 1 - t * 1.6) : a);
     if (head) {
       const ht = Math.min(1, t * 1.25);         // снаряд добегает раньше, чем гаснет линия
       const hx = bbLerp(f.x0, f.x1, ht), hz = bbLerp(f.y0, f.y1, ht);

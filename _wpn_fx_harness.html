@@ -1,0 +1,37 @@
+<!doctype html><meta charset="utf-8"><title>Почерк орудий — стенд</title>
+<style>body{background:#0b0d12;color:#c8cede;font:13px system-ui;margin:0;padding:12px}
+canvas{display:block;background:#0b0d12}#log{color:#ff7b7b;white-space:pre}</style>
+<div id="log"></div><canvas id="c" width="1180" height="900"></canvas>
+<script src="battle_board.js?v=h1"></script>
+<script>
+try{
+const FX=['ballistic','flak','rail','laser','plasma','ion','grav','void','missile','torpedo','swarm','nano'];
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+window.BB={R:26,zoom:1,dpr:1,vw:1180,vh:900,anim:{fx:[],move:new Map(),raf:0},st:null};
+function seed(){
+  BB.anim.fx.length=0;
+  FX.forEach((fx,i)=>{
+    const row=Math.floor(i/3),col=i%3;
+    const ax=90+col*390, ay=120+row*210, bx=ax+250, by=ay;
+    const prof=bbFxWProf('kinetic',3,fx);
+    const c={px:bx,py:by}, a={px:ax,py:ay};
+    const at=bbFxVolley(a,c,prof,performance.now(),prof.col||'120,200,255');
+    const k=prof.impact==='mend'?'hit':prof.impact;
+    bbFxAdd({kind:k,px:bx,py:by,t0:at,dur:bbFxImpDur(k),col:prof.col||'255,150,60',
+             ang:0,dmg:120,big:prof.big||1,shk:prof.shake||0});
+  });
+}
+seed(); setInterval(seed,2600);
+function frame(){
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#0b0d12';ctx.fillRect(0,0,1180,900);
+  ctx.fillStyle='#7f8899';ctx.font='12px system-ui';
+  FX.forEach((fx,i)=>{const row=Math.floor(i/3),col=i%3;
+    ctx.fillText(fx+' — '+(BBFX_RU[fx]||''),90+col*390,120+row*210-42);});
+  bbPaintFx(ctx);
+  const now=performance.now();
+  BB.anim.fx=BB.anim.fx.filter(f=>now-f.t0<f.dur+50);
+  requestAnimationFrame(frame);
+}
+frame();
+}catch(e){document.getElementById('log').textContent='ОШИБКА: '+e.message+'\n'+e.stack;}
+</script>
