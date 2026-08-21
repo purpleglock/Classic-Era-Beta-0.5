@@ -2059,3 +2059,349 @@ begin
 end$function$;
 
 notify pgrst, 'reload schema';
+
+-- ════════════════════════════════════════════════════════════
+-- «ПРЕСТОЛ» — ШАГ 18: БОЙ СО СТРАЖЕЙ ИДЁТ ПО ОБЩИМ ПРАВИЛАМ
+-- ────────────────────────────────────────────────────────────
+-- ПОРЯДОК: за шагом 17, тем же файлом. Надмножество `_war_engage`.
+-- ⚠️ Правки завязки боя вести ОТСЮДА.
+--
+-- ЧТО БЫЛО НЕ ТАК. Шаг 15 оставил единственную дорогу к страже — кнопку
+-- «Выйти навстречу». Это костыль: кнопка писалась под КОВЧЕГ, который ходит по
+-- галактике и прилётом сгонял на доску каждый стоящий флот. Стража никуда не
+-- ходит, она стоит у порога — и правило «не сгонять» ей не нужно вовсе. Зато
+-- через кнопку не работало то, ради чего стража и заведена: подкрепления из
+-- резерва (`battle_reinforce` берёт корабли из флотов, втянутых в бой) и
+-- вступление третьей державы (`_war_join_battle` — «в бой вступает третья
+-- сила»). Оба механизма общие и живут в обычных боях; бой, заведённый в обход
+-- них, оставался поединком один на один.
+--
+-- КАК СТАЛО. Заслонка добровольности теперь смотрит на ФЛОТ-ТЕЛО, а не на
+-- державу: ковчег по-прежнему берут только кнопкой, а стража — обычный флот
+-- обычной державы. С ней бой завязывается встречей, перехватом и обходом
+-- стоящих; в него подводят подкрепления, в него вступают союзники, у него
+-- обычные часы и обычный конец с победителем (см. шаг 15: особые правила
+-- включаются по `_angel_ark_bt`, то есть по ковчегу НА доске).
+--
+-- КТО НАЧИНАЕТ. Обычный `_war_sweep` работает только для держав, которые УЖЕ
+-- в войне. Стража сама на войну никого не вызывает — поэтому ниже сторож
+-- `_angel_guard_watch`: чужой флот, вставший в системе с живой стражей,
+-- получает объявление войны и бой. Порог есть порог: пришёл — объясняйся.
+--
+-- КОВЧЕГ В ЭТОТ БОЙ НЕ ВСТУПАЕТ САМ. Он остаётся при своём правиле: на доску
+-- с ним выходят добровольно (кнопка тянет на доску и его, и стражу разом).
+-- Иначе рейд на стражу автоматически превращался бы в бой с ним, а это
+-- ровно то, от чего уходили в шаге «не сгонять».
+-- ════════════════════════════════════════════════════════════
+
+-- ── СТОРОЖ У ПОРОГА ─────────────────────────────────────────
+create or replace function public._angel_guard_watch()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare af text; g record; foe record; b uuid; n int := 0; wars int := 0;
+begin
+  af := public._angel_fid();
+  if af is null then return jsonb_build_object('ok', true, 'why', 'ангела нет'); end if;
+  if public._angel_guard_left() <= 0 then
+    return jsonb_build_object('ok', true, 'why', 'стражи нет');
+  end if;
+
+  for g in select distinct f.id, f.system_id
+             from public.fleets f
+             join public.angel_guard ag on ag.fleet_id = f.id and ag.dead_at is null
+            where f.status = 'idle' and f.system_id is not null
+  loop
+    if public._fleet_in_battle(g.id) is not null then continue; end if;
+
+    for foe in select fl.id, fl.faction_id from public.fleets fl
+                where fl.system_id = g.system_id and fl.status = 'idle'
+                  and fl.faction_id is distinct from af
+    loop
+      if public._fleet_in_battle(foe.id) is not null then continue; end if;
+      -- Война оформляется по факту прихода: разговаривать не о чем.
+      begin
+        if not public.at_war(af, foe.faction_id) then
+          perform public._angel_declare(foe.faction_id);
+          wars := wars + 1;
+        end if;
+      exception when others then null; end;
+
+      b := public._war_engage(g.id, foe.id, g.system_id, 'meeting');
+      if b is not null then n := n + 1; end if;
+      exit;                                  -- один бой за проход, дальше сам
+    end loop;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'battles', n, 'wars', wars);
+end$$;
+revoke all on function public._angel_guard_watch() from public;
+
+-- ── ТИК ДОСКИ: сторож + расстановка ─────────────────────────
+-- Надмножество шага 15. Зовётся кроном angel-ai-tick (раз в пять минут).
+create or replace function public.angel_battle_tick()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare b record; d int := 0; g int := 0; af text; w jsonb;
+begin
+  af := public._angel_fid();
+  if af is null then return jsonb_build_object('ok', true, 'why', 'ангела нет'); end if;
+
+  begin w := public._angel_guard_watch(); exception when others then w := null; end;
+
+  for b in select id from public.battles
+            where status = 'forming' and (attacker_fid = af or defender_fid = af)
+  loop
+    begin
+      if (public.angel_battle_deploy(b.id)->>'ok')::boolean then d := d + 1; end if;
+    exception when others then null;
+    end;
+    begin
+      g := g + coalesce((public._angel_guard_deploy(b.id)->>'placed')::int, 0);
+    exception when others then null;
+    end;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'deployed', d, 'guards', g, 'watch', w);
+end$$;
+revoke all on function public.angel_battle_tick() from public;
+
+-- ── 18.1 ЗАВЯЗКА БОЯ: НАДМНОЖЕСТВО _war_engage ─────────────
+CREATE OR REPLACE FUNCTION public._war_engage(p_mover_fleet uuid, p_foe_fleet uuid, p_sys text, p_kind text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+-- ⚠️ НАДМНОЖЕСТВО ЖИВОГО _war_engage (см. _angel_guard.sql, шаг 18).
+declare a_fid text; d_fid text; b uuid; wid uuid; sysname text;
+begin
+  select faction_id into a_fid from public.fleets where id = p_mover_fleet;
+  select faction_id into d_fid from public.fleets where id = p_foe_fleet;
+  if a_fid is null or d_fid is null or a_fid = d_fid then return null; end if;
+
+  -- ◈ ПРЕСТОЛ: на доску с ним выходят добровольно. Ни прилёт, ни обход
+  -- стоящих флотов, ни перехват на трассе боя с ковчегом не заводят.
+  -- ⚠️ Уже идущий бой это НЕ трогает: ниже мы просто не создаём новый.
+  begin
+    -- ⚠️ ПО ФЛОТУ-ТЕЛУ, А НЕ ПО ДЕРЖАВЕ. Добровольным остаётся бой с САМИМ
+    -- ковчегом: он идёт по галактике, и правило «не сгонять на доску» писалось
+    -- ровно про его прилёты. Стража стоит на месте и является обычным флотом
+    -- обычной державы — с ней бой завязывается как со всеми: встречей,
+    -- перехватом, обходом стоящих. Иначе к ней нельзя ни подвести подкрепление,
+    -- ни позвать союзника — а это ровно то, ради чего стража и заведена.
+    if exists (select 1 from public.angel_state s
+                where s.fell_at is null
+                  and s.fleet_id in (p_mover_fleet, p_foe_fleet))
+       and not public._angel_engage_meant() then
+      return null;
+    end if;
+  exception when undefined_function then null; end;
+
+  select b2.id into b from public.battles b2
+   where b2.system_id = p_sys and b2.status <> 'done'
+     and ((b2.attacker_fid = a_fid and b2.defender_fid = d_fid)
+       or (b2.attacker_fid = d_fid and b2.defender_fid = a_fid))
+   limit 1;
+
+  if b is null then
+    select w.id into wid from public.wars w
+      join public.war_sides sa on sa.war_id = w.id and sa.fid = a_fid
+      join public.war_sides sd on sd.war_id = w.id and sd.fid = d_fid and sd.side <> sa.side
+     where w.status = 'active' limit 1;
+    insert into public.battles(system_id, war_id, attacker_fid, defender_fid, kind)
+      values (p_sys, wid, a_fid, d_fid, coalesce(p_kind,'meeting'))
+      returning id into b;
+
+    select coalesce(nullif(name,''), id) into sysname from public.map_systems where id = p_sys;
+    perform public._war_news(
+      (case when p_kind = 'intercept' then '🛑 Перехват: ' else '⚔ Столкновение флотов: ' end) || sysname,
+      public._news_pick(array[
+        format('Флоты %s и %s сходятся в системе %s. Отступать некуда — бой неизбежен.',
+               public._war_nm(a_fid), public._war_nm(d_fid), sysname),
+        format('В %s замечены встречные курсы: корабли %s наткнулись на заслон %s. Начинается сражение.',
+               sysname, public._war_nm(a_fid), public._war_nm(d_fid)),
+        format('%s перехвачена силами %s в системе %s. Орудия расчехлены.',
+               public._war_nm(a_fid), public._war_nm(d_fid), sysname)
+      ]),
+      jsonb_build_array(a_fid, d_fid));
+  end if;
+
+  -- Втягиваем оба флота (повторный вызов безвреден).
+  insert into public.battle_fleets(battle_id, fleet_id, fid, side)
+    select b, p_mover_fleet, a_fid,
+           case when (select attacker_fid from public.battles where id=b) = a_fid then 'attacker' else 'defender' end
+  on conflict (battle_id, fleet_id) do nothing;
+  insert into public.battle_fleets(battle_id, fleet_id, fid, side)
+    select b, p_foe_fleet, d_fid,
+           case when (select attacker_fid from public.battles where id=b) = d_fid then 'attacker' else 'defender' end
+  on conflict (battle_id, fleet_id) do nothing;
+  -- Стража выходит на доску сразу: совещаться ей не с кем, а бой уже идёт.
+  begin perform public._angel_guard_deploy(b); exception when others then null; end;
+  return b;
+end$function$;
+
+notify pgrst, 'reload schema';
+
+-- ════════════════════════════════════════════════════════════
+-- «ПРЕСТОЛ» — ШАГ 19: КОВЧЕГ ВСТАЛ КОЛОМ В ЧУЖОМ БОЮ
+-- ────────────────────────────────────────────────────────────
+-- ПОРЯДОК: за шагом 18, тем же файлом. Надмножество `_war_join_battle`.
+-- ⚠️ Правки вступления в чужой бой вести ОТСЮДА.
+--
+-- ЧТО НАШЛОСЬ ПО ЖАЛОБЕ «ангел перестал двигаться». Ковчег стоял `idle` в
+-- sys_15 и числился скованным боем `c24ed629` от 06:07 — перехват ЛЕГИОНА
+-- против чужой державы, где ангела нет ни в нападающих, ни в защищающихся.
+-- Его втянуло туда ТРЕТЬЕЙ СИЛОЙ через `_war_join_battle`: `_war_sweep` зовёт
+-- эту дверь ПЕРВОЙ, а заслонка добровольности стояла только в `_war_engage`.
+-- Дальше «флот скован боем — никуда не уйдёт», и ангел десять часов не ходил
+-- по карте вообще, а в чужой расстановке висел безымянным «Кораблём» на
+-- 900 000 корпуса из резерва (`battle_pool` читает состав втянутых флотов).
+--
+-- ВТОРАЯ ПРИЧИНА, ПОЧЕМУ ЭТО НЕ РАССОСАЛОСЬ САМО. Сторож `_angel_grip_sweep`,
+-- который для того и писался — «ковчег нельзя держать боем», — не был подвешен
+-- НИ К ОДНОМУ крону: живого вызова у него не было ни одного. Плюс он ищет бои
+-- по `attacker_fid/defender_fid`, а здесь ангел не сторона, а третий.
+--
+-- ЛЕЧЕНИЕ ТРОЙНОЕ:
+--   1) ковчег не вступает в чужие бои сам (заслонка теперь и в этой двери);
+--   2) `_angel_unstick` вытаскивает тело из ЧУЖИХ досок, где его нет на поле, —
+--      не закрывая при этом сам бой: он не наш, там дерутся другие;
+--   3) оба сторожа подвешены к тику `angel-ai-tick` (раз в пять минут).
+-- Стражи всё это не касается: она обычный флот, скованность боем для неё —
+-- нормальное правило, и вступать в бои у своего порога она должна.
+-- ════════════════════════════════════════════════════════════
+
+-- ── ВЫТАЩИТЬ ТЕЛО ИЗ ЧУЖОЙ ДОСКИ ────────────────────────────
+create or replace function public._angel_unstick()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare a record; r record; n int := 0;
+begin
+  select * into a from public.angel_state where fell_at is null order by created_at limit 1;
+  if a.fleet_id is null then return jsonb_build_object('ok', true, 'why', 'ангела нет'); end if;
+
+  for r in select bf.battle_id, b.status, b.attacker_fid, b.defender_fid
+             from public.battle_fleets bf
+             join public.battles b on b.id = bf.battle_id
+            where bf.fleet_id = a.fleet_id
+  loop
+    -- Бой кончился — строка уже ничего не держит, но и смысла в ней нет.
+    -- Бой идёт, а ковчега на доске НЕТ — значит он там и не дрался: снимаем.
+    if r.status = 'done'
+       or not exists (select 1 from public.battle_units u
+                       where u.battle_id = r.battle_id and u.cls = 'angel') then
+      delete from public.battle_fleets
+       where battle_id = r.battle_id and fleet_id = a.fleet_id;
+      -- Союзником его тоже могли записать — снимаем и это.
+      delete from public.battle_allies
+       where battle_id = r.battle_id and fid = a.faction_id
+         and r.attacker_fid is distinct from a.faction_id
+         and r.defender_fid is distinct from a.faction_id;
+      n := n + 1;
+    end if;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'freed', n);
+end$$;
+revoke all on function public._angel_unstick() from public;
+
+-- ── ОБХОД, КОТОРЫЙ НАКОНЕЦ ЗОВУТ ────────────────────────────
+-- Надмножество шага 18. Порядок важен: сначала вытащить тело из чужих досок
+-- (иначе сторож порога попробует завязать бой флотом, который «скован»),
+-- потом обход своих досок, потом расстановка.
+create or replace function public.angel_battle_tick()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare b record; d int := 0; g int := 0; af text; w jsonb; u jsonb; sw jsonb;
+begin
+  af := public._angel_fid();
+  if af is null then return jsonb_build_object('ok', true, 'why', 'ангела нет'); end if;
+
+  begin u  := public._angel_unstick();     exception when others then u  := null; end;
+  begin sw := public._angel_grip_sweep();  exception when others then sw := null; end;
+  begin w  := public._angel_guard_watch(); exception when others then w  := null; end;
+
+  for b in select id from public.battles
+            where status = 'forming' and (attacker_fid = af or defender_fid = af)
+  loop
+    begin
+      if (public.angel_battle_deploy(b.id)->>'ok')::boolean then d := d + 1; end if;
+    exception when others then null;
+    end;
+    begin
+      g := g + coalesce((public._angel_guard_deploy(b.id)->>'placed')::int, 0);
+    exception when others then null;
+    end;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'deployed', d, 'guards', g,
+                            'unstick', u, 'sweep', sw, 'watch', w);
+end$$;
+revoke all on function public.angel_battle_tick() from public;
+
+-- ── 19.1 ВСТУПЛЕНИЕ В ЧУЖОЙ БОЙ: НАДМНОЖЕСТВО _war_join_battle ──
+CREATE OR REPLACE FUNCTION public._war_join_battle(p_fid text, p_sys text, p_fleet uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+-- ⚠️ НАДМНОЖЕСТВО ЖИВОГО _war_join_battle (см. _angel_guard.sql, шаг 19).
+declare r record; sd text; fresh boolean; sysname text; foe_name text;
+begin
+  if p_fid is null or p_sys is null or p_fleet is null then return null; end if;
+
+  -- ◈ ПРЕСТОЛ. Ковчег НЕ вступает в чужие бои сам. Заслонка добровольности
+  -- стояла только в `_war_engage`, а `_war_sweep` зовёт СНАЧАЛА эту дверь —
+  -- и тело утягивало на чужую доску третьей силой, минуя правило целиком.
+  -- Стоило это дорого: `_battle_lock_fleet` держит скованный флот на месте,
+  -- а ковчег и есть держава — он вставал колом, переставал ходить по карте и
+  -- висел в чужой расстановке обычным «Кораблём» из резерва.
+  -- ⚠️ Стражи это НЕ касается: она обычный флот и в бои у своего порога
+  -- вступает как все, вместе с подкреплениями и союзниками.
+  if exists (select 1 from public.angel_state a
+              where a.fleet_id = p_fleet and a.fell_at is null) then
+    return null;
+  end if;
+
+  for r in select b.* from public.battles b
+            where b.system_id = p_sys and b.status <> 'done'
+            order by b.created_at
+  loop
+    sd := public._war_side_for(r.id, p_fid);
+    if sd is null then continue; end if;   -- не моя война — следующий бой
+
+    -- Новичок на стороне? Запоминаем ДО вставки: главные участники в
+    -- battle_allies не пишутся, им и объявляться незачем.
+    fresh := (p_fid not in (r.attacker_fid, r.defender_fid))
+             and not exists(select 1 from public.battle_allies a
+                             where a.battle_id = r.id and a.fid = p_fid);
+
+    if p_fid not in (r.attacker_fid, r.defender_fid) then
+      insert into public.battle_allies(battle_id, fid, side, ready)
+        values (r.id, p_fid, sd, false)
+      on conflict (battle_id, fid) do nothing;
+    end if;
+
+    insert into public.battle_fleets(battle_id, fleet_id, fid, side)
+      values (r.id, p_fleet, p_fid, sd)
+    on conflict (battle_id, fleet_id) do nothing;
+
+    if fresh then
+      select coalesce(nullif(name,''), id) into sysname from public.map_systems where id = p_sys;
+      foe_name := public._war_nm(case when sd = 'attacker' then r.defender_fid else r.attacker_fid end);
+      perform public._bt_log(r.id, format('%s вступает в бой на стороне %s.',
+        public._war_nm(p_fid),
+        public._war_nm(case when sd = 'attacker' then r.attacker_fid else r.defender_fid end)));
+      perform public._war_news(
+        '⚔ В бой вступает третья сила: ' || sysname,
+        format('Флоты %s выходят из прыжка в системе %s и с ходу принимают сторону против %s. Расклад сил меняется.',
+               public._war_nm(p_fid), sysname, foe_name),
+        jsonb_build_array(p_fid, r.attacker_fid, r.defender_fid));
+    else
+      perform public._bt_log(r.id, format('%s подводит подкрепление.', public._war_nm(p_fid)));
+    end if;
+
+    return r.id;
+  end loop;
+
+  return null;
+end$function$;
+
+notify pgrst, 'reload schema';

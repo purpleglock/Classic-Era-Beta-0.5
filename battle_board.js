@@ -2744,18 +2744,44 @@ function bbFit() {
   bbCamClamp();
   if (BB.glOn) bgResize();      // 3D берёт размер у того же слоя карты
 }
+// ⚠️ КАДР «ДОМОЙ» — ЭТО ФЛОТ, А НЕ ПУСТАЯ АРЕНА. Раньше камера вставала так,
+// чтобы в кадр влезло всё поле целиком. На арене клуба (48×28) и на большой
+// доске войны (60×60) это значит, что дестроер занимает три-четыре пикселя:
+// игрок открывал бой и честно НЕ ВИДЕЛ кораблей — ни при расстановке, ни в
+// бою. Кадр берём по коробке бортов: свои, а зрителю дуэли — все. Коробку
+// держим в разумных пределах, ближе 12 гексов не подъезжаем и дальше 26 не
+// отъезжаем: остальное игрок добирает перетаскиванием и зумом.
+function bbFocusBox() {
+  const s = BB.st || {};
+  const { W, H } = bbWorldSize();
+  const all = (s.units || []).filter(u => u && u.x != null && u.y != null);
+  const mine = all.filter(u => u.mine);
+  // Зритель дуэли своих бортов не имеет: ему кадр строим по стороне нападающего —
+  // разведённые по краям арены флоты в один читаемый кадр не влезают ФИЗИЧЕСКИ,
+  // и «серединка между ними» — это пустота с кораблями за обоими краями.
+  const us = mine.length ? mine : (all.filter(u => u.side === 'attacker').length
+                                   ? all.filter(u => u.side === 'attacker') : all);
+  if (!us.length) return { cx: W / 2, cy: H / 2, w: W, h: H };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  us.forEach(u => {
+    const c = bbHexCenter(u.x, u.y);
+    if (c.px < x0) x0 = c.px; if (c.px > x1) x1 = c.px;
+    if (c.py < y0) y0 = c.py; if (c.py > y1) y1 = c.py;
+  });
+  const pad = BB.R * 2.5;
+  const minW = BB.R * 1.5 * 12, maxW = BB.R * 1.5 * 26;
+  const minH = BB.R * BB_SQ3 * 7, maxH = BB.R * BB_SQ3 * 15;
+  const w = Math.min(maxW, Math.max(minW, (x1 - x0) + pad * 2));
+  const h = Math.min(maxH, Math.max(minH, (y1 - y0) + pad * 2));
+  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w, h };
+}
 function bbCamHome() {
   const s = BB.st; if (!s) return;
-  const { W, H } = bbWorldSize();
-  BB.zoom = Math.max(Math.min(BB.vh / H, BB.vw / W), 22 / (BB.R * BB_SQ3));
+  const b = bbFocusBox();
+  BB.zoom = Math.max(Math.min(BB.vh / b.h, BB.vw / b.w), 22 / (BB.R * BB_SQ3));
   BB.zoom = Math.min(BB.zoom, 1.6);
-  const meAtt = s.my_side === 'attacker';
-  const mine = (s.units || []).filter(u => u.mine);
-  let fx;
-  if (mine.length) fx = mine.reduce((a, u) => a + bbHexCenter(u.x, u.y).px, 0) / mine.length;
-  else fx = meAtt ? BB.R * 4 : W - BB.R * 4;
-  BB.camX = fx - BB.vw / BB.zoom / 2;
-  BB.camY = H / 2 - BB.vh / BB.zoom / 2;
+  BB.camX = b.cx - BB.vw / BB.zoom / 2;
+  BB.camY = b.cy - BB.vh / BB.zoom / 2;
   bbCamClamp();
   if (BB.glOn) { bgCamHome(); return; }
   if (BB.ctx) bbPaint();
@@ -4746,7 +4772,10 @@ function bbShip(ctx, u, alpha) {
   // Метку ставит сервер (pk.gd), класс для этого не трогаем — см. _angel_guard.sql.
   if (u.pk && u.pk.gd && typeof angelDraw === 'function') {
     if (typeof angelSyncHits === 'function') angelSyncHits(u);
-    angelDraw(ctx, { cx, cy, R: BB.R * 0.78, alpha, tone: col,
+    // Ступень облика: 1 — Херувим (стена), 2 — Офаним (эскорт, ещё мельче).
+    // Ковчег — 1.15 радиуса, стена — 0.78, эскорт — 0.55: разницу в чине видно
+    // до того, как игрок откроет карточку борта.
+    angelDraw(ctx, { cx, cy, R: BB.R * (+u.pk.gd >= 2 ? 0.55 : 0.78), alpha, tone: col,
                      gaze: bbGazeAt(u, cx, cy), id: u.id, guard: true });
     if (typeof angelWantsFrames === 'function' && angelWantsFrames()) bbAnimKick();
   } else {

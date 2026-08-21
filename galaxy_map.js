@@ -3538,20 +3538,25 @@ function gmOpenFleetCmd(id) {
 // быть кнопка — без неё правило «только по своей воле» означает «никогда».
 // Кнопку показываем, когда в системе флота стоит хоть один его борт: тело или
 // стража. Что именно там стоит, разбирает сервер.
+// ⚠️ КНОПКА — ТОЛЬКО ПРО КОВЧЕГ. Со стражей бой завязывается сам, обычным
+// порядком (см. _angel_guard.sql, шаг 18): встал флотом у порога — получил
+// объявление войны и доску, с подкреплениями и союзниками, как везде.
+// Добровольным остался вход на доску с ТЕЛОМ: оно ходит по галактике, и
+// правило «не сгонять на доску» писалось ровно про его прилёты.
 function gmAngelHere(sysId) {
-  const a = GM.angel; if (!a || !a.fid || a.fell) return null;
+  const a = GM.angel; if (!a || !a.fid || a.fell || !a.fleet) return null;
   if (GM.myFid === a.fid) return null;                       // сам себе навстречу не выходят
   const all = (GM.fleetsVis || []).concat(GM.fleets || []);
-  const f = all.find(x => x && x.faction_id === a.fid && x.system_id === sysId
-                       && (x.status === 'idle' || !x.status));
-  if (!f) return null;
-  return { ark: !(a.fleet && f.id !== a.fleet), guards: +a.guards || 0 };
+  const ark = all.find(x => x && x.id === a.fleet && x.system_id === sysId
+                         && (x.status === 'idle' || !x.status));
+  if (!ark) return null;
+  return { ark: true, guards: +a.guards || 0 };
 }
 function gmAngelEngageHtml(fl) {
   if (!fl || fl.status !== 'idle' || !fl.system_id) return '';
   const h = gmAngelHere(fl.system_id); if (!h) return '';
   return `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetEngageAngel()">◈ Выйти навстречу</button>
-      <div class="gm-opcmd-hint">Оно не нападает первым. Бой начнётся только этой кнопкой, и выйти из него будет нельзя.</div>`;
+      <div class="gm-opcmd-hint">Оно не нападает первым. Бой с ним начнётся только этой кнопкой${h.guards > 0 ? ' — и сопровождение выйдет вместе с ним' : ''}.</div>`;
 }
 async function gmFleetEngageAngel() {
   if (!GMM.fleetCmd) return; const id = GMM.fleetCmd.id;

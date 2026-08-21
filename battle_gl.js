@@ -25,6 +25,7 @@ const BG = {
   yaw: -Math.PI / 2,      // 0 = смотрим вдоль +X; -90° ставит нос поля вправо
   pitch: 0.92,            // угол над плоскостью (рад): 0 — вровень, π/2 — сверху
   dist: 900,
+  fit: null,              // {w,h,k} — кадр, который надо держать при смене размера окна
   hover: null,            // {x,y} гекс под курсором
   ptrs: new Map(), drag: null, orbit: null, pinch: null,
   g: {},                  // группы сцены по ключам (поле, борта, эффекты)
@@ -260,9 +261,13 @@ function bgFitDist(w, h, k) {
 
 function bgCamHome() {
   const s = BB.st; if (!s) return;
-  const { W, H } = bbWorldSize();
-  BG.tgt.x = W / 2; BG.tgt.z = H / 2;
-  BG.dist = bgFitDist(W, H, 0.62);              // поле целиком, с запасом по краям
+  // Кадр берёт ФЛОТ, а не пустую арену целиком (см. bbFocusBox в battle_board.js):
+  // на доске 48×28 «всё поле» означает корабли по три пикселя.
+  const b = (typeof bbFocusBox === 'function') ? bbFocusBox()
+          : (() => { const q = bbWorldSize(); return { cx: q.W / 2, cy: q.H / 2, w: q.W, h: q.H }; })();
+  BG.tgt.x = b.cx; BG.tgt.z = b.cy;
+  BG.fit = { w: b.w, h: b.h, k: 0.62 };
+  BG.dist = bgFitDist(b.w, b.h, 0.62);
   BG.pitch = 0.92; BG.yaw = -Math.PI / 2;
   bgApplyCam(); BG.dirty = true; bgKick();
 }
@@ -283,11 +288,20 @@ function bgOrbitStep(dir) {
 function bgResize() {
   if (!BG.renderer) return;
   const box = BG.cv.parentElement.getBoundingClientRect();
+  // ⚠️ ПУСТУЮ КОРОБКУ НЕ ПРИНИМАЕМ ЗА КВАДРАТ. Слой карты в момент подъёма
+  // сцены бывает ещё не разложен (оверлей боя выезжает переходом), и обе
+  // стороны схлопывались в минимум 240×240 — аспект получался 1. Кадр
+  // считался по нему и уезжал в полтора раза дальше нужного: поле в треть
+  // экрана, корабли по три пикселя. Пока размера нет, камеру не трогаем.
+  if (!(box.width > 2 && box.height > 2)) return;
   const w = Math.max(240, Math.round(box.width)), h = Math.max(240, Math.round(box.height));
   BG.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   BG.renderer.setSize(w, h, false);
   BG.cam.aspect = w / h;
   BG.cam.updateProjectionMatrix();
+  // Кадр пересчитываем под новый аспект: поворот телефона и запоздавшая
+  // раскладка не должны менять то, что игрок видит в кадре.
+  if (BG.fit) BG.dist = bgFitDist(BG.fit.w, BG.fit.h, BG.fit.k);
   bgApplyCam();
   BG.dirty = true; bgKick();
 }
@@ -372,6 +386,7 @@ function bgBindInput() {
         // меняем дистанцию, потом сдвигаем прицел так, чтобы та же точка легла
         // под НОВОЙ серединой: заодно получается панорама двумя пальцами.
         const before = bgPickWorld(P.mx, P.my);
+        BG.fit = null;                       // щипок — воля игрока, кадр больше не держим
         BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, BG.dist * P.d / d));
         // ДОВОРОТА ЩИПКОМ НЕТ. Пальцы при сведении всегда чуть проворачиваются,
         // и камера уезжала вбок при обычном зуме — никакой порог этого не
@@ -464,6 +479,7 @@ function bgBindInput() {
 // дистанции не обойтись — прицел надо доподвинуть на разницу мировых точек.
 function bgZoomAnchor(dist, sx, sy) {
   const before = bgPickWorld(sx, sy);
+  BG.fit = null;
   BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, dist));
   bgApplyCam();
   if (before) {
@@ -1197,14 +1213,15 @@ function bgSyncUnits() {
       // ◈ ПРЕСТОЛ. Габарит берём НЕ от класса: у ангела нет корпуса, его
       // размер задаёт свечение — 2.9 радиуса в каждую сторону (см. angel_fx.js).
       // Полотно строим ровно под него, чтобы halo не срезался кромкой.
-      const L = gdn ? BB.R * 0.78 * 1.9 * 2
+      const L = gdn ? BB.R * (+(u.pk && u.pk.gd) >= 2 ? 0.55 : 0.78) * 1.9 * 2
         : ang ? BB.R * 1.15 * 2.9 * 2
         : u.contact ? BB.R * 0.8
         : BB.R * (0.75 + (typeof bbClsSize === 'function' ? bbClsSize(u.cls) : 1) * 1.15) * BG_SHIP_K;
-      m = ang ? bgBuildAngel() : u.contact ? bgBuildContact() : bgBuildShip(u.cls, bgTone(u), uh);
+      const rank = u.cls === 'angel' ? 0 : (+(u.pk && u.pk.gd) >= 2 ? 2 : 1);
+      m = ang ? bgBuildAngel(rank) : u.contact ? bgBuildContact() : bgBuildShip(u.cls, bgTone(u), uh);
       m.scale.setScalar(L);
       m.userData.key = key; m.userData.uid = u.id;
-      m.userData.L = L; m.userData.angel = ang; m.userData.gd = gdn;
+      m.userData.L = L; m.userData.angel = ang; m.userData.gd = gdn; m.userData.rank = rank;
       m.userData.y = ang ? BB.R * 0.9 : u.contact ? BB.R * 0.3 : L * 0.12;   // высота килем над плоскостью
       BG.g.units.add(m);
       BG.units.set(u.id, m);
@@ -1288,15 +1305,33 @@ function bgIsAngel(u) {
 // Отличаем по метке сервера (pk.gd), а НЕ по классу: класс у них честный.
 function bgIsGuard(u) { return !!u && !u.contact && !!(u.pk && u.pk.gd) && u.cls !== 'angel'; }
 
-function bgBuildAngel() {
+function bgBuildAngel(rank) {
   const grp = new THREE.Group();
-  // Полотно мельче на телефоне: там и экран меньше, и каждый кадр — заливка
-  // всей этой площади. 256² против 160² — это вчетверо меньше пикселей в кадр.
-  const px = (typeof angelLo === 'function' && angelLo()) ? 160 : 256;
+  // ПОЛОТНО. Спрайт живёт на билборде, который на доске занимает несколько
+  // сотен экранных пикселей, — а рисовался он в 256², и дальше эти 256 тянули
+  // на весь борт. Отсюда «шакальный» вид: не спрайт плохой, а увеличенный.
+  // Даём полотно по ЧИНУ: ковчег крупнее всех на экране, эскорт мельче всех.
+  // Телефон остаётся на прежних размерах — там и экран меньше, и каждый кадр
+  // это заливка всей площади (см. angelLo и такт медленных отметок).
+  const lo = (typeof angelLo === 'function' && angelLo());
+  const px = lo ? (rank >= 2 ? 128 : rank === 1 ? 160 : 192)
+                : (rank >= 2 ? 288 : rank === 1 ? 352 : 512);
   const cv = document.createElement('canvas');
   cv.width = px; cv.height = px;
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
+  // Полотно перерисовывается КАЖДЫЙ кадр, поэтому мип-уровни здесь — чистый
+  // расход: их пришлось бы пересобирать на каждое обновление, а помогают они
+  // только при уменьшении. Линейная фильтрация без мипов + анизотропия дают
+  // чистую кромку пера и обода на крупном плане.
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  try {
+    if (BG.renderer && BG.renderer.capabilities) {
+      tex.anisotropy = Math.min(4, BG.renderer.capabilities.getMaxAnisotropy());
+    }
+  } catch (e) { /* без анизотропии тоже живём */ }
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({
     // ⚠️ Смешивание ОБЫЧНОЕ, не аддитивное. Аддитивное съедает всё тёмное, а у
     // ангела тёмное несёт смысл: обвод глаза, щель зрачка и насечка обода. С
@@ -1324,9 +1359,16 @@ function bgStepAngels() {
     // Радиус подбираем так, чтобы свечение (2.9R) село ровно в полотно.
     const gdn = !!m.userData.gd;
     const R = px / 2 / (gdn ? 1.9 : 2.9);
+    // ⚠️ СТУПЕНЬ ЗАДАЁМ ЯВНО. angelDetail считает её от радиуса, а радиус здесь
+    // — это ПОЛОТНО, а не размер на экране: подняв полотно ради чёткости, мы
+    // невольно заказали бы самую тяжёлую ступень всем, включая девять эскортных
+    // бортов сразу. Ковчегу и страже — полная (их и разглядывают), эскорту —
+    // вторая: там есть и зубья, и спицы, и глаза, нет только мелочи в упор.
+    const rank = m.userData.rank || 0;
+    const det = rank >= 2 ? 2 : 3;
     const tone = (typeof BB_C !== 'undefined' && BB_C[bgTone(u)]) || '255,220,140';
     const dim = (u.pk && u.pk.dim != null) ? +u.pk.dim : 1;
-    angelDraw(x, { cx: px / 2, cy: px / 2, R, alpha: 1, tone, guard: gdn,
+    angelDraw(x, { cx: px / 2, cy: px / 2, R, alpha: 1, tone, guard: gdn, detail: det,
                    gaze: bgAngelGaze(u, m), id: u.id, seals: gdn ? 1 : dim });
     m.userData.sp.material.map.needsUpdate = true;
   });
@@ -2902,6 +2944,7 @@ function bgCamFocus(px, py, span, dur) {
   const fov = BG.cam.fov * Math.PI / 180;
   const d1 = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, (Math.max(span, BB.R * 8) * 0.62) / Math.tan(fov / 2)));
   if (Math.hypot(px - BG.tgt.x, py - BG.tgt.z) < BB.R * 0.5 && Math.abs(d1 - BG.dist) < BG.dist * 0.04) return;
+  BG.fit = null;
   BG.camAnim = { x0: BG.tgt.x, z0: BG.tgt.z, x1: px, z1: py,
                  d0: BG.dist, d1, t0: performance.now(), dur: dur || 700 };
   bgKick();
@@ -2954,6 +2997,7 @@ function bgCamDeploy() {
     span *= 2;
     BG.yaw = -Math.PI / 2;
   }
+  BG.fit = { w: span, h: span, k: 0.58 };
   BG.dist = bgFitDist(span, span, 0.58);
   BG.pitch = 0.98;
   BG.camAnim = null;
@@ -2963,6 +3007,7 @@ function bgCamDeploy() {
 // Кнопки зума в HUD: в 3D приблизить = подъехать, а не растянуть картинку
 function bgZoom(f) {
   if (!BG.ready) return;
+  BG.fit = null;
   BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, BG.dist / (f || 1)));
   BG.camAnim = null;
   bgApplyCam(); BG.dirty = true; bgKick();
