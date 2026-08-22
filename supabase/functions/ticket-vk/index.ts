@@ -51,7 +51,12 @@ Deno.serve(async (req) => {
       const icon = t.kind === "bulletin" ? "📡" : t.kind === "rumor" ? "👁" : "📰";
       const label = t.kind === "bulletin" ? "Сводка сектора" : t.kind === "rumor" ? "Слух" : "Новость";
       const title = stripMarkup(t.title ?? "").slice(0, 140);
-      const preview = sentClip(stripMarkup(t.excerpt || t.body || ""), 5, 700);
+      // Часовая сводка (mode:'news' + digest:true, см. _news_vk_digest.sql) приходит
+      // уже собранной: переносы строк — часть формата, резать её по предложениям
+      // нечего. Разметку снимаем построчно, чтобы столбик не схлопнулся в абзац.
+      const preview = t.digest === true
+        ? String(t.body ?? "").split("\n").map(stripMarkup).filter(Boolean).join("\n").slice(0, 3500)
+        : sentClip(stripMarkup(t.excerpt || t.body || ""), 5, 700);
       const msg = [
         `${icon} ${label}${t.faction_name ? " · " + stripMarkup(t.faction_name) : ""}`,
         title ? `«${title}»` : "",
