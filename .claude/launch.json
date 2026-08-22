@@ -240,6 +240,16 @@
         "8247"
       ],
       "port": 8247
+    },
+    {
+      "name": "abyss",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8253"
+      ],
+      "port": 8253
     }
   ]
 }

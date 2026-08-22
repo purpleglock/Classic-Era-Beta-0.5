@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Аваддон — превью спрайта</title>
+<style>
+  html,body{margin:0;background:#070a0e;color:#fa8;font:13px/1.5 monospace;height:100%}
+  #wrap{display:flex;height:100%}
+  canvas{flex:1;display:block}
+  #ui{width:250px;padding:14px;border-left:1px solid rgba(255,140,90,.18);background:#0b0709}
+  label{display:block;margin:12px 0 4px;color:#c86}
+  input[type=range]{width:100%}
+  b{color:#fed}
+</style>
+<div id="wrap"><canvas id="cv"></canvas>
+<div id="ui">
+  <div><b>АВАДДОН</b> — превью</div>
+  <label>Оковы: <b id="sv">100%</b></label>
+  <input id="bound" type="range" min="0" max="100" value="100">
+  <label>Размер (R): <b id="rv">34</b></label>
+  <input id="rad" type="range" min="12" max="90" value="34">
+  <label>Куда обращена пасть</label>
+  <input id="gz" type="range" min="0" max="628" value="470">
+  <p style="color:#a76">Клик по холсту — попадание (разрыв шкуры, зарастает).</p>
+  <p style="color:#a76">Слева направо: масштаб доски (R≈16), крупный план, бес (spawn).</p>
+  <p style="color:#a76" id="perf">—</p>
+</div></div>
+<script src="demon_fx.js"></script>
+<script>
+const cv = document.getElementById('cv'), x = cv.getContext('2d');
+let dpr = Math.min(2, window.devicePixelRatio || 1);
+function fit(){ const r = cv.getBoundingClientRect();
+  cv.width = r.width*dpr; cv.height = r.height*dpr; }
+addEventListener('resize', fit); fit();
+const S = { bound:1, R:34, gaze:4.7 };
+const bind=(id,f)=>{const e=document.getElementById(id);e.oninput=()=>f(+e.value);};
+bind('bound',v=>{S.bound=v/100;document.getElementById('sv').textContent=v+'%';});
+bind('rad',  v=>{S.R=v;document.getElementById('rv').textContent=v;});
+bind('gz',   v=>{S.gaze=v/100;});
+cv.onclick = e => { demonHit('a'); demonHit('b'); demonHit('c'); };
+let acc=0, cnt=0;
+function frame(){
+  x.setTransform(dpr,0,0,dpr,0,0);
+  const W = cv.width/dpr, H = cv.height/dpr;
+  x.fillStyle='#070a0e'; x.fillRect(0,0,W,H);
+  x.fillStyle='rgba(200,230,255,.35)';
+  for(let i=0;i<160;i++){const a=(i*97)%W, b=(i*57)%H; x.fillRect(a,b,1,1);}
+  x.strokeStyle='rgba(255,140,90,.05)';
+  for(let gx=0;gx<W;gx+=40){x.beginPath();x.moveTo(gx,0);x.lineTo(gx,H);x.stroke();}
+  for(let gy=0;gy<H;gy+=40){x.beginPath();x.moveTo(0,gy);x.lineTo(W,gy);x.stroke();}
+
+  const t0 = performance.now();
+  demonDraw(x,{cx:W*0.20,cy:H*0.5,R:16,alpha:1,tone:'120,255,200',gaze:S.gaze,id:'a',bound:S.bound});
+  demonChainBar(x, W*0.20, H*0.5+30, 40, S.bound);
+
+  demonDraw(x,{cx:W*0.52,cy:H*0.5,R:S.R,alpha:1,tone:'190,60,50',gaze:S.gaze,id:'b',bound:S.bound});
+  demonChainBar(x, W*0.52, H*0.5+S.R*2.6, S.R*2.2, S.bound);
+
+  demonDraw(x,{cx:W*0.83,cy:H*0.5,R:22,alpha:1,tone:'190,60,50',gaze:S.gaze,id:'c',bound:S.bound,spawn:true});
+  demonChainBar(x, W*0.83, H*0.5+60, 50, S.bound);
+  acc += performance.now()-t0; cnt++;
+  if (cnt>=60){ document.getElementById('perf').textContent =
+    'отрисовка трёх: '+(acc/cnt).toFixed(3)+' мс/кадр'; acc=0; cnt=0; }
+
+  DEMON.live = 0;
+  requestAnimationFrame(frame);
+}
+frame();
+</script>

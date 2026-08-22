@@ -105,7 +105,7 @@ begin
   select * into app from public.faction_applications
    where faction_id = a.faction_id and status = 'approved' order by updated_at desc limit 1;
   select owner_id into ecoown from public.faction_economy where faction_id = a.faction_id;
-  select coalesce(f.system_id, f.from_sys, a.home_sys) into here
+  select coalesce(f.system_id, a.home_sys) into here
     from public.fleets f where f.id = a.fleet_id;
   nf := greatest(1, public._angel_host_const('fleets')::int);
   np := greatest(1, public._angel_host_const('per')::int);
@@ -820,7 +820,12 @@ begin
     return jsonb_build_object('ok', true, 'saving_for', 'ship', 'need', price);
   end if;
 
-  select coalesce(f.system_id, f.dest_sys, f.from_sys, a.home_sys) into here
+  -- ⚠️ ТОЛЬКО ТАМ, ГДЕ ТЕЛО СЕЙЧАС. Раньше здесь стоял dest_sys — и новый борт
+  -- материализовался в системе НАЗНАЧЕНИЯ, пока ковчег ещё летел: на карте
+  -- эскорт стоял там, где ангела нет, и путал всё — вплоть до «по кому вообще
+  -- этот залп». Ковчег в прыжке — рождаем в гнезде, дальше крыло само подтянется
+  -- (см. _angel_host_follow).
+  select coalesce(f.system_id, a.home_sys) into here
     from public.fleets f where f.id = a.fleet_id;
   select * into app from public.faction_applications
    where faction_id = a.faction_id and status = 'approved' order by updated_at desc limit 1;

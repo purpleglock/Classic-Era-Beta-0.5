@@ -7573,13 +7573,33 @@ function gmmBuildSalvos() {
   // ⚠️ Точку в базе при этом НЕ трогаем (пробовали — см. _shell_track_off.sql):
   // запись о залпе хранит факт пуска, по ней написана сводка, а «за кем он
   // сейчас летит» — вопрос отрисовки и считается здесь, каждый кадр данных.
-  const fleetSys = {};
-  [].concat(GM.fleets || [], GM.fleetsVis || []).forEach(f => {
-    if (f && f.id) fleetSys[f.id] = f.system_id || f.dest_sys || f.from_sys || null;
-  });
+  // ⚠️ КОЛЬЦО ВЕШАЕМ НА САМ ФЛОТ, А НЕ НА ЕГО ЗВЕЗДУ. Пока целью считалась
+  // звезда, картинка врала дважды: на одной звезде стоят и ковчег, и его
+  // эскорт — и по кольцу нельзя было понять, по кому стреляли («не верю, что
+  // игрок целил в этот флот»), — а пока цель в прыжке, кольцо вообще прыгало
+  // на систему назначения, где её ещё нет. Считаем ТОЧКУ цели: стоит — берём
+  // её звезду, в пути — интерполируем по трассе, как это делает сама отметка.
+  const fleetById = {};
+  [].concat(GM.fleets || [], GM.fleetsVis || []).forEach(f => { if (f && f.id) fleetById[f.id] = f; });
+  const chasePt = (fid) => {
+    const f = fleetById[fid]; if (!f) return null;
+    if (f.system_id && byId[f.system_id]) {
+      const ss = byId[f.system_id];
+      return { x: ss.x, y: ss.y, sys: ss };
+    }
+    const a = byId[f.from_sys], b = byId[f.dest_sys];
+    if (!a || !b) return b ? { x: b.x, y: b.y, sys: b } : null;
+    const d0 = f.depart_at ? Date.parse(f.depart_at) : NaN;
+    const d1 = f.arrive_at ? Date.parse(f.arrive_at) : NaN;
+    let k = (isFinite(d0) && isFinite(d1) && d1 > d0) ? (Date.now() - d0) / (d1 - d0) : 0.5;
+    k = Math.max(0, Math.min(1, k));
+    return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, sys: null };
+  };
+
   GM.salvos.forEach(s => {
-    const chase = s.target_fleet_id ? byId[fleetSys[s.target_fleet_id]] : null;
-    const tgt = chase || byId[s.target_system_id];
+    const chase = s.target_fleet_id ? chasePt(s.target_fleet_id) : null;
+    const star = byId[s.target_system_id];
+    const tgt = chase || (star ? { x: star.x, y: star.y, sys: star } : null);
     if (!tgt) return;                         // цель не на карте — нечего рисовать
     const ori = byId[s.origin_system_id];     // источник может быть неизвестен/вне карты
     const la = s.launched_at ? Date.parse(s.launched_at) : null;
@@ -7598,7 +7618,7 @@ function gmmBuildSalvos() {
       g = { ax, ay, cx: (ax + bx) / 2 + nx * bow, cy: (ay + by) / 2 + ny * bow, bx, by };
     }
     GMM.salvos.push({
-      g, sys: tgt, dx: tgt.x, dy: tgt.y, la, ra, col,
+      g, sys: tgt.sys || null, dx: tgt.x, dy: tgt.y, la, ra, col,
       attacker: aName, planet: s.target_planet || ''
     });
   });

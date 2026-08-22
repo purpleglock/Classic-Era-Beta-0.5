@@ -121,20 +121,30 @@ function demonDetail(R, cap) {
  * читается как помеха, а не как жизнь. Поэтому всё случайное берётся ОДИН раз
  * из семени, посчитанного по id: два демона на доске не близнецы, но каждый
  * сам себе равен от кадра к кадру.                                           */
+// ⚠️ ВЕЗДЕ >>> 0 И Math.imul. У Престола семя — положительная константа в коде,
+// и туда эти грабли не заезжали. Здесь семя считается ИЗ id через XOR, а `^`
+// в JS даёт ЗНАКОВОЕ 32-битное: одно отрицательное число на входе — и весь
+// поток случайных уходит в минус. Наружу это вылезло не «странной раскладкой»,
+// а падением холста: у капли получился отрицательный радиус, ellipse бросил
+// IndexSizeError, и предохранитель снял спрайт с отрисовки целиком.
 function demonHash(n) {
-  var s = (n * 2654435761) % 4294967296;
-  s = ((s ^ (s >>> 13)) * 1274126177) % 4294967296;
-  return (((s ^ (s >>> 16)) % 4294967296) + 4294967296) % 4294967296 / 4294967296;
+  var s = (n >>> 0);
+  s = Math.imul(s ^ (s >>> 15), 2246822507) >>> 0;
+  s = Math.imul(s ^ (s >>> 13), 3266489909) >>> 0;
+  return ((s ^ (s >>> 16)) >>> 0) / 4294967296;
 }
 function demonForm(id) {
   var k = String(id == null ? '_' : id);
   var F = DEMON.forms[k];
   if (F) return F;
   if (DEMON.formN > 24) { DEMON.forms = {}; DEMON.formN = 0; }
-  var s = 2166136261;
-  for (var c = 0; c < k.length; c++) { s = ((s ^ k.charCodeAt(c)) * 16777619) % 4294967296; }
+  var s = 2166136261 >>> 0;
+  for (var c = 0; c < k.length; c++) { s = Math.imul(s ^ k.charCodeAt(c), 16777619) >>> 0; }
   var rnd = (function (seed) {
-    return function () { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+    return function () {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
   })(s);
   F = { seed: Math.floor(s % 9973), ph: [], limbs: [], faces: [], horns: [], cracks: [], drips: [] };
   var i, j;
@@ -148,7 +158,7 @@ function demonForm(id) {
     F.limbs.push({
       a: (i / 6) * Math.PI * 2 + (rnd() - 0.5) * 0.55,
       len: 0.85 + rnd() * 0.95,
-      w: 0.19 + rnd() * 0.16,
+      w: 0.28 + rnd() * 0.22,
       bend: (rnd() - 0.5) * 1.5,
       per: 2.4 + rnd() * 3.6,
       ph: rnd() * 10,
@@ -161,7 +171,7 @@ function demonForm(id) {
   // открыт только рот — тем и страшны.
   for (i = 0; i < 5; i++) {
     F.faces.push({
-      a: rnd() * Math.PI * 2, r: 0.38 + rnd() * 0.34, sz: 0.19 + rnd() * 0.13,
+      a: rnd() * Math.PI * 2, r: 0.30 + rnd() * 0.30, sz: 0.30 + rnd() * 0.16,
       per: 5.5 + rnd() * 7.0, ph: rnd() * 12, tilt: (rnd() - 0.5) * 1.1,
       gap: 0.25 + rnd() * 0.55
     });
@@ -172,9 +182,13 @@ function demonForm(id) {
   for (i = 0; i < hn; i++) {
     F.horns.push({
       a: -Math.PI / 2 + (i - (hn - 1) / 2) * 0.255 + (rnd() - 0.5) * 0.09,
-      len: 0.40 + rnd() * 0.80,
+      // ⚠️ ДЛИНА И СВЕТЛОТА. Первый заход дал рога до 1.2R и почти белые: на
+      // кадре вышел морской ёж — кость забрала весь силуэт, а масса под ней
+      // читалась подложкой. Рог должен быть КОРОЧЕ комьев тела и грязнее их:
+      // венец не торчит из существа, он в нём сидит.
+      len: 0.26 + rnd() * 0.34,
       curl: (rnd() - 0.5) * 1.5,
-      w: 0.075 + rnd() * 0.065,
+      w: 0.045 + rnd() * 0.045,
       rank: (i * 5) % hn          // порядок отсева по ступеням: венец редеет ровно
     });
   }
@@ -316,7 +330,16 @@ function demonLimb(x, R, lb, t, D, loose, heat) {
     return g;
   });
   x.fill();
-  x.strokeStyle = 'rgba(168,136,126,' + (0.13 + 0.06 * heat) + ')';
+  // ⚠️ ЖАР ПО КРОМКЕ. Без него лоскут — тёмное на тёмном, то есть ничего:
+  // на первом кадре шесть лохмотьев не читались вовсе, от них оставались
+  // только нити. Кромка не делает их светлыми, она делает их ВИДНЫМИ.
+  x.save();
+  x.globalCompositeOperation = 'lighter';
+  x.strokeStyle = 'rgba(132,34,18,' + (0.10 + 0.16 * heat) + ')';
+  x.lineWidth = Math.max(0.6, R * 0.05);
+  x.stroke();
+  x.restore();
+  x.strokeStyle = 'rgba(168,136,126,' + (0.18 + 0.10 * heat) + ')';
   x.lineWidth = Math.max(0.35, R * 0.012);
   x.stroke();
 
@@ -362,9 +385,9 @@ function demonFace(x, px, py, r, fc, k, D, heat) {
   var qr = Math.max(1, demonQ(r, 2));
   x.fillStyle = demonGrad('fc' + qr + '_' + qa.toFixed(1), function () {
     var g = x.createLinearGradient(0, qr, 0, -qr);
-    g.addColorStop(0, 'rgba(126,86,72,' + (0.92 * qa) + ')');
-    g.addColorStop(0.55, 'rgba(78,54,50,' + (0.80 * qa) + ')');
-    g.addColorStop(1, 'rgba(34,22,24,' + (0.55 * qa) + ')');
+    g.addColorStop(0, 'rgba(84,50,42,' + (0.95 * qa) + ')');
+    g.addColorStop(0.55, 'rgba(48,28,28,' + (0.88 * qa) + ')');
+    g.addColorStop(1, 'rgba(20,12,14,' + (0.60 * qa) + ')');
     return g;
   });
   x.fill();
@@ -446,10 +469,10 @@ function demonMaw(x, R, t, gaze, D, loose, heat, F, gk) {
     for (i = 0; i < emb; i++) {
       var pe = (t * 0.7 + i * 0.19) % 1;
       var ea = Math.sin(pe * Math.PI) * (0.30 + 0.55 * gk) * heat;
-      var eх = -mr * 0.55 + Math.sin(i * 2.1 + t * 1.3) * mr * 0.18;
+      var ex2 = -mr * 0.55 + Math.sin(i * 2.1 + t * 1.3) * mr * 0.18;
       var ey = Math.cos(i * 1.7 + t * 1.1) * mr * 0.34;
       x.beginPath();
-      x.arc(eх, ey, mr * (0.05 + (i % 3) * 0.022), 0, Math.PI * 2);
+      x.arc(ex2, ey, mr * (0.05 + (i % 3) * 0.022), 0, Math.PI * 2);
       x.fillStyle = 'rgba(255,' + (96 + (i % 4) * 22) + ',36,' + ea.toFixed(3) + ')';
       x.fill();
     }
@@ -463,13 +486,13 @@ function demonMaw(x, R, t, gaze, D, loose, heat, F, gk) {
       var ta = (i / tn) * Math.PI * 2 + 0.11;
       var tb = ((i + 0.62) / tn) * Math.PI * 2 + 0.11;
       var rx = mr * 0.74, ry = mr;
-      var hh = 0.62 + demonHash(i * 3 + F.seed) * 0.34;    // длина зуба
+      var hh = 0.78 + demonHash(i * 3 + F.seed) * 0.16;    // длина зуба
       var ax = Math.cos(ta) * rx, ay = Math.sin(ta) * ry;
       var bx = Math.cos(tb) * rx, by = Math.sin(tb) * ry;
       var mx2 = (ax + bx) / 2 * hh, my2 = (ay + by) / 2 * hh;
       x.moveTo(ax, ay); x.lineTo(mx2, my2); x.lineTo(bx, by);
     }
-    x.fillStyle = 'rgba(198,182,166,0.78)';
+    x.fillStyle = 'rgba(146,132,120,0.62)';
     x.fill();
     x.strokeStyle = 'rgba(40,26,24,0.55)';
     x.lineWidth = Math.max(0.3, R * 0.008);
@@ -501,9 +524,9 @@ function demonHorn(x, R, h, t, D, P) {
   var qh = Math.max(1, demonQ(len, 3));
   x.fillStyle = demonGrad('hr' + qh, function () {
     var g = x.createLinearGradient(0, 0, qh, 0);
-    g.addColorStop(0, 'rgba(46,34,30,1)');
-    g.addColorStop(0.45, 'rgba(150,132,116,1)');
-    g.addColorStop(1, 'rgba(228,218,200,1)');
+    g.addColorStop(0, 'rgba(34,24,22,1)');
+    g.addColorStop(0.45, 'rgba(104,90,80,1)');
+    g.addColorStop(1, 'rgba(176,164,146,1)');
     return g;
   });
   x.fill();
@@ -586,13 +609,13 @@ function demonDrawCore(x, opt) {
   // 1) ЗАРЕВО, КОТОРОЕ ГАСИТ. У ангела первый слой — свет; здесь первый слой
   //    ТЕМНЕЕ доски: он съедает звёзды вокруг борта. Тон стороны появляется
   //    только на дальнем краю грязным подмесом — не свечение, а пятно.
-  var halo = Math.max(2, demonQ(R * (sp ? 1.8 : 2.7) * (1 + breath * 0.05), 2));
+  var halo = Math.max(2, demonQ(R * (sp ? 1.5 : 2.05) * (1 + breath * 0.05), 2));
   var qh = demonQ(heat, 0.1);
   x.beginPath(); x.arc(0, 0, halo, 0, Math.PI * 2);
   x.fillStyle = demonGrad('dh' + halo + '_' + qh.toFixed(1) + '_' + tone, function () {
     var g = x.createRadialGradient(0, 0, halo * 0.05, 0, 0, halo);
     g.addColorStop(0, 'rgba(9,4,6,0.90)');
-    g.addColorStop(0.38, 'rgba(38,10,12,' + (0.42 + 0.2 * qh) + ')');
+    g.addColorStop(0.38, 'rgba(38,10,12,' + (0.30 + 0.16 * qh) + ')');
     g.addColorStop(0.70, 'rgba(' + tone + ',' + (0.10 + 0.06 * qh) + ')');
     g.addColorStop(1, 'rgba(' + tone + ',0)');
     return g;
@@ -654,7 +677,7 @@ function demonDrawCore(x, opt) {
     F.cracks.forEach(function (c) {
       if (c.rank >= cn) return;
       var pulse = 0.45 + 0.55 * Math.sin(t * (Math.PI * 2 / c.per) + c.ph);
-      var al = (0.16 + 0.62 * heat) * (0.30 + 0.70 * pulse);
+      var al = (0.30 + 0.55 * heat) * (0.30 + 0.70 * pulse);
       var pts = [], i;
       for (i = 0; i <= 5; i++) {
         var u = i / 5;
