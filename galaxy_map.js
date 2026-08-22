@@ -7587,13 +7587,13 @@ function gmmBuildSalvos() {
       const ss = byId[f.system_id];
       return { x: ss.x, y: ss.y, sys: ss };
     }
-    const a = byId[f.from_sys], b = byId[f.dest_sys];
-    if (!a || !b) return b ? { x: b.x, y: b.y, sys: b } : null;
-    const d0 = f.depart_at ? Date.parse(f.depart_at) : NaN;
-    const d1 = f.arrive_at ? Date.parse(f.arrive_at) : NaN;
-    let k = (isFinite(d0) && isFinite(d1) && d1 > d0) ? (Date.now() - d0) / (d1 - d0) : 0.5;
-    k = Math.max(0, Math.min(1, k));
-    return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, sys: null };
+    // В прыжке — берём точку, которую отрисовка положила в GMM.shipXY: считать
+    // её заново нельзя, флот идёт по трассе с прогибом (см. запись выше).
+    const w = GMM.shipXY && GMM.shipXY[fid];
+    if (w) return { x: w.x, y: w.y, sys: null };
+    // Отметки ещё не рисовали (первый кадр) — до прибытия ведём к его цели.
+    const b = byId[f.dest_sys];
+    return b ? { x: b.x, y: b.y, sys: b } : null;
   };
 
   GM.salvos.forEach(s => {
@@ -8774,6 +8774,12 @@ function gmmPaintDefense(ctx) {
       if (d.segs) { pt = gmmSegPt(d.segs, d.total, u); back = gmmSegPt(d.segs, d.total, Math.max(0, u - 0.02)); }
       else { pt = gmmBezPt(d.g, u); back = gmmBezPt(d.g, Math.max(0, u - 0.02)); }
       const hX = SX(pt.x), hY = SY(pt.y);
+      // ⚠️ ТОЧКА ЛЕТЯЩЕЙ ОТМЕТКИ — В ОБЩИЙ РЕЕСТР. Флот в прыжке едет по своей
+      // трассе (segs) или по дуге с прогибом, а не по прямой между звёздами.
+      // Кто попробует посчитать его место сам — промахнётся (так и вышло с
+      // кольцом залпа). Кладём сюда то, что реально нарисовано, и целимся по
+      // нему: один источник правды на кадр, как GMM.colonyXY у колоний.
+      if (d.id) { (GMM.shipXY || (GMM.shipXY = {}))[d.id] = { x: pt.x, y: pt.y }; }
       // трасса до цели (тонкая, бледная)
       const drawTrace = (sampler) => {
         const N = 24; ctx.beginPath();

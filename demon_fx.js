@@ -298,7 +298,10 @@ function demonLimb(x, R, lb, t, D, loose, heat) {
   var ph = t * (Math.PI * 2 / lb.per) + lb.ph;
   var ext = 0.5 + 0.5 * Math.sin(ph);
   ext = ext * ext;
-  var len = R * (0.45 + lb.len * 1.30 * ext * (0.80 + loose * 0.45));
+  // ⚠️ ДЛИНА ПРОТИВ ШИРИНЫ. Заход с длиной до 2.3R дал не мембраны, а ИГЛЫ:
+  // узкий длинный треугольник читается лезвием, а лезвие — деталь машины,
+  // то есть ангела. Лоскут должен быть коротким и широким, тогда он висит.
+  var len = R * (0.40 + lb.len * 0.72 * ext * (0.80 + loose * 0.45));
   if (len < R * 0.28) return;
   x.save();
   x.rotate(lb.a);
@@ -312,7 +315,7 @@ function demonLimb(x, R, lb, t, D, loose, heat) {
   for (i = 0; i <= S; i++) {
     var u = i / S, p0 = at(u), p1 = at(Math.min(1, u + 0.06));
     var dx = p1[0] - p0[0], dy = p1[1] - p0[1], dl = Math.hypot(dx, dy) || 1;
-    var w = R * lb.w * (1 - u * 0.70) * (0.70 + 0.55 * lb.jag[i % 8]);
+    var w = R * lb.w * (1 - u * 0.34) * (0.55 + 0.80 * lb.jag[i % 8]);
     up.push([p0[0] + (-dy / dl) * w, p0[1] + (dx / dl) * w]);
     dn.push([p0[0] + (dy / dl) * w * 0.72, p0[1] - (dx / dl) * w * 0.72]);
   }
@@ -450,6 +453,19 @@ function demonMaw(x, R, t, gaze, D, loose, heat, F, gk) {
   var mr = R * (0.40 + 0.22 * gk + loose * 0.10);
   x.save();
   x.rotate(gaze);
+  // ОБОД. Провал на тёмном теле сам по себе неразличим: дырка в чёрном — это
+  // просто чёрное. Пасть начинает читаться, когда у неё есть ГУБА — валик
+  // мяса чуть светлее массы, обведённый жаром изнутри.
+  x.beginPath();
+  x.ellipse(0, 0, mr * 0.92, mr * 1.22, 0, 0, Math.PI * 2);
+  x.fillStyle = 'rgba(64,32,30,0.95)';
+  x.fill();
+  x.save();
+  x.globalCompositeOperation = 'lighter';
+  x.strokeStyle = 'rgba(176,52,24,' + (0.20 + 0.35 * heat) + ')';
+  x.lineWidth = Math.max(0.6, mr * 0.14);
+  x.stroke();
+  x.restore();
   var rings = D >= 2 ? 5 : 3, i;
   for (i = 0; i < rings; i++) {
     var q = 1 - (i / rings) * 0.80;
@@ -468,7 +484,7 @@ function demonMaw(x, R, t, gaze, D, loose, heat, F, gk) {
     var emb = D >= 2 ? 7 : 3;
     for (i = 0; i < emb; i++) {
       var pe = (t * 0.7 + i * 0.19) % 1;
-      var ea = Math.sin(pe * Math.PI) * (0.30 + 0.55 * gk) * heat;
+      var ea = Math.sin(pe * Math.PI) * (0.55 + 0.45 * gk) * (0.45 + 0.55 * heat);
       var ex2 = -mr * 0.55 + Math.sin(i * 2.1 + t * 1.3) * mr * 0.18;
       var ey = Math.cos(i * 1.7 + t * 1.1) * mr * 0.34;
       x.beginPath();
