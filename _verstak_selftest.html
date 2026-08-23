@@ -1,3 +1,77 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Престол — верстак облика</title>
+<!-- ════════════════════════════════════════════════════════════
+ ВЕРСТАК ОБЛИКА. Детальки второго тела рисует ЧЕЛОВЕК, движок их анимирует.
+
+ ЗАЧЕМ. Процедурные клинья, плиты и лезвия раз за разом выходили «детским
+ рисунком», и спорить о них можно было только вслепую: чтобы увидеть правку,
+ надо было пересобрать файл. У нас это уже проходили с корпусом Имперского
+ колосса — кончилось тем, что фигуру рисует игрок, и нарисованное И ЕСТЬ
+ корабль. Здесь то же, но растровой маской не обойтись: ангел не стоит на
+ месте — крылья бьют, колёса вертятся, плита дышит. Поэтому рисуется не
+ спрайт целиком, а ОДНА деталь в своей роли; сколько их, где они и как
+ двигаются — по-прежнему дело движка.
+
+ КАК ПОЛЬЗОВАТЬСЯ. Выбрать роль слева → щёлкать по клетке, ставя углы. Справа
+ то же самое сразу крутится на живом ангеле, в трёх размерах. Точку можно
+ тащить мышью, убрать — правой кнопкой. «Выгрузить» кладёт angel_parts.js.
+
+ ⚠️ УГЛЫ, А НЕ КРИВЫЕ — намеренно: гладкая дуга и делала форму мягкой.
+════════════════════════════════════════════════════════════ -->
+<style>
+  html,body{margin:0;height:100%;background:#080b10;color:#cfe3f2;
+            font:13px/1.5 ui-monospace,Consolas,monospace}
+  #wrap{display:flex;height:100%}
+  #side{width:236px;padding:12px;border-right:1px solid rgba(140,200,255,.16);
+        background:#0a0e14;overflow:auto;flex:none}
+  #mid{flex:1;display:flex;flex-direction:column;min-width:0}
+  #live{border-left:1px solid rgba(140,200,255,.16);flex:none}
+  canvas{display:block}
+  #pad{flex:1;width:100%}
+  h4{margin:14px 0 6px;color:#7fb6d8;font-weight:600;font-size:12px;
+     letter-spacing:.08em;text-transform:uppercase}
+  .role{display:block;width:100%;text-align:left;margin:3px 0;padding:6px 8px;
+        background:#111823;color:#bcd6ea;border:1px solid rgba(140,200,255,.18);
+        cursor:pointer;font:inherit}
+  .role.on{background:#1d2c3d;border-color:#4f9fd0;color:#eaf6ff}
+  .role i{float:right;font-style:normal;color:#5d7f99}
+  button.act{width:100%;margin:4px 0;padding:7px;background:#16202c;
+             color:#dbeaf7;border:1px solid rgba(140,200,255,.22);cursor:pointer;font:inherit}
+  button.act:hover{background:#1d2c3d}
+  #hint{padding:8px 12px;color:#6d8ba3;border-top:1px solid rgba(140,200,255,.12)}
+  label{display:block;margin:8px 0 2px;color:#6d8ba3}
+  b{color:#ffd9a8}
+</style>
+<div id="wrap">
+  <div id="side">
+    <div><b>ПРЕСТОЛ</b> · верстак облика</div>
+    <h4>Деталь</h4>
+    <div id="roles"></div>
+    <h4>Правка</h4>
+    <button class="act" id="undo">Убрать последнюю точку</button>
+    <button class="act" id="clear">Стереть деталь</button>
+    <button class="act" id="proc">Вернуть процедурную</button>
+    <h4>Набор</h4>
+    <button class="act" id="save">Выгрузить angel_parts.js</button>
+    <button class="act" id="copy">Скопировать в буфер</button>
+    <button class="act" id="load">Загрузить набор…</button>
+    <input id="file" type="file" accept=".js,.json" style="display:none">
+    <h4>Показ</h4>
+    <label>Плоть <b id="mv">80%</b></label>
+    <input id="mass" type="range" min="0" max="100" value="80" style="width:100%">
+    <label>Печати <b id="sv">100%</b></label>
+    <input id="seals" type="range" min="0" max="100" value="100" style="width:100%">
+    <p style="color:#5d7f99">Набор держится в этом браузере (localStorage) —
+    вкладку можно закрыть, работа не пропадёт.</p>
+  </div>
+  <div id="mid"><canvas id="pad"></canvas>
+    <div id="hint"></div>
+  </div>
+  <canvas id="live"></canvas>
+</div>
+<script src="angel_parts.js" onerror="void 0"></script>
+<script>
 /* ════════════════════════════════════════════════════════════
  * «ПРЕСТОЛ» — СПРАЙТ. Процедурный ветхозаветный ангел.
  * ────────────────────────────────────────────────────────────
@@ -1296,3 +1370,181 @@ if (typeof window !== 'undefined') {
   window.ANGEL = ANGEL;
   window.angelLo = angelLo;
 }
+
+</script>
+<script>
+/* ── РОЛИ. Клетка у каждой своя, и подсказка на холсте рисуется по ней:
+ * без неё непонятно, где у детали «основание», а где «остриё».            */
+var ROLES = {
+  feather: { t:'Перо крыла',   box:[0,-1,1,1],  hint:'Основание слева в точке (0,0), кончик вправо. Зеркалится на второе крыло.' },
+  spike:   { t:'Клин обода',   box:[0,-1,1,1],  hint:'Растёт из полосы обода наружу: слева кромка колеса, справа остриё.' },
+  plate:   { t:'Плита плоти',  box:[-1,-1,1,1], hint:'Нарост вокруг столба света. Центр клетки — центр плиты.' },
+  crown:   { t:'Лезвие венца', box:[-1,-1,1,0], hint:'Основание на ободе нимба (низ клетки), остриё вверх.' },
+  eye:     { t:'Разрез глаза', box:[-1,-1,1,1], hint:'Внутренний угол слева. Наклон верхнего века и есть злость.' },
+  brow:    { t:'Надбровье',    box:[-1,-1,1,1], hint:'Кладётся ПОВЕРХ глаза и срезает его верх — от этого прищур.' }
+};
+var KEY = 'angel_parts_v1';
+var PARTS = Object.assign({}, window.ANGEL_PARTS || {},
+                          JSON.parse(localStorage.getItem(KEY) || '{}'));
+window.ANGEL_PARTS = PARTS;
+var role = 'plate', drag = -1;
+
+var pad = document.getElementById('pad'), px = pad.getContext('2d');
+var live = document.getElementById('live'), lx = live.getContext('2d');
+var dpr = Math.min(2, window.devicePixelRatio || 1);
+var LW = 420;
+function fit(){
+  var r = pad.getBoundingClientRect();
+  pad.width = r.width*dpr; pad.height = r.height*dpr;
+  live.style.width = LW+'px'; live.style.height = window.innerHeight+'px';
+  live.width = LW*dpr; live.height = window.innerHeight*dpr;
+}
+
+/* Клетка роли → пиксели холста, с полями и без искажения пропорций. */
+function view(){
+  var W = pad.width/dpr, H = pad.height/dpr, b = ROLES[role].box, m = 60;
+  var k = Math.min((W-m*2)/(b[2]-b[0]), (H-m*2)/(b[3]-b[1]));
+  return { k:k, ox: W/2 - (b[0]+b[2])/2*k, oy: H/2 - (b[1]+b[3])/2*k };
+}
+function toPx(p){ var v = view(); return [v.ox + p[0]*v.k, v.oy + p[1]*v.k]; }
+function toUn(x,y){ var v = view(); return [(x-v.ox)/v.k, (y-v.oy)/v.k]; }
+
+function drawPad(){
+  var W = pad.width/dpr, H = pad.height/dpr, b = ROLES[role].box, gx, gy, p, q;
+  px.setTransform(dpr,0,0,dpr,0,0);
+  px.fillStyle = '#080b10'; px.fillRect(0,0,W,H);
+  px.strokeStyle = 'rgba(120,180,230,.08)'; px.lineWidth = 1;
+  px.beginPath();
+  for (gx=b[0]; gx<=b[2]+1e-9; gx+=0.1){ p=toPx([gx,b[1]]); q=toPx([gx,b[3]]);
+    px.moveTo(p[0],p[1]); px.lineTo(q[0],q[1]); }
+  for (gy=b[1]; gy<=b[3]+1e-9; gy+=0.1){ p=toPx([b[0],gy]); q=toPx([b[2],gy]);
+    px.moveTo(p[0],p[1]); px.lineTo(q[0],q[1]); }
+  px.stroke();
+  px.strokeStyle = 'rgba(120,180,230,.30)'; px.beginPath();
+  p=toPx([b[0],0]); q=toPx([b[2],0]); px.moveTo(p[0],p[1]); px.lineTo(q[0],q[1]);
+  p=toPx([0,b[1]]); q=toPx([0,b[3]]); px.moveTo(p[0],p[1]); px.lineTo(q[0],q[1]);
+  px.stroke();
+  px.strokeStyle = 'rgba(255,190,120,.45)';
+  var p0=toPx([b[0],b[1]]), p1=toPx([b[2],b[3]]);
+  px.strokeRect(p0[0],p0[1],p1[0]-p0[0],p1[1]-p0[1]);
+
+  var pts = PARTS[role];
+  if (pts && pts.length){
+    px.beginPath();
+    pts.forEach(function(pt,i){ var s=toPx(pt); if(i) px.lineTo(s[0],s[1]); else px.moveTo(s[0],s[1]); });
+    if (pts.length>2) px.closePath();
+    if (pts.length>2){ px.fillStyle = 'rgba(226,124,48,.28)'; px.fill(); }
+    px.strokeStyle = '#f0a05a'; px.lineWidth = 2; px.stroke();
+    pts.forEach(function(pt,i){ var s=toPx(pt);
+      px.beginPath(); px.arc(s[0],s[1], i===drag?7:5, 0, 6.2832);
+      px.fillStyle = i===0 ? '#8ff0b0' : '#ffd9a8'; px.fill(); });
+  }
+  document.getElementById('hint').textContent =
+    ROLES[role].hint + '  ·  точек: ' + ((pts&&pts.length)||0) +
+    (pts && pts.length>2 ? '' : '  ·  нужно не меньше трёх');
+}
+
+function drawLive(){
+  var W = LW, H = live.height/dpr;
+  lx.setTransform(dpr,0,0,dpr,0,0);
+  lx.fillStyle='#070a0e'; lx.fillRect(0,0,W,H);
+  var mass = +document.getElementById('mass').value/100;
+  var seals = +document.getElementById('seals').value/100;
+  var R1 = Math.min(W*0.32, H*0.15);
+  angelDraw(lx,{cx:W*0.5, cy:H*0.24, R:R1,      alpha:1, tone:'255,220,140',
+                gaze:-Math.PI/2, id:'v1', seals:seals, phase:2, mass:mass});
+  angelDraw(lx,{cx:W*0.30,cy:H*0.62, R:R1*0.55, alpha:1, tone:'255,220,140',
+                gaze:-Math.PI/2, id:'v2', seals:seals, phase:2, mass:mass});
+  angelDraw(lx,{cx:W*0.74,cy:H*0.62, R:R1*0.28, alpha:1, tone:'255,220,140',
+                gaze:-Math.PI/2, id:'v3', seals:seals, phase:2, mass:mass});
+  lx.fillStyle='rgba(120,160,190,.65)'; lx.font='11px ui-monospace,monospace';
+  lx.textAlign='center';
+  lx.fillText('крупный план', W*0.5, H*0.24 + R1*2.0);
+  lx.fillText('доска', W*0.30, H*0.62 + R1*1.3);
+  lx.fillText('карта', W*0.74, H*0.62 + R1*1.0);
+  ANGEL.live = 0;
+  requestAnimationFrame(drawLive);
+}
+
+/* ── ПРАВКА ТОЧЕК ─────────────────────────────────────────── */
+pad.addEventListener('mousedown', function(e){
+  var r = pad.getBoundingClientRect(), mx = e.clientX-r.left, my = e.clientY-r.top;
+  var pts = PARTS[role] = PARTS[role] || [];
+  var hit = -1;
+  pts.forEach(function(pt,i){ var s=toPx(pt);
+    if (Math.hypot(s[0]-mx, s[1]-my) < 9) hit = i; });
+  if (e.button === 2){ if (hit>=0){ pts.splice(hit,1); commit(); } return; }
+  if (hit >= 0){ drag = hit; drawPad(); return; }
+  pts.push(toUn(mx,my)); commit();
+});
+window.addEventListener('mousemove', function(e){
+  if (drag < 0) return;
+  var r = pad.getBoundingClientRect();
+  PARTS[role][drag] = toUn(e.clientX-r.left, e.clientY-r.top);
+  drawPad(); bump();
+});
+window.addEventListener('mouseup', function(){ if(drag>=0){ drag=-1; commit(); } });
+pad.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+/* ⚠️ Спрайт кэширует Path2D по ОБЪЕКТУ набора (ANGEL.pcSrc). Пересобираем
+ * ссылку на каждую правку, иначе она видна только после перезагрузки.     */
+function bump(){ PARTS = Object.assign({}, PARTS); window.ANGEL_PARTS = PARTS; }
+function commit(){ bump(); localStorage.setItem(KEY, JSON.stringify(PARTS));
+                   drawPad(); paintRoles(); }
+
+function paintRoles(){
+  var host = document.getElementById('roles'); host.innerHTML = '';
+  Object.keys(ROLES).forEach(function(k){
+    var b = document.createElement('button');
+    b.className = 'role' + (k===role ? ' on' : '');
+    var n = (PARTS[k]||[]).length;
+    b.innerHTML = ROLES[k].t + '<i>' + (n>2 ? n+' т.' : '—') + '</i>';
+    b.onclick = function(){ role = k; paintRoles(); drawPad(); };
+    host.appendChild(b);
+  });
+}
+document.getElementById('undo').onclick  = function(){ (PARTS[role]||[]).pop(); commit(); };
+document.getElementById('clear').onclick = function(){ PARTS[role] = []; commit(); };
+document.getElementById('proc').onclick  = function(){ delete PARTS[role]; commit(); };
+['mass','seals'].forEach(function(id){
+  var e = document.getElementById(id);
+  e.oninput = function(){ document.getElementById(id==='mass'?'mv':'sv').textContent = e.value+'%'; };
+});
+
+/* ── ВЫГРУЗКА. Файл кладётся рядом и подключается ПЕРЕД angel_fx.js. ── */
+function dump(){
+  var use = {};
+  Object.keys(PARTS).forEach(function(k){
+    if ((PARTS[k]||[]).length > 2)
+      use[k] = PARTS[k].map(function(p){ return [+p[0].toFixed(4), +p[1].toFixed(4)]; });
+  });
+  return '/* ДЕТАЛИ ОБЛИКА «ПРЕСТОЛА» — нарисованы в _angel_verstak.html.\n'
+       + ' * Роли и их клетки описаны в angel_fx.js (см. angelPart). Править\n'
+       + ' * руками можно, но проще открыть верстак: он показывает деталь\n'
+       + ' * сразу на живом спрайте, в трёх размерах. */\n'
+       + 'window.ANGEL_PARTS = ' + JSON.stringify(use, null, 2) + ';\n';
+}
+document.getElementById('save').onclick = function(){
+  var b = new Blob([dump()], {type:'text/javascript'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(b); a.download = 'angel_parts.js'; a.click();
+};
+document.getElementById('copy').onclick = function(){
+  navigator.clipboard.writeText(dump()).then(function(){
+    var c = document.getElementById('copy');
+    c.textContent = 'Скопировано ✓';
+    setTimeout(function(){ c.textContent = 'Скопировать в буфер'; }, 1500);
+  });
+};
+document.getElementById('load').onclick = function(){ document.getElementById('file').click(); };
+document.getElementById('file').onchange = function(e){
+  var f = e.target.files[0]; if(!f) return;
+  f.text().then(function(txt){
+    var m = txt.match(/\{[\s\S]*\}/); if(!m) return;
+    PARTS = Object.assign({}, JSON.parse(m[0])); commit();
+  });
+};
+
+fit(); paintRoles(); drawPad(); drawLive();
+window.addEventListener('resize', function(){ fit(); drawPad(); });
+</script>

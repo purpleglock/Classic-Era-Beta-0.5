@@ -1358,7 +1358,10 @@ function bgStepAngels() {
     x.clearRect(0, 0, px, px);
     // Радиус подбираем так, чтобы свечение (2.9R) село ровно в полотно.
     const gdn = !!m.userData.gd;
-    const R = px / 2 / (gdn ? 1.9 : 2.9);
+    // ◈ ФАЗА. У второго воплощения свечение шире (3.3R против 2.9R) — делитель
+    // берём тот же, что и в спрайте, иначе ореол срежется о край полотна.
+    const aph = (u.pk && +u.pk.ph) || 1;
+    const R = px / 2 / (gdn ? 1.9 : aph >= 2 ? 3.3 : 2.9);
     // ⚠️ СТУПЕНЬ ЗАДАЁМ ЯВНО. angelDetail считает её от радиуса, а радиус здесь
     // — это ПОЛОТНО, а не размер на экране: подняв полотно ради чёткости, мы
     // невольно заказали бы самую тяжёлую ступень всем, включая девять эскортных
@@ -1369,7 +1372,8 @@ function bgStepAngels() {
     const tone = (typeof BB_C !== 'undefined' && BB_C[bgTone(u)]) || '255,220,140';
     const dim = (u.pk && u.pk.dim != null) ? +u.pk.dim : 1;
     angelDraw(x, { cx: px / 2, cy: px / 2, R, alpha: 1, tone, guard: gdn, detail: det,
-                   gaze: bgAngelGaze(u, m), id: u.id, seals: gdn ? 1 : dim });
+                   gaze: bgAngelGaze(u, m), id: u.id, seals: gdn ? 1 : dim,
+                   phase: gdn ? 1 : aph });
     m.userData.sp.material.map.needsUpdate = true;
   });
   if (any) BG.dirty = true;

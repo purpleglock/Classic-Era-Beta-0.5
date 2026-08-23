@@ -913,6 +913,21 @@ textarea.gm-fi{resize:vertical}
 #gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed){padding:4px}
 #gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed) .gm-panel-head{gap:0}
 #gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed) .gm-panel-ttl{display:none}
+/* Шапка панели липнет к верху её собственной прокрутки: список слоёв длиннее
+   экрана, и без этого кнопка «свернуть» уезжала вверх вместе с содержимым —
+   развернув панель, свернуть её было уже нечем. Отрицательные поля гасят
+   padding контейнера, чтобы под шапкой не просвечивали строки. */
+#gm-wrap.gm-mobile #gm-controls .gm-panel-head{
+  position:sticky;top:-7px;z-index:3;
+  margin:-7px -8px 1px;padding:7px 8px 6px;
+  background:hsl(216 24% 8% / .97);
+  border-bottom: var(--deco-frame-w, 1px) solid var(--w1);
+}
+#gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed) .gm-panel-head{
+  position:static;margin:0;padding:0;background:none;border-bottom:none;
+}
+/* по заголовку тоже тапается — цель шире одной стрелки */
+#gm-wrap.gm-mobile .gm-panel-ttl{cursor:pointer}
 /* раскрытая: аккуратные пальцевые строки-слои */
 #gm-wrap.gm-mobile .gm-ctl-row{height:38px;font-size:13px}
 /* панель системы — нижний лист на всю ширину */
@@ -960,8 +975,11 @@ textarea.gm-fi{resize:vertical}
 /* легенда в две колонки: в одну строку на 375 px она разъезжается на пять рядов */
 #gm-wrap.gm-mobile .gm-th-leg{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
 /* контролы карты не должны нырять под лист */
-#gm-wrap.gm-mobile.gm-theatre #gm-controls{bottom:calc(46% + 12px)}
-#gm-wrap.gm-mobile.gm-theatre:has(#gm-theatre.gm-th-min) #gm-controls{bottom:64px}
+/* Контролы карты не должны нырять под лист театра. Поднимая низ панели, ОБЯЗАТЕЛЬНО
+   ужимаем и её потолок: с прежним max-height:calc(100% - 24px) раскрытый список
+   слоёв уходил выше карты — шапка со стрелкой оказывалась за экраном. */
+#gm-wrap.gm-mobile.gm-theatre #gm-controls{bottom:calc(46% + 12px);max-height:calc(54% - 24px)}
+#gm-wrap.gm-mobile.gm-theatre:has(#gm-theatre.gm-th-min) #gm-controls{bottom:64px;max-height:calc(100% - 76px)}
 
 /* пальцевые строки: 35 px по высоте мало для тапа по краю списка целей */
 #gm-wrap.gm-mobile .gm-opcmd-btn{padding:11px 12px}

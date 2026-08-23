@@ -63,7 +63,7 @@ function gmCtlBtns(opts) {
   if (opts.edit) tools.push(`<button class="gm-ctl gm-ctl-row gm-ctl-edit" title="Редактировать карту" onclick="gmEnterEdit()"><span class="gm-ctl-ic">${GM_ICO.edit}</span><span class="gm-ctl-lb">Редактировать карту</span></button>`);
   return `
         <div class="gm-panel-head">
-          <span class="gm-panel-ttl">Режимы карты</span>
+          <span class="gm-panel-ttl" onclick="gmToggleControls()">Режимы карты</span>
           <button class="gm-ctl gm-ctl-toggle${GM.ctlCollapsed ? ' gm-on' : ''}" id="gm-ctl-toggle" title="${GM.ctlCollapsed ? 'Показать панель' : 'Свернуть панель'}" onclick="gmToggleControls()">${GM_ICO.collapse}</button>
         </div>
         <div class="gm-ctl-group${GM.ctlCollapsed ? ' gm-collapsed' : ''}" id="gm-ctl-group">
@@ -5430,6 +5430,7 @@ function gmmBlit() {
   ctx.setTransform(GMM.s * dpr, 0, 0, GMM.s * dpr, GMM.tx * dpr, GMM.ty * dpr);
   gmmPaintStars(ctx, GMM.s);
   gmmPaintOccup(ctx, GMM.s);   // ВОЙНА: флаги оккупантов — поверх звёзд, тот же мировой трансформ
+  gmmPaintMelt(ctx, GMM.s);    // ◈ ПРЕСТОЛ, фаза 2: над переплавляемым миром
   ctx.restore();
   gmmPaintSecLabels(ctx, GMM.s);  // плашки нейминга секторов — ПОВЕРХ звёзд
   if (GMM.selId) {   // кольцо выбранной системы — поверх, живёт без перерисовки мира
@@ -7837,7 +7838,7 @@ function gmmBuildDefense() {
     // не бывает численности, его нельзя пересчитать в корветы и незачем красить
     // в цвет державы. Своя отметка, свой цвет (кость и золото), без бейджа.
     const angelFid = (GM.angel && GM.angel.fid) || null;
-    const angelCol = [246, 224, 150];
+    const angelCol = gmAngelCol();
     // ◈ СТРАЖА. Флот ангела, который НЕ ковчег, — это подобия у порога: их
     // можно пересчитать (они корабли), и бейдж с числом им полагается. Отличаем
     // по id флота тела, а не по составу: состав у стражи убывает по мере боёв.
@@ -7875,7 +7876,7 @@ function gmmBuildDefense() {
       // нечего, «состав» у него один.
       if (fl.faction_id === ((GM.angel && GM.angel.fid) || null)) {
         const gdF = !!(GM.angel && GM.angel.fleet && fl.id !== GM.angel.fleet);
-        pushShip(fl, { fleet: true, angel: true, guard: gdF, side: 'left', col: [246, 224, 150],
+        pushShip(fl, { fleet: true, angel: true, guard: gdF, side: 'left', col: gmAngelCol(),
                        enemy: true, fid: fl.faction_id,
                        ships: gdF ? (fl.ships == null ? null : +fl.ships) : null, intel: false,
                        facName: fl.faction_name });
@@ -8154,6 +8155,18 @@ function gmmCarrierGlyph(ctx, x, y, sz, col, a, ang) {
 function gmAngelDetail() {
   return (typeof angelLo === 'function' && angelLo()) ? 0 : 1;
 }
+// ◈ ФАЗА. Второе воплощение отличают ЦВЕТОМ отметки, а не подписью: подписи у
+// ковчега нет и не будет (её некому выдать — классификатор молчит). Кость и
+// золото — то, что вставало в первый раз; раскалённая медь — то, что встало
+// после. Кто уже видел первую фазу, поймёт без единого слова.
+const GM_ANG_T1 = [246, 224, 150], GM_ANG_T2 = [242, 158, 96];
+function gmAngelPhase() { return (GM.angel && +GM.angel.phase) || 1; }
+// ЗАПАС ПЛОТИ (angel_state.mass). Сервер отдаёт долю ТОЛЬКО своей стороне —
+// чужим здесь ноль, и это верно: со стороны видно, что оно наросло, но не
+// видно, хватит ли ему на разворот следующего снаряда.
+function gmAngelMass() { return Math.max(0, Math.min(1, +(GM.angel && GM.angel.mass_frac) || 0)); }
+function gmAngelCol() { return gmAngelPhase() >= 2 ? GM_ANG_T2 : GM_ANG_T1; }
+function gmAngelTone() { return gmAngelCol().join(','); }
 function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
   const o = opts || {};
   const mza = o.type === 'mza';
@@ -8250,8 +8263,9 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
     GMM._angelDrawn = true;
     if (typeof angelDraw === 'function') {
       angelDraw(ctx, { cx: 0, cy: 0, R: AR, alpha: 1, detail: gmAngelDetail(),
-                       tone: '246,224,150', gaze: -Math.PI / 2, guard: !!o.guard,
-                       id: o.guard ? 'gm-guard' : 'gm', seals: 1 });
+                       tone: gmAngelTone(), gaze: -Math.PI / 2, guard: !!o.guard,
+                       id: o.guard ? 'gm-guard' : 'gm', seals: 1,
+                       phase: gmAngelPhase(), mass: gmAngelMass() });
     }
     ctx.restore();
     return AR * 1.35;                    // радиус клик-зоны/подписи — по новому калибру
@@ -8661,10 +8675,13 @@ function gmmPaintDefense(ctx) {
           // помеха: считать тут нечего, и прибор это признаёт.
           ctx.save();
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          const gl = '▓░▒█╳╬┼⌁⟊⟟';
+          // Фаза 2: помеха гуще и на знак длиннее — прибор стал справляться хуже.
+          const ph2 = gmAngelPhase() >= 2;
+          const gl = ph2 ? '█▓╬╳▚▒⟊⌁' : '▓░▒█╳╬┼⌁⟊⟟';
           let noise = '';
           const seed = Math.floor((t || 0) * 7);
-          for (let i = 0; i < 3; i++) noise += gl[(seed * 7 + i * 13 + (d.id ? d.id.length : 0)) % gl.length];
+          const nn = ph2 ? 4 : 3;
+          for (let i = 0; i < nn; i++) noise += gl[(seed * 7 + i * 13 + (d.id ? d.id.length : 0)) % gl.length];
           const fs2 = Math.max(8, csz * 1.5);
           ctx.font = '700 ' + fs2.toFixed(0) + 'px ui-monospace, "Consolas", monospace';
           ctx.lineWidth = Math.max(1, csz * 0.45); ctx.lineJoin = 'round';
@@ -8750,7 +8767,7 @@ function gmmPaintDefense(ctx) {
           const enemyTag = d.enemy && d.facName ? ` · ${d.facName}` : '';
           // ⚠️ Ковчег не подписываем ни классом, ни державой: подпись — это
           // уже классификация, а его никто не классифицировал.
-          const fleetLbl = (d.angel && !d.guard) ? '◈ ▓░▒ ▚'
+          const fleetLbl = (d.angel && !d.guard) ? (gmAngelPhase() >= 2 ? '◈ █▓▚╬ ▒' : '◈ ▓░▒ ▚')
             : d.army ? (stacked ? `Армии · ${n}` : '🪖 Армия')
             : d.station ? '🛰 Станция'
             : d.enemy ? 'Чужой флот' + enemyTag : (stacked ? `Флоты · ${n}` : 'Флот');
@@ -8822,25 +8839,49 @@ function gmmPaintDefense(ctx) {
           // сдвинулось с места.
           const AR = Math.min(Math.max(Math.max(2.6, Math.min(14, 2.2 + s * 1.6)) * zf * 4.2, 22), 58);
           const pulse = 0.5 + 0.5 * Math.sin((t || 0) * 1.6);
+          // ◈ ФАЗА В ПОЛЁТЕ. Перегон длится часами, и всё это время ковчег виден
+          // ТОЛЬКО здесь — значит облик второго воплощения обязан доезжать и
+          // сюда, иначе полфазы игрок смотрит на первое тело. Спрайт фазу уже
+          // знает; фазы не знала ОБВЯЗКА перегона: кольцо было золотым наглухо,
+          // а подпись — из глифов первой фазы.
+          const ph2t = gmAngelPhase() >= 2;
+          const ac = gmAngelCol();
           ctx.save();
           ctx.translate(hX, hY);
           ctx.globalCompositeOperation = 'lighter';
-          ctx.strokeStyle = `rgba(255,232,168,${0.12 + 0.16 * pulse})`;
-          ctx.lineWidth = Math.max(1.4, AR * 0.07);
+          ctx.strokeStyle = `rgba(${ac[0]},${ac[1]},${ac[2]},${(ph2t ? 0.18 : 0.12) + 0.16 * pulse})`;
+          ctx.lineWidth = Math.max(1.4, AR * (ph2t ? 0.10 : 0.07));
           ctx.beginPath(); ctx.arc(0, 0, AR * (1.15 + 0.22 * pulse), 0, 6.2832); ctx.stroke();
+          // СЛЕД. Второе тело идёт не «светясь», а ДОГОРАЯ: за ним тянутся угли
+          // переплавленного. Кладём по курсу назад, поэтому направление движения
+          // читается и без разворота спрайта (у него нет носа).
+          if (ph2t) {
+            for (let w = 0; w < 5; w++) {
+              const wp = ((t || 0) * 0.5 + w * 0.2) % 1;
+              const wd = AR * (1.1 + wp * 2.4);
+              const wa = 0.42 * (1 - wp);
+              ctx.fillStyle = `rgba(255,${(140 + w * 14).toFixed(0)},70,${wa.toFixed(3)})`;
+              ctx.beginPath();
+              ctx.arc(-Math.cos(ang) * wd, -Math.sin(ang) * wd, AR * 0.12 * (1 - wp * 0.5), 0, 6.2832);
+              ctx.fill();
+            }
+          }
           ctx.restore();
           GMM._angelDrawn = true;
           if (typeof angelDraw === 'function') {
             angelDraw(ctx, { cx: hX, cy: hY, R: AR, alpha: 1, detail: gmAngelDetail(),
-                             tone: '246,224,150', gaze: ang, id: 'gm-transit', seals: 1 });
+                             tone: gmAngelTone(), gaze: ang, id: 'gm-transit', seals: 1,
+                             phase: gmAngelPhase(), mass: gmAngelMass() });
           }
           if (deep) {
             ctx.save();
             ctx.font = '600 11px system-ui, sans-serif';
             ctx.textAlign = 'center'; ctx.textBaseline = 'top';
             ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3;
-            ctx.fillStyle = 'rgba(250,238,196,0.98)';
-            ctx.fillText('◈ ▓░▒ ▚', hX, hY + AR * 1.35);
+            // Подпись — та же, что у стоящего (см. fleetLbl): помеха гуще на
+            // фазе 2. Ковчег не подписывают ни классом, ни державой.
+            ctx.fillStyle = ph2t ? 'rgba(255,214,168,0.98)' : 'rgba(250,238,196,0.98)';
+            ctx.fillText(ph2t ? '◈ █▓▚╬ ▒' : '◈ ▓░▒ ▚', hX, hY + AR * 1.35);
             ctx.restore();
           }
         } else {
@@ -10763,6 +10804,70 @@ async function gmLoadOccup() {
     GM.occup = Array.isArray(r) ? r : [];
   } catch (e) { GM.occup = GM.occup || []; }   // срез не накачен → слой просто пуст
   return GM.occup;
+}
+// ◈ ПРЕСТОЛ, ФАЗА 2: ПЕРЕПЛАВКА МИРА.
+// ⚠️ БЕЗ ТУМБЛЕРА И БЕЗ РАЗВЕДКИ, как и сам ковчег: пять часов над колонией
+// стоит то, что видно с любой орбиты. Слоя-переключателя тут нет намеренно —
+// это не «срез данных», а событие, которое сейчас происходит.
+// Рисуем кольцо-обод, которое затягивается по мере переплавки (frac), и подпись.
+// Мировые координаты (вызов из gmmBlit), экранный размер держим делением на camS.
+function gmmPaintMelt(ctx, camS) {
+  const lst = (GM.angel && GM.angel.melting_list) || null;
+  if (!lst || !lst.length || !GM.systems || !GM.systems.length) return;
+  const byId = {};
+  lst.forEach(m => { if (m && m.system_id) byId[m.system_id] = m; });
+  const mg = 160, u = 1 / camS;
+  const t = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  GM.systems.forEach(s => {
+    const m = byId[s.id]; if (!m) return;
+    const X = s.x * camS + GMM.tx, Y = s.y * camS + GMM.ty;
+    if (X < -mg || X > GMM.vw + mg || Y < -mg || Y > GMM.vh + mg) return;
+    const _scY = s.y * camS + GMM.ty, _dyW = (gmmTY(_scY) - _scY) / camS;
+    ctx.save(); ctx.translate(0, _dyW);
+
+    const iw = gmmIconPx(s, camS) / camS;
+    const R = iw * 0.78 + 7 * u;
+    const frac = Math.max(0, Math.min(1, +m.frac || 0));
+    const puls = 0.72 + 0.28 * Math.sin(t * 2.1);
+
+    // 1) фон обода — тот же костяно-медный тон, что у самой отметки в фазе 2
+    ctx.globalAlpha = 0.30;
+    ctx.strokeStyle = 'rgba(242,158,96,0.9)';
+    ctx.lineWidth = 2.2 * u;
+    ctx.beginPath(); ctx.arc(s.x, s.y, R, 0, Math.PI * 2); ctx.stroke();
+
+    // 2) заполненная доля — сколько мира уже ушло вверх
+    ctx.globalAlpha = 0.95 * puls;
+    ctx.lineWidth = 3.2 * u;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+    ctx.stroke();
+
+    // 3) вертикальные штрихи вверх: «люди уходят ровными линиями»
+    ctx.globalAlpha = 0.5 * puls; ctx.lineWidth = 1.2 * u;
+    for (let i = -1; i <= 1; i++) {
+      const bx = s.x + i * R * 0.42;
+      ctx.beginPath();
+      ctx.moveTo(bx, s.y - R * 0.2);
+      ctx.lineTo(bx, s.y - R * (1.05 + 0.25 * Math.sin(t * 1.7 + i)));
+      ctx.stroke();
+    }
+
+    // 4) подпись — без цифр процента: прибор считает не всё
+    ctx.globalAlpha = 0.98;
+    ctx.font = '700 ' + (10 * u).toFixed(2) + 'px ui-monospace, "Consolas", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(4,9,16,0.92)';
+    const lbl = '◈ ПЕРЕПЛАВКА' + (m.planet ? ' · ' + m.planet : '');
+    ctx.strokeText(lbl, s.x, s.y - R * 1.35);
+    ctx.fillStyle = 'rgba(250,206,160,0.98)';
+    ctx.fillText(lbl, s.x, s.y - R * 1.35);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  });
+  ctx.restore();
 }
 // Флаг оккупанта над системой. Рисуется в МИРОВЫХ координатах (вызов из gmmBlit
 // сразу после gmmPaintStars), размер держим экранно-постоянным делением на camS.

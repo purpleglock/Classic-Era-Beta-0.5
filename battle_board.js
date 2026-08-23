@@ -4538,7 +4538,12 @@ function bbAngel(ctx, u, alpha, cx, cy) {
     ctx.strokeStyle = `rgba(${tone},0.9)`; ctx.lineWidth = Math.max(1, 2 / BB.zoom);
     ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
   }
-  angelDraw(ctx, { cx, cy, R: BB.R * 1.15, alpha, tone, gaze, id: u.id, seals: dim });
+  // ◈ ФАЗА ВОПЛОЩЕНИЯ (pk.ph) — ключ облика, идёт обеим сторонам, как gd и dim
+  // (см. _angel_phase_look.sql). Второе тело крупнее: даём ему больше поля,
+  // иначе шипы ободьев и венец режутся о край клетки.
+  const aph = (u.pk && +u.pk.ph) || 1;
+  angelDraw(ctx, { cx, cy, R: BB.R * (aph >= 2 ? 1.28 : 1.15), alpha, tone, gaze,
+                   id: u.id, seals: dim, phase: aph });
   // Полосы состояния под ангелом НЕТ намеренно — см. _angel_board_seal.sql.
   // Вместо неё строка помех: место, где у любого другого борта стоят цифры,
   // занято сбоем — и это сообщает ровно то, что нужно сообщить.

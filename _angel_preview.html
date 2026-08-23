@@ -17,6 +17,10 @@
   <input id="seals" type="range" min="0" max="100" value="100">
   <label>Размер (R): <b id="rv">34</b></label>
   <input id="rad" type="range" min="12" max="90" value="34">
+  <label>Фаза воплощения: <b id="pv">2</b></label>
+  <input id="ph" type="range" min="1" max="2" value="2">
+  <label>Плоть (запас): <b id="mv">60%</b></label>
+  <input id="mass" type="range" min="0" max="100" value="60">
   <label>Взгляд</label>
   <input id="gz" type="range" min="0" max="628" value="470">
   <p style="color:#587">Клик по холсту — попадание (вспышка нимба).</p>
@@ -29,11 +33,13 @@ let dpr = Math.min(2, window.devicePixelRatio || 1);
 function fit(){ const r = cv.getBoundingClientRect();
   cv.width = r.width*dpr; cv.height = r.height*dpr; }
 addEventListener('resize', fit); fit();
-const S = { seals:1, R:34, gaze:4.7 };
+const S = { seals:1, R:34, gaze:4.7, phase:2, mass:0.6 };
 const bind=(id,f)=>{const e=document.getElementById(id);e.oninput=()=>f(+e.value);};
 bind('seals',v=>{S.seals=v/100;document.getElementById('sv').textContent=v+'%';});
 bind('rad',  v=>{S.R=v;document.getElementById('rv').textContent=v;});
 bind('gz',   v=>{S.gaze=v/100;});
+bind('ph',   v=>{S.phase=v;document.getElementById('pv').textContent=v;});
+bind('mass', v=>{S.mass=v/100;document.getElementById('mv').textContent=v+'%';});
 cv.onclick = e => { angelHit('a'); angelHit('b'); angelHit('c'); };
 function frame(){
   x.setTransform(dpr,0,0,dpr,0,0);
@@ -47,13 +53,13 @@ function frame(){
   for(let gx=0;gx<W;gx+=40){x.beginPath();x.moveTo(gx,0);x.lineTo(gx,H);x.stroke();}
   for(let gy=0;gy<H;gy+=40){x.beginPath();x.moveTo(0,gy);x.lineTo(W,gy);x.stroke();}
 
-  angelDraw(x,{cx:W*0.20,cy:H*0.5,R:16,alpha:1,tone:'255,90,90',gaze:S.gaze,id:'a',seals:S.seals});
+  angelDraw(x,{cx:W*0.20,cy:H*0.5,R:16,alpha:1,tone:'255,90,90',gaze:S.gaze,id:'a',seals:S.seals,phase:S.phase,mass:S.mass});
   angelSealBar(x, W*0.20, H*0.5+30, 40, S.seals);
 
-  angelDraw(x,{cx:W*0.52,cy:H*0.5,R:S.R,alpha:1,tone:'120,255,200',gaze:S.gaze,id:'b',seals:S.seals});
+  angelDraw(x,{cx:W*0.52,cy:H*0.5,R:S.R,alpha:1,tone:'120,255,200',gaze:S.gaze,id:'b',seals:S.seals,phase:S.phase,mass:S.mass});
   angelSealBar(x, W*0.52, H*0.5+S.R*2.6, S.R*2.2, S.seals);
 
-  angelDraw(x,{cx:W*0.83,cy:H*0.5,R:26,alpha:1,tone:'255,220,140',gaze:S.gaze,id:'c',seals:S.seals});
+  angelDraw(x,{cx:W*0.83,cy:H*0.5,R:26,alpha:1,tone:'255,220,140',gaze:S.gaze,id:'c',seals:S.seals,phase:S.phase,mass:S.mass});
   angelSealBar(x, W*0.83, H*0.5+70, 60, S.seals);
 
   ANGEL.live = 0;
