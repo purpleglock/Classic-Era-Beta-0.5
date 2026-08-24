@@ -4850,12 +4850,20 @@ async function renderHotspots() {
   if (typeof curSlug !== 'undefined' && curSlug !== 'hotspots') return;
   const threatsHtml = hsThreatsBlock(threats);
 
+  // ◈ ПРЕСТОЛ · ЧАСЫ ВОЗНЕСЕНИЯ. Один счётчик на всю галактику, поэтому и
+  // место у него общее — над боями и над угрозами, а не в пульте Длани: часы
+  // должен видеть КАЖДЫЙ, а не только тот, кто уже построил себе орудие.
+  let clock = null;
+  try { clock = await ecRpc('angel_clock', {}); } catch (e) { clock = null; }
+  if (typeof curSlug !== 'undefined' && curSlug !== 'hotspots') return;
+  const ascHtml = hsAscendBlock(clock);
+
   // В бейдж идут бои плюс ВСКРЫТЫЕ угрозы: ghost — это фон, дёргать им цифру
   // в меню значит приучить игрока её игнорировать.
   hsNavBadge(battles.length + threats.filter(t => t && t.grade !== 'ghost').length);
 
   if (!battles.length) {
-    setPg(head + threatsHtml + `<div class="hs-empty"><div class="hs-empty-ic">🕊</div>Сейчас ваши флоты не скованы боем.<br>
+    setPg(head + ascHtml + threatsHtml + `<div class="hs-empty"><div class="hs-empty-ic">🕊</div>Сейчас ваши флоты не скованы боем.<br>
       <span class="hs-hint">Бой завязывается при встрече с врагом или перехвате на трассе — тогда точка появится здесь.</span></div></div>`);
     return;
   }
@@ -4873,8 +4881,56 @@ async function renderHotspots() {
         <button class="btn btn-gd" onclick="bbOpen('${jsq(b.id)}')">${forming ? 'Расставить флот' : 'К доске боя'}</button>
       </div>`;
   }).join('');
-  setPg(head + threatsHtml + `<div class="hs-grid">${rows}</div>
+  setPg(head + ascHtml + threatsHtml + `<div class="hs-grid">${rows}</div>
     <div class="hs-hint" style="margin-top:14px">Скованный боем флот никуда не уйдёт, пока сражение не окончено. Система под боем не оккупируется — сначала надо победить.</div></div>`);
+}
+
+// ── ◈ ПРЕСТОЛ · ЧАСЫ ВОЗНЕСЕНИЯ ────────────────────────────────
+// Считает сервер (`angel_clock`, _angel_clock.sql): съеденное население к
+// порогу. Клиент НИЧЕГО не досчитывает — иначе два счётчика одного и того же
+// разъедутся, как уже было с доходом ГС.
+//
+// ⚠️ Блок молчит, если кризиса нет: пустая шкала «0%» на мирной карте — это
+// обещание беды, которого никто не давал.
+function hsAscendBlock(c) {
+  if (!c || !c.exists) return '';
+  const pct     = Math.max(0, Math.min(100, +c.pct || 0));
+  const anchors = +c.anchors || 0;
+  const worlds  = +c.worlds || 0;
+  const eating  = +c.eating || 0;
+  const broken  = +c.broken || 0;
+  // Зарастание печатей — то же правило, что на сервере: 1.6 за якорь, потолок 8.
+  const knit = (1.6 * Math.min(anchors, 8) * (1 + pct / 100)).toFixed(1);
+  const meta = [
+    ['миров переплавлено', worlds],
+    ['в переплавке сейчас', eating],
+    ['якорей у кризиса', anchors],
+    ['якорей снято', broken],
+  ].map(([k, v]) => `<span>${k}: <b>${v}</b></span>`).join('');
+  // Главная строка. Она объясняет, ПОЧЕМУ якоря важны, — без неё цифра
+  // «якорей 1» ничего игроку не говорит.
+  // ⚠️ Формулировку ведём ОТ ЧИСЛА, а не одной фразой на все случаи. Снаряд
+  // Длани снимает 2.2–3.4 печати, значит порог осмысленности примерно 3 в час:
+  // ниже него зарастание залпами перебивается, выше — уже нет. Писать «быстрее,
+  // чем их снимают залпы» при одном якоре (1.7 в час) — прямое враньё игроку.
+  const heavy = +knit >= 3;
+  const note = anchors > 0
+    ? `<div class="${heavy ? 'hs-asc-warn' : 'hs-asc-ok'}">Печати Престола зарастают на <b>${knit}</b> в час — это ${anchors} ${anchors === 1 ? 'якорь' : anchors < 5 ? 'якоря' : 'якорей'}.
+       ${heavy
+         ? 'Это быстрее, чем их снимает огонь Длани: пока якоря стоят, кампания не дойдёт до конца.'
+         : 'Залпы Длани такое зарастание перебивают — но каждый новый якорь его ускоряет.'}
+       Якорь снимается флотом: выбить крыло из переплавленной системы и остаться в ней.</div>`
+    : `<div class="hs-asc-ok">Якорей у кризиса нет — печати не зарастают вовсе. Сейчас залпы Длани доводят кампанию до конца без единой отмены.</div>`;
+  return `<div class="hs-asc">
+      <div class="hs-asc-cap">◈ Вознесение · счёт по галактике</div>
+      <div class="hs-asc-row">
+        <span class="hs-asc-pct">${pct.toFixed(1)}%</span>
+        <span class="hs-asc-of">${Math.round(+c.taken || 0).toLocaleString('ru')} из ${Math.round(+c.goal || 0).toLocaleString('ru')} населения</span>
+      </div>
+      <div class="hs-asc-bar"><div class="hs-asc-fill" style="width:${pct.toFixed(1)}%"></div></div>
+      <div class="hs-asc-meta">${meta}</div>
+      ${note}
+    </div>`;
 }
 
 // ── ☠ УГРОЗЫ: блок сигнатур Легиона на странице «Горячие точки» ──

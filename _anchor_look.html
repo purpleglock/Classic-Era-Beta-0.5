@@ -1,0 +1,169 @@
+<meta charset="utf-8">
+<title>Якорь: варианты отметки</title>
+<style>
+  body{margin:0;background:#05070c;color:#c9d6e6;font:13px/1.5 ui-monospace,Consolas,monospace}
+  h1{font:600 15px/1 ui-monospace,monospace;letter-spacing:.14em;color:#7f93ab;margin:18px 16px 10px}
+  .row{display:flex;flex-wrap:wrap;gap:14px;padding:0 16px 20px}
+  .cell{background:#070a11;border:1px solid #16202e}
+  .cap{padding:7px 10px;border-bottom:1px solid #16202e;color:#f2a267;letter-spacing:.1em;font-size:11px}
+  .cap b{color:#dfe9f5}
+  canvas{display:block}
+</style>
+<h1>ЯКОРЬ ПРЕСТОЛА — КАК ОТМЕТКА ЧИТАЕТСЯ НА КАРТЕ</h1>
+<div class="row" id="row"></div>
+<script>
+// Фон-заглушка: то, поверх чего отметка реально живёт на карте галактики —
+// заливка территории державы, туманность, гиперпути, звёзды с подписями.
+function bg(g, W, H){
+  g.fillStyle='#05070c'; g.fillRect(0,0,W,H);
+  // территория державы (как gmmPaintFactions)
+  g.save(); g.globalAlpha=.30; g.fillStyle='#7d2230';
+  g.beginPath(); g.moveTo(0,H*.18); g.lineTo(W*.72,0); g.lineTo(W,H*.62);
+  g.lineTo(W*.44,H); g.lineTo(0,H*.86); g.closePath(); g.fill();
+  g.globalAlpha=.85; g.strokeStyle='#c8455c'; g.lineWidth=1.6; g.stroke(); g.restore();
+  // туманность — ИМЕННО с ней путается мягкое пятно
+  const n=g.createRadialGradient(W*.24,H*.72,4,W*.24,H*.72,W*.32);
+  n.addColorStop(0,'rgba(60,90,190,.34)'); n.addColorStop(1,'rgba(60,90,190,0)');
+  g.fillStyle=n; g.beginPath(); g.arc(W*.24,H*.72,W*.32,0,7); g.fill();
+  // гиперпути
+  g.strokeStyle='rgba(120,180,255,.42)'; g.lineWidth=1;
+  [[0,H*.3,W,H*.55],[W*.5,0,W*.35,H],[0,H*.9,W,H*.2]].forEach(l=>{
+    g.beginPath(); g.moveTo(l[0],l[1]); g.lineTo(l[2],l[3]); g.stroke(); });
+  // соседние звёзды
+  [[W*.16,H*.28,'Полынь'],[W*.82,H*.3,'Веритас'],[W*.74,H*.8,'Рокабай'],[W*.3,H*.88,'Сигма']]
+   .forEach(([x,y,nm])=>{
+    const gl=g.createRadialGradient(x,y,0,x,y,13);
+    gl.addColorStop(0,'rgba(255,244,214,.95)'); gl.addColorStop(1,'rgba(255,214,140,0)');
+    g.fillStyle=gl; g.beginPath(); g.arc(x,y,13,0,7); g.fill();
+    g.fillStyle='#ffe9bd'; g.beginPath(); g.arc(x,y,3.1,0,7); g.fill();
+    g.font='600 10px ui-monospace,monospace'; g.textAlign='center';
+    g.lineWidth=3; g.strokeStyle='rgba(4,9,16,.9)'; g.strokeText(nm,x,y-16);
+    g.fillStyle='#cfe0f2'; g.fillText(nm,x,y-16);
+  });
+}
+// Звезда-хозяйка отметки (её же рисует карта под слоем)
+function star(g,x,y){
+  const gl=g.createRadialGradient(x,y,0,x,y,15);
+  gl.addColorStop(0,'rgba(255,244,214,.95)'); gl.addColorStop(1,'rgba(255,214,140,0)');
+  g.fillStyle=gl; g.beginPath(); g.arc(x,y,15,0,7); g.fill();
+  g.fillStyle='#ffe9bd'; g.beginPath(); g.arc(x,y,3.4,0,7); g.fill();
+}
+function label(g,x,y,t,col){
+  g.font='700 11px ui-monospace,monospace'; g.textAlign='center'; g.textBaseline='bottom';
+  g.lineWidth=3.4; g.strokeStyle='rgba(4,9,16,.95)'; g.strokeText(t,x,y);
+  g.fillStyle=col; g.fillText(t,x,y);
+}
+
+// ── A. ТО, ЧТО СЕЙЧАС: мягкое тёмное пятно ──────────────────
+function A(g,x,y,R){
+  star(g,x,y);
+  const gr=g.createRadialGradient(x,y,R*.05,x,y,R);
+  gr.addColorStop(0,'rgba(24,6,10,.72)'); gr.addColorStop(.42,'rgba(58,14,20,.34)');
+  gr.addColorStop(1,'rgba(58,14,20,0)');
+  g.fillStyle=gr; g.beginPath(); g.arc(x,y,R,0,7); g.fill();
+  g.globalAlpha=.6; g.strokeStyle='rgba(242,158,96,.55)'; g.lineWidth=2.2;
+  g.beginPath(); g.arc(x,y,R*.3,0,7); g.stroke(); g.globalAlpha=1;
+}
+
+// ── B. ДЫРА: жёсткий чёрный вырез с рваной кромкой ──────────
+// Звезда ГАСНЕТ — её закрывает вырез. Карта в этом месте буквально кончается.
+function hole(g,x,y,R,seed){
+  g.beginPath();
+  const N=44;
+  for(let i=0;i<=N;i++){
+    const a=i/N*Math.PI*2;
+    const w=R*(.80+.20*Math.sin(a*3+seed)+.07*Math.sin(a*7.7+seed*2));
+    const px=x+Math.cos(a)*w, py=y+Math.sin(a)*w*.94;
+    i?g.lineTo(px,py):g.moveTo(px,py);
+  }
+  g.closePath();
+}
+function B(g,x,y,R){
+  star(g,x,y);
+  g.save();
+  hole(g,x,y,R*.62,1.1);
+  g.fillStyle='#000'; g.fill();                       // непрозрачно: это ВЫРЕЗ
+  g.strokeStyle='rgba(242,158,96,.9)'; g.lineWidth=1.6; g.stroke();
+  g.restore();
+  // угли внутри — что-то там ещё тлеет
+  g.fillStyle='rgba(214,74,48,.85)';
+  for(let i=0;i<7;i++){
+    const a=i*2.39, rr=R*.62*(.2+.5*((i*7)%5)/5);
+    g.beginPath(); g.arc(x+Math.cos(a)*rr, y+Math.sin(a)*rr*.94, 1.5, 0, 7); g.fill();
+  }
+  label(g,x,y-R*.72,'◈ 7 МИРОВ','rgba(250,206,160,.98)');
+}
+
+// ── C. КАРАНТИН: дыра + жёсткое кольцо с насечкой ───────────
+// Насечка — единственная механическая геометрия на всей карте: ни туманности,
+// ни границы, ни пути так не выглядят, поэтому взгляд цепляется сразу.
+function C(g,x,y,R){
+  star(g,x,y);
+  g.save();
+  hole(g,x,y,R*.55,2.3);
+  g.fillStyle='#000'; g.fill(); g.restore();
+  g.fillStyle='rgba(214,74,48,.8)';
+  for(let i=0;i<6;i++){
+    const a=i*2.39, rr=R*.55*(.25+.45*((i*5)%4)/4);
+    g.beginPath(); g.arc(x+Math.cos(a)*rr, y+Math.sin(a)*rr*.94, 1.6, 0, 7); g.fill();
+  }
+  // кольцо карантина: рваный пунктир + радиальные штрихи наружу
+  g.strokeStyle='rgba(242,158,96,.92)'; g.lineWidth=1.5;
+  g.setLineDash([13,7,3,7]);
+  g.beginPath(); g.ellipse(x,y,R*.80,R*.75,0,0,7); g.stroke();
+  g.setLineDash([]);
+  g.lineWidth=1.7;
+  for(let i=0;i<16;i++){
+    const a=i/16*Math.PI*2, c=Math.cos(a), s=Math.sin(a);
+    const l=(i%4===0)?R*.16:R*.08;
+    g.beginPath();
+    g.moveTo(x+c*R*.80, y+s*R*.75);
+    g.lineTo(x+c*(R*.80+l), y+s*(R*.75+l));
+    g.stroke();
+  }
+  label(g,x,y-R*1.02,'◈ ПРЕСТОЛ · 7 МИРОВ','rgba(250,206,160,.98)');
+}
+
+// ── D. ОБРЫВ ПУТЕЙ: дыра + перерубленные гиперпути ──────────
+// Самое «страшное» по смыслу: из системы больше ничего не выходит.
+function D(g,x,y,R){
+  // перерубленные пути: тёмные culье с засечкой поперёк
+  g.save();
+  for(let i=0;i<5;i++){
+    const a=i*1.257+.4, c=Math.cos(a), s=Math.sin(a)*.9;
+    g.strokeStyle='rgba(214,74,48,.75)'; g.lineWidth=2.4;
+    g.beginPath();
+    g.moveTo(x+c*R*.75, y+s*R*.75); g.lineTo(x+c*R*1.5, y+s*R*1.5); g.stroke();
+    // засечка-обрыв
+    const bx=x+c*R*1.5, by=y+s*R*1.5;
+    g.strokeStyle='rgba(255,236,214,.95)'; g.lineWidth=2;
+    g.beginPath(); g.moveTo(bx-s*7, by+c*7); g.lineTo(bx+s*7, by-c*7); g.stroke();
+  }
+  g.restore();
+  star(g,x,y);
+  g.save(); hole(g,x,y,R*.55,3.7); g.fillStyle='#000'; g.fill();
+  g.strokeStyle='rgba(242,158,96,.9)'; g.lineWidth=1.6; g.stroke(); g.restore();
+  g.fillStyle='rgba(214,74,48,.85)';
+  for(let i=0;i<6;i++){
+    const a=i*2.39, rr=R*.55*(.25+.45*((i*3)%4)/4);
+    g.beginPath(); g.arc(x+Math.cos(a)*rr, y+Math.sin(a)*rr*.94, 1.6, 0, 7); g.fill();
+  }
+  label(g,x,y-R*.72,'◈ 7 МИРОВ · ПУТИ МЕРТВЫ','rgba(250,206,160,.98)');
+}
+
+const VARS=[
+  ['A · СЕЙЧАС <b>мягкое пятно</b>', A],
+  ['B · <b>ДЫРА</b> в карте', B],
+  ['C · <b>КАРАНТИН</b> дыра + насечка', C],
+  ['D · <b>ОБРЫВ ПУТЕЙ</b>', D],
+];
+const row=document.getElementById('row');
+VARS.forEach(([cap,fn])=>{
+  const d=document.createElement('div'); d.className='cell';
+  d.innerHTML='<div class="cap">'+cap+'</div>';
+  const c=document.createElement('canvas'); c.width=430; c.height=300;
+  d.appendChild(c); row.appendChild(d);
+  const g=c.getContext('2d');
+  bg(g,430,300); fn(g,215,150,105);
+});
+</script>

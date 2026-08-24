@@ -42,6 +42,11 @@
 -- ════════════════════════════════════════════════════════════
 
 -- ── 0. СХЕМА ────────────────────────────────────────────────
+-- ⚠️ `faction_id` — ЭТО АНГЕЛ, ВЛАДЕЛЕЦ ЯКОРЯ. Не жертва.
+-- Первая редакция брала его из `angel_transmute.faction_id`, а там лежит ТОТ,
+-- У КОГО ЕДЯТ. Якоря записывались на Алую Унию, и обе двери, которые ищут
+-- `where faction_id = af`, молча не находили ничего: якорь нельзя было снять,
+-- и зарастание с якорей не шло вовсе. Бывший хозяин мира — в `victim_fid`.
 create table if not exists public.angel_anchor (
   system_id   text primary key,
   faction_id  text not null,
@@ -50,6 +55,7 @@ create table if not exists public.angel_anchor (
   broken_at   timestamptz,
   broken_by   text
 );
+alter table public.angel_anchor add column if not exists victim_fid text;
 create index if not exists angel_anchor_live_idx
   on public.angel_anchor (faction_id) where broken_at is null;
 
@@ -74,16 +80,29 @@ $$;
 -- якорей — заодно подхватывается всё, что съедено ДО этого наката.
 create or replace function public._angel_anchor_sync()
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare n int := 0;
+declare n int := 0; af text;
 begin
-  insert into public.angel_anchor(system_id, faction_id, worlds, born_at)
-    select t.system_id, t.faction_id, count(*), min(t.done_at)
+  af := public._angel_fid();
+  if af is null then return jsonb_build_object('ok', true, 'why', 'ангела нет'); end if;
+
+  -- ⚠️ Владелец якоря — АНГЕЛ (`af`), а `t.faction_id` идёт в `victim_fid`:
+  -- в `angel_transmute` это тот, у кого едят.
+  insert into public.angel_anchor(system_id, faction_id, victim_fid, worlds, born_at)
+    select t.system_id, af, min(t.faction_id), count(*), min(t.done_at)
       from public.angel_transmute t
      where t.done_at is not null and t.system_id is not null
-     group by t.system_id, t.faction_id
+     group by t.system_id
   on conflict (system_id) do update
-     set worlds = excluded.worlds;
+     set worlds = excluded.worlds,
+         faction_id = excluded.faction_id,
+         victim_fid = coalesce(public.angel_anchor.victim_fid, excluded.victim_fid);
   get diagnostics n = row_count;
+
+  -- Починка уже записанного: якоря, оформленные на жертву, переписываем на него.
+  update public.angel_anchor set victim_fid = coalesce(victim_fid, faction_id),
+                                 faction_id = af
+   where faction_id is distinct from af;
+
   return jsonb_build_object('ok', true, 'synced', n);
 end$$;
 revoke all on function public._angel_anchor_sync() from public;

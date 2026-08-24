@@ -1031,3 +1031,26 @@
   color: #e0b457; background: rgba(224, 180, 87, .1);
   box-shadow: inset 0 0 0 1px rgba(224, 180, 87, .34);
 }
+
+/* ◈ ПРЕСТОЛ · ЧАСЫ ВОЗНЕСЕНИЯ — «Горячие точки», блок над всем остальным.
+   ⚠️ Срезанный угол делаем СЛОЯМИ (::before цвет + ::after инсет-фон), а не
+   border: clip-path режет border начисто — см. cut-corner-border-layers. */
+.hs-asc { position: relative; margin: 0 0 16px; padding: 14px 16px 15px;
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px)); }
+.hs-asc::before { content: ''; position: absolute; inset: 0; background: #f29e60; opacity: .5;
+  clip-path: inherit; z-index: 0; }
+.hs-asc::after { content: ''; position: absolute; inset: 1px; z-index: 0;
+  background: linear-gradient(180deg, #150d0c 0%, #0c0a10 100%); clip-path: inherit; }
+.hs-asc > * { position: relative; z-index: 1; }
+.hs-asc-cap { font: 600 10.5px/1 ui-monospace, Consolas, monospace; letter-spacing: .18em;
+  color: #f2a267; text-transform: uppercase; }
+.hs-asc-row { display: flex; align-items: baseline; gap: 10px; margin: 7px 0 9px; }
+.hs-asc-pct { font: 700 30px/1 ui-monospace, Consolas, monospace; color: #fadca0; letter-spacing: .02em; }
+.hs-asc-of { font-size: 12px; color: var(--t3); }
+.hs-asc-bar { height: 7px; background: rgba(255,255,255,.07); overflow: hidden; }
+.hs-asc-fill { height: 100%; background: linear-gradient(90deg, #8a3524, #f29e60); }
+.hs-asc-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px;
+  font-size: 11.5px; color: var(--t3); }
+.hs-asc-meta b { color: #e9d7bd; font-weight: 600; }
+.hs-asc-warn { margin-top: 9px; font-size: 11.5px; color: #f0a08a; line-height: 1.45; }
+.hs-asc-ok { margin-top: 9px; font-size: 11.5px; color: #8fd6a8; line-height: 1.45; }

@@ -1,0 +1,23 @@
+<meta charset="utf-8">
+<title>Часы вознесения — проверка блока</title>
+<link rel="stylesheet" href="css/index.css?v=20260824clockB">
+<style>
+  body{background:#080b11;padding:22px;font-family:ui-sans-serif,system-ui,sans-serif}
+  .cn-wrap{max-width:760px}
+  h2{color:#7f93ab;font:600 12px/1 ui-monospace,monospace;letter-spacing:.16em;margin:26px 0 10px}
+</style>
+<div class="cn-wrap">
+  <h2>КАК ЕСТЬ СЕЙЧАС (живые данные с сервера)</h2>
+  <div id="live"></div>
+  <h2>ЯКОРЕЙ НЕТ — ПЕЧАТИ НЕ ЗАРАСТАЮТ</h2>
+  <div id="none"></div>
+  <h2>ЗАПУЩЕНО: 62%, ДЕВЯТЬ ЯКОРЕЙ</h2>
+  <div id="bad"></div>
+</div>
+<script src="battle_board.js?v=20260824clock"></script>
+<script>
+  const put = (id, c) => { document.getElementById(id).innerHTML = hsAscendBlock(c); };
+  put('live', {ok:true,exists:true,pct:6.8,goal:150000,taken:10192.4,worlds:7,eating:46,anchors:1,broken:0});
+  put('none', {ok:true,exists:true,pct:6.8,goal:150000,taken:10192.4,worlds:7,eating:46,anchors:0,broken:4});
+  put('bad',  {ok:true,exists:true,pct:62.0,goal:150000,taken:93000,worlds:214,eating:38,anchors:9,broken:3});
+</script>
