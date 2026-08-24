@@ -168,6 +168,26 @@
   background: rgba(4, 6, 10, .88); overflow-y: auto;
 }
 .fn-art-ov.show { display: flex; }
+/* Задник оверлея — обложка депеши вместо пустой заливки (без blur: он лагает).
+   ::before — сама картинка, ::after — затемнение и виньетка поверх неё.
+   Оба с z-index:-1, поэтому лежат под содержимым, но над фоном .fn-art-ov. */
+.fn-art-ov::before, .fn-art-ov::after {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  opacity: 0; transition: opacity .35s ease;
+}
+.fn-art-ov::before {
+  background-image: var(--fn-ov-img, none);
+  background-size: cover; background-position: center 30%; background-repeat: no-repeat;
+}
+.fn-art-ov::after {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 40%, rgba(4, 6, 10, .74), rgba(4, 6, 10, .95) 100%),
+    linear-gradient(180deg, rgba(4, 6, 10, .72), rgba(4, 6, 10, .88));
+}
+.fn-art-ov.has-ovimg::before, .fn-art-ov.has-ovimg::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .fn-art-ov::before, .fn-art-ov::after { transition: none; }
+}
 .fn-art {
   position: relative; width: 100%; max-width: 840px; margin: auto; overflow: hidden;
   background: linear-gradient(180deg, var(--b2, #141a22), var(--b1, #0d1117));

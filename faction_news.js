@@ -1491,6 +1491,9 @@ function fnOpenArticle(id) {
   const kind = fnKind(n);               // news | rumor | bulletin
   const coverHtml = n.image_url
     ? `<div class="fn-art-cov"><img src="${esc(n.image_url)}" alt="" loading="lazy"></div>` : '';
+  // Обложка уходит и на задник оверлея — вместо пустой заливки (см. .fn-art-ov::before).
+  modal.style.setProperty('--fn-ov-img', n.image_url ? `url('${cssUrl(n.image_url)}')` : 'none');
+  modal.classList.toggle('has-ovimg', !!n.image_url);
   // Флаг автора: герб фракции, либо герб/спец-эффект НПС.
   const artFlag = (FN.heralds && FN.heralds.get(n.faction_id)) || n.author_herald || '';
   const isFxHerald = typeof artFlag === 'string' && artFlag.indexOf('fx:') === 0;   // спец-символ, не картинка
