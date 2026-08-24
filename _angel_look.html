@@ -1,0 +1,55 @@
+<meta charset="utf-8">
+<title>Престол — облик двух воплощений</title>
+<style>
+  body{margin:0;background:#06080d;color:#c9d6e6;font:13px/1.5 ui-monospace,Consolas,monospace}
+  h1{font:600 15px/1 ui-monospace,monospace;letter-spacing:.14em;color:#8ea3ba;margin:20px 18px 4px}
+  p.sub{margin:0 18px 16px;color:#5d6f85;font-size:11.5px;letter-spacing:.03em;max-width:900px}
+  .row{display:flex;flex-wrap:wrap;gap:16px;padding:0 18px 24px;max-width:824px}
+  .cell{background:#04060a;border:1px solid #17222f}
+  .cap{padding:8px 11px;border-bottom:1px solid #17222f;color:#f2a267;letter-spacing:.09em;font-size:11px}
+  .cap b{color:#e6eef8}
+  .cap i{display:block;font-style:normal;color:#5d6f85;font-size:10.5px;letter-spacing:.02em;margin-top:2px}
+  canvas{display:block}
+</style>
+<h1>◈ ПРЕСТОЛ — ОБЛИК ДВУХ ВОПЛОЩЕНИЙ</h1>
+<p class="sub">Спрайт процедурный, рисуется функцией angelDraw из angel_fx.js — той же самой, что на доске боя,
+на карте и в 3D. Ничего не дорисовано руками. Подробность на максимуме (ступень 3), фон нейтральный.
+Анимация живая: колёса вращаются, свет дышит, частота дыхания зависит от печатей.</p>
+<div class="row" id="row"></div>
+<script src="angel_fx.js"></script>
+<script>
+const CASES = [
+  { cap:'<b>ПЕРВОЕ ВОПЛОЩЕНИЕ</b><i>печати целы · как он приходит впервые</i>',
+    o:{ phase:1, seals:1.00, mass:0 } },
+  { cap:'<b>ПЕРВОЕ ВОПЛОЩЕНИЕ</b><i>печати на исходе · свет тускнеет, дыхание чаще</i>',
+    o:{ phase:1, seals:0.12, mass:0 } },
+  { cap:'<b>ВТОРОЕ ВОПЛОЩЕНИЕ</b><i>после гибели тела · голодное, плоти нет</i>',
+    o:{ phase:2, seals:1.00, mass:0 } },
+  { cap:'<b>ВТОРОЕ ВОПЛОЩЕНИЕ</b><i>сытое · плоть полна, снаряды разворачиваются</i>',
+    o:{ phase:2, seals:1.00, mass:1 } },
+  { cap:'<b>ХЕРУВИМ</b><i>страж · тот же облик на чин ниже, остаётся в первой фазе</i>',
+    o:{ phase:1, seals:1.00, mass:0, guard:true } },
+];
+const cells = [];
+const row = document.getElementById('row');
+CASES.forEach(c => {
+  const d = document.createElement('div'); d.className = 'cell';
+  d.innerHTML = '<div class="cap">' + c.cap + '</div>';
+  const cv = document.createElement('canvas'); cv.width = 380; cv.height = 380;
+  d.appendChild(cv); row.appendChild(d);
+  cells.push({ g: cv.getContext('2d'), o: c.o });
+});
+function frame(){
+  cells.forEach(c => {
+    const g = c.g;
+    g.clearRect(0,0,380,380);
+    // лёгкая подложка, чтобы тёмные части силуэта не сливались с бумагой
+    const bg = g.createRadialGradient(190,190,10,190,190,215);
+    bg.addColorStop(0,'#080b12'); bg.addColorStop(1,'#04060a');
+    g.fillStyle = bg; g.fillRect(0,0,380,380);
+    angelDraw(g, Object.assign({ cx:190, cy:190, R:95, alpha:1, detail:3 }, c.o));
+  });
+  requestAnimationFrame(frame);
+}
+frame();
+</script>

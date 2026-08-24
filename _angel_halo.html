@@ -1,0 +1,75 @@
+<meta charset="utf-8">
+<title>Второе воплощение — было / стало</title>
+<style>
+  body{margin:0;background:#06080d;color:#c9d6e6;font:13px/1.5 ui-monospace,Consolas,monospace}
+  h1{font:600 15px/1 ui-monospace,monospace;letter-spacing:.14em;color:#8ea3ba;margin:20px 18px 4px}
+  p.sub{margin:0 18px 16px;color:#5d6f85;font-size:11.5px;max-width:880px}
+  .row{display:flex;flex-wrap:wrap;gap:16px;padding:0 18px 24px;max-width:850px}
+  .cell{background:#04060a;border:1px solid #17222f}
+  .cap{padding:8px 11px;border-bottom:1px solid #17222f;letter-spacing:.09em;font-size:11px}
+  .was .cap{color:#8b6b52} .now .cap{color:#f2a267}
+  .cap b{color:#e6eef8;display:block}
+  canvas{display:block}
+  #num{padding:0 18px 26px;font-size:11.5px;color:#7f93ab;white-space:pre}
+</style>
+<h1>◈ ВТОРОЕ ВОПЛОЩЕНИЕ — БЫЛО / СТАЛО</h1>
+<p class="sub">Слева рисует angel_fx.js из git (HEAD), справа — текущий файл. Обе функции живые,
+загружены в один кадр под разными именами. Печати целы, плоть полна, подробность 3.</p>
+<div class="row" id="row"></div>
+<div id="num"></div>
+<script>
+const ANGEL_SCOPE = {};
+async function boot(){
+  const [oldSrc, newSrc] = await Promise.all([
+    fetch('_angel_fx_old.js?cb='+Date.now()).then(r=>r.text()),
+    fetch('angel_fx.js?cb='+Date.now()).then(r=>r.text()),
+  ]);
+  // Каждая версия живёт в своей замкнутой области: объявления функций внутри
+  // тела Function локальны, поэтому имена не сталкиваются.
+  ANGEL_SCOPE.was = new Function(oldSrc + '\n; return angelDraw;')();
+  ANGEL_SCOPE.now = new Function(newSrc + '\n; return angelDraw;')();
+  render();
+}
+const CASES=[
+  {k:'was', cls:'was', cap:'<b>БЫЛО</b>нимб-венец из гвоздей'},
+  {k:'now', cls:'now', cap:'<b>СТАЛО</b>нимба нет вовсе'},
+];
+const cells=[];
+function render(){
+  const row=document.getElementById('row');
+  CASES.forEach(c=>{
+    const d=document.createElement('div'); d.className='cell '+c.cls;
+    d.innerHTML='<div class="cap">'+c.cap+'</div>';
+    const cv=document.createElement('canvas'); cv.width=380; cv.height=380;
+    d.appendChild(cv); row.appendChild(d);
+    cells.push({g:cv.getContext('2d'), fn:ANGEL_SCOPE[c.k], k:c.k});
+  });
+  frame(); setTimeout(measure, 700);
+}
+function paint(c, t){
+  const g=c.g; g.clearRect(0,0,380,380);
+  const bg=g.createRadialGradient(190,190,10,190,190,215);
+  bg.addColorStop(0,'#080b12'); bg.addColorStop(1,'#04060a');
+  g.fillStyle=bg; g.fillRect(0,0,380,380);
+  // t задаём явно: без него две версии анимируются вразнобой и сравнить нельзя
+  c.fn(g, {cx:190, cy:190, R:95, alpha:1, detail:3, phase:2, seals:1, mass:1, t:t});
+}
+function frame(){ const t=performance.now()/1000; cells.forEach(c=>paint(c,t)); requestAnimationFrame(frame); }
+// Замер: полоса, где сидел нимб второй фазы.
+// ny = -R*1.02 = -96.9 → y≈93; nr = R*1.46 = 138.7 → x от 51 до 329.
+function measure(){
+  const t=12.0; cells.forEach(c=>paint(c,t));   // одинаковый кадр обеим
+  const band=(g)=>{ const d=g.getImageData(51,57,278,74).data; let n=0;
+    for(let i=0;i<d.length;i+=4){ if(d[i]+d[i+1]+d[i+2]>90) n++; } return n; };
+  const all=(g)=>{ const d=g.getImageData(0,0,380,380).data; let n=0;
+    for(let i=0;i<d.length;i+=4){ if(d[i]+d[i+1]+d[i+2]>90) n++; } return n; };
+  const w=cells[0].g, n=cells[1].g;
+  document.getElementById('num').textContent =
+    'полоса нимба (x 51…329, y 57…131), непустых пикселей:\n' +
+    '   было ' + band(w) + '\n   стало ' + band(n) +
+    '\n   разница ' + (band(w)-band(n)) + '\n\n' +
+    'весь спрайт целиком:\n   было ' + all(w) + '\n   стало ' + all(n) +
+    '\n   разница ' + (all(w)-all(n));
+}
+boot();
+</script>
