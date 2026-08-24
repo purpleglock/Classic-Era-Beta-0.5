@@ -2,13 +2,15 @@
 // Проприетарное ПО. Использование, копирование, изменение и распространение
 // без письменного разрешения правообладателя запрещены. См. файл LICENSE.
 // ════════════════════════════════════════════════════════════════════════
-//  ОБЩИЙ ЧАТ «ГИПЕРСВЯЗЬ» — Supabase Realtime Broadcast (вебсокет, БЕЗ БД).
-//  Сообщения живут только «в проводе»: разослали онлайн-игрокам и забыли.
-//  История — в памяти вкладки + sessionStorage (переживает F5, но не закрытие
-//  вкладки и не появляется у тех, кто зашёл позже). В базу не пишется ничего.
+//  ОБЩИЙ ЧАТ «ГИПЕРСВЯЗЬ» — Supabase Realtime Broadcast (вебсокет) + история.
+//  ДОСТАВКА живая, по вебсокету: разослали всем, кто сейчас в сети, — быстро и
+//  без круга через базу. ИСТОРИЯ пишется в public.chat_messages: таблица-кольцо
+//  на 300 строк (хвост режет триггер chat_trim, см. _chat_history.sql). Вошедший
+//  читает последние 300 и видит, о чём речь, — раньше чат забывал всё при
+//  закрытии вкладки. sessionStorage остался кадром «до ответа сервера».
 //  Подключение ПОСТОЯННОЕ (с момента входа), окно можно закрывать — эфир
 //  копится, на кнопке растёт бейдж непрочитанных.
-//  Зависит от: core.js (sb, dbGet, esc, toast, user, userProfile).
+//  Зависит от: core.js (sb, dbGet, dbPost, esc, toast, user, userProfile).
 // ════════════════════════════════════════════════════════════════════════
 
 const CH = {
@@ -24,8 +26,10 @@ const CH = {
   facLoaded: false,
   retryT: null,       // таймер пересоздания канала после CLOSED
   ghost: false,       // «невидимка»: стафф не публикует presence (нет в «На связи»)
+  histAt: 0,          // когда последний раз тянули историю из БД
+  histBusy: false,
 };
-const CH_LOG_CAP = 200;
+const CH_LOG_CAP = 300;   // столько же строк держит кольцо в базе
 const CH_MSG_MAX = 500;
 const CH_SS_KEY = 'wk_chat_log';   // sessionStorage: история переживает F5
 const CH_GHOST_KEY = 'wk_chat_ghost';  // localStorage: выбор режима невидимки переживает вкладку
@@ -93,7 +97,7 @@ function chAvatar(name, av) {
   return ini;
 }
 
-// ── История в sessionStorage (НЕ БД: умирает с вкладкой) ──────
+// ── Мгновенный кадр в sessionStorage (пока не пришла история из БД) ──
 function chSaveLog() { try { sessionStorage.setItem(CH_SS_KEY, JSON.stringify(CH.log.slice(-CH_LOG_CAP))); } catch (e) {} }
 function chLoadLog() {
   try {
@@ -101,6 +105,39 @@ function chLoadLog() {
     const arr = JSON.parse(raw);
     if (Array.isArray(arr)) CH.log = arr.filter(m => m && typeof m.body === 'string').slice(-CH_LOG_CAP);
   } catch (e) {}
+}
+
+// ── История из БД (последние 300) ──────────────────────────────
+// Живая доставка идёт мимо базы, поэтому строка может прийти дважды: broadcast'ом
+// и в выборке. Серверные строки помечены `id` — по нему и склеиваем; у пришедших
+// вебсокетом id нет, их отсеиваем по совпадению автора и текста.
+function chKey(m) { return String(m.name) + '|' + String(m.body); }
+function chMergeHistory(rows) {
+  const hist = rows.map(r => ({
+    id: r.id,
+    name: String(r.name || 'Аноним').slice(0, 40),
+    fac: String(r.fac || '').slice(0, 60),
+    fc: /^#[0-9a-fA-F]{3,8}$/.test(r.fc || '') ? r.fc : '',
+    av: chAvUrl(r.av),
+    staff: !!r.staff,
+    body: String(r.body || '').slice(0, CH_MSG_MAX),
+    at: r.created_at ? Date.parse(r.created_at) : Date.now(),
+  }));
+  const seen = new Set(hist.map(m => chKey(m)));
+  const live = CH.log.filter(m => !m.id && !seen.has(chKey(m)));
+  CH.log = hist.concat(live).slice(-CH_LOG_CAP);
+  chSaveLog();
+  if (CH.open) chRenderLog();
+}
+async function chLoadHistory(force) {
+  if (CH.histBusy) return;
+  if (!force && CH.histAt && Date.now() - CH.histAt < 120000) return;
+  CH.histBusy = true;
+  try {
+    const rows = await dbGet('chat_messages', `select=id,name,fac,fc,av,staff,body,created_at&order=id.desc&limit=${CH_LOG_CAP}`);
+    if (Array.isArray(rows)) { CH.histAt = Date.now(); chMergeHistory(rows.reverse()); }
+  } catch (e) {}
+  finally { CH.histBusy = false; }
 }
 
 // Моя фракция (название+цвет) — один запрос за сессию, дальше из памяти
@@ -120,7 +157,7 @@ function chMount() {
   chLoadGhost();
   const fab = document.createElement('button');
   fab.id = 'ch-fab';
-  fab.title = 'Общий чат «Гиперсвязь» (сообщения не сохраняются)';
+  fab.title = 'Общий чат «Гиперсвязь» (хранятся последние 300 сообщений)';
   fab.innerHTML = '<svg class="ch-fab-ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4c-1.2 0-2.4-.2-3.4-.7L3 21l1.8-4.4A8.4 8.4 0 1 1 21 11.5z"/></svg><span id="ch-fab-badge" class="ch-fab-badge" style="display:none">0</span>';
   fab.onclick = chToggle;
   fab.style.display = 'none';   // показывается только игрокам/админам (chUpdateVisibility)
@@ -147,6 +184,7 @@ function chToggle() {
     CH.unread = 0; chBadge();
     chConnect();
     chRender();
+    chLoadHistory();
     setTimeout(() => document.getElementById('ch-inp')?.focus(), 60);
   }
 }
@@ -178,6 +216,7 @@ function chConnect() {
         await chLoadFaction();
         chLoadGhost();            // user уже авторизован — теперь роль известна
         await chSyncPresence();   // в невидимке НЕ трекаемся — нет в «На связи»
+        chLoadHistory(true);      // последние 300 строк — чтобы вошедший видел разговор
         chRenderStatus(); chRenderOnline();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         CH.joined = false;
@@ -222,9 +261,13 @@ async function chSend() {
   if (CH.ghost && !confirm('Ты в режиме невидимки, но сообщение уйдёт под именем «' + chMyName() + '» и спалит тебя. Отправить?')) return;
   CH.busy = true;
   try {
-    await CH.channel.send({ type: 'broadcast', event: 'msg', payload: { name: chMyName(), staff: chIsStaff(), fac: CH.fac?.name || '', fc: CH.fac?.color || '', av: chMyAvatar(), body } });
+    const p = { name: chMyName(), staff: chIsStaff(), fac: CH.fac?.name || '', fc: CH.fac?.color || '', av: chMyAvatar(), body };
+    await CH.channel.send({ type: 'broadcast', event: 'msg', payload: p });
     CH.lastSent = now;
     inp.value = '';
+    // История: живую доставку не задерживаем — пишем строку после отправки в эфир.
+    // Не легло в базу (RLS, обрыв) — сообщение всё равно услышали, поэтому тихо.
+    dbPost('chat_messages', p).catch(() => {});
   } catch (e) { toast('Не отправилось: ' + (e.message || 'нет связи'), 'err'); }
   finally { CH.busy = false; inp.focus(); }
 }
@@ -243,7 +286,7 @@ function chRender() {
     </div>
     <div class="ch-body">
       <div class="ch-main">
-        <div class="ch-note"><span class="ch-note-dot"></span>Эфемерный эфир — история не пишется, слышат только те, кто в сети</div>
+        <div class="ch-note"><span class="ch-note-dot"></span>Открытый эфир — в записи держатся последние 300 сообщений</div>
         <div class="ch-log" id="ch-log"></div>
         <div class="ch-input-row">
           <div class="ch-inp-wrap">
