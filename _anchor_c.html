@@ -1,0 +1,215 @@
+<meta charset="utf-8">
+<title>Якорь: чёрная звезда</title>
+<style>
+  body{margin:0;background:#05070c;color:#c9d6e6;font:13px/1.5 ui-monospace,Consolas,monospace}
+  h1{font:600 14px/1 ui-monospace,monospace;letter-spacing:.13em;color:#7f93ab;margin:18px 16px 4px}
+  p.sub{margin:0 16px 14px;color:#5d6f85;font-size:11.5px;letter-spacing:.04em}
+  .row{display:flex;flex-wrap:wrap;gap:14px;padding:0 16px 22px}
+  .cell{background:#070a11;border:1px solid #16202e}
+  .cap{padding:7px 10px;border-bottom:1px solid #16202e;color:#f2a267;letter-spacing:.1em;font-size:11px}
+  canvas{display:block}
+</style>
+<h1>ЯКОРЬ ПРЕСТОЛА — ЧЁРНАЯ ЗВЕЗДА</h1>
+<p class="sub">Функция gmmPaintAnchors взята из galaxy_map.js как есть. Фон — заглушка того,
+поверх чего отметка живёт на карте: заливка территории, туманность, трассы, соседние звёзды с подписями.
+Центральная звезда «Ничейная пустошь» рисуется ЖИВОЙ — отметка обязана её погасить.</p>
+<div class="row" id="row"></div>
+<script>
+const GMM = { tx:0, ty:0, vw:430, vh:300, s:1 };
+function gmmTY(y){ return y; }
+const GM = { systems: [], lanes: [], anchors: [] };
+</script>
+<script>
+// ◈ ПРЕСТОЛ: ЯКОРЬ — ЧЁРНАЯ ЗВЕЗДА.
+// ⚠️ ЗАБРАКОВАНЫ ДВЕ ПРЕДЫДУЩИЕ РЕДАКЦИИ, обе по делу:
+//   1) мягкая тёмная заливка — говорит на языке слоя туманностей и читается
+//      как «подкрашено», а не как «здесь случилась беда»;
+//   2) вырез с кольцом карантина и радиальной насечкой — читается как СХЕМА.
+//      Пунктир, засечки, ровные лучи — это словарь чертежа, а карта галактики
+//      им нигде больше не пользуется, поэтому отметка выглядела наклейкой
+//      поверх мира, а не частью мира.
+//
+// ПРАВИЛО: якорь — это АСТРОНОМИЧЕСКИЙ ОБЪЕКТ, с которым что-то не так, а не
+// значок. Никаких пунктиров, засечек и правильных многоугольников. Всё, что
+// рисуется, должно объясняться физикой: свет вытеснен, вещество падает внутрь,
+// на границе горит кольцо.
+//
+// СОБРАНО ИЗ ЧЕТЫРЁХ СЛОЁВ (снаружи внутрь):
+//   • ВЫТЕСНЕНИЕ — свет вокруг гаснет к центру. В отличие от туманности край
+//     не растворяется в никуда, а уплотняется: видно, что тьму сюда СТЯНУЛО.
+//   • АККРЕЦИЯ — дуги вещества, падающего внутрь. Наклон у каждой свой,
+//     вращаются медленно и с разной скоростью, поэтому рисунок никогда не
+//     повторяется и не читается как узор.
+//   • ГОРИЗОНТ — чистая чернота. Не серая, не тёмно-красная: чёрная.
+//   • КОЛЬЦО — узкая раскалённая кромка ровно по краю горизонта,
+//     НЕРАВНОМЕРНОЙ яркости по обходу. Равномерное кольцо — снова чертёж.
+//
+// ⚠️ РИСУЕТСЯ ПОВЕРХ ЗВЁЗД (вызов после gmmPaintStars). Горизонт обязан
+// ГАСИТЬ светило: под звёздами она ложится сверху и вся затея сводится к
+// ободку вокруг обычной живой системы.
+//
+// ⚠️ БЕЗ shadowBlur. Свечение набираем наложением обводок с падающей альфой:
+// размытие тени на канвасе считается попиксельно и роняет кадр, а карта с
+// ангелом уже однажды легла именно на этом (см. angel-map-lag-detail-cap).
+//
+// ⚠️ Радиус — в МИРОВЫХ единицах: при среднем расстоянии между звёздами ~200
+// соседние якоря сливаются в общее поле, и кризис читается территорией.
+// Экранный размер зажат с двух сторон, дуги отключаются на мелком масштабе.
+//
+// ⚠️ БЕЗ ТУМБЛЕРА И БЕЗ РАЗВЕДКИ, как переплавка и сам ковчег: якоря — это
+// полоса здоровья кризиса, прятать её не от кого, а спрятанная за выключенным
+// тумблером она бы просто не существовала (см. map-defense-visible-to-all).
+function gmmPaintAnchors(ctx, camS) {
+  const lst = GM.anchors;
+  if (!lst || !lst.length || !GM.systems || !GM.systems.length) return;
+  const byId = {};
+  lst.forEach(a => { if (a && a.system_id) byId[a.system_id] = a; });
+  const mg = 400, u = 1 / camS;
+  const t = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  ctx.save();
+  ctx.lineCap = 'round';
+
+  GM.systems.forEach(s => {
+    const a = byId[s.id]; if (!a) return;
+    const X = s.x * camS + GMM.tx, Y = s.y * camS + GMM.ty;
+    if (X < -mg || X > GMM.vw + mg || Y < -mg || Y > GMM.vh + mg) return;
+    const _scY = s.y * camS + GMM.ty, _dyW = (gmmTY(_scY) - _scY) / camS;
+    ctx.save(); ctx.translate(0, _dyW);
+
+    const w = Math.max(1, +a.worlds || 1);
+    let R = 150 * (1 + 0.14 * Math.min(4, w - 1));
+    R = Math.max(R, 15 * u); R = Math.min(R, 120 * u);
+    const Rpx = R * camS;                 // экранный радиус — по нему решаем детальность
+    const core = R * 0.30;                // горизонт
+    const sq = 0.94;                      // сплюснутость по y, как у всего на карте
+    // Сид от координат: у каждой чёрной звезды свой наклон дисков и свой ритм,
+    // иначе несколько якорей рядом выглядят штампом.
+    const seed = Math.abs(s.x * 0.013 + s.y * 0.007) % 6.283;
+
+    // ── 1. ВЫТЕСНЕНИЕ СВЕТА ────────────────────────────────
+    // Две остановки у самого края дают уплотнение вместо мягкого схода в ноль:
+    // граница ЧУВСТВУЕТСЯ, но нигде не превращается в линию.
+    const g1 = ctx.createRadialGradient(s.x, s.y, core * 0.9, s.x, s.y, R * 1.25);
+    g1.addColorStop(0.00, 'rgba(0,0,0,0.95)');
+    g1.addColorStop(0.34, 'rgba(6,3,6,0.72)');
+    g1.addColorStop(0.72, 'rgba(14,6,10,0.34)');
+    g1.addColorStop(1.00, 'rgba(14,6,10,0.00)');
+    ctx.fillStyle = g1;
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, R * 1.25, R * 1.25 * sq, 0, 0, Math.PI * 2); ctx.fill();
+
+    // ── 2. АККРЕЦИЯ ────────────────────────────────────────
+    // Дуги, а не замкнутые эллипсы: замкнутый — орбита, дуга — падение.
+    if (Rpx > 9) {
+      const arcs = Rpx > 22 ? 5 : 3;
+      for (let i = 0; i < arcs; i++) {
+        const f = i / arcs;
+        const rad = core * 1.25 + (R * 0.62 - core * 1.25) * f;
+        const tilt = seed + i * 1.17;                          // свой наклон
+        const spin = t * (0.30 - 0.045 * i) + seed + i * 2.1;  // своя скорость
+        const span = 1.5 + 1.6 * ((i * 7) % 5) / 5;            // своя длина
+        ctx.globalAlpha = 0.34 - 0.045 * i;
+        ctx.strokeStyle = i % 2 ? 'rgba(214,74,48,1)' : 'rgba(242,158,96,1)';
+        ctx.lineWidth = (2.6 - 0.35 * i) * u;
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y, rad, rad * (0.34 + 0.16 * f), tilt, spin, spin + span);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ── 3. ГОРИЗОНТ ────────────────────────────────────────
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, core, core * sq, 0, 0, Math.PI * 2); ctx.fill();
+
+    // ── 4. КОЛЬЦО ──────────────────────────────────────────
+    // Обход сегментами: яркость гуляет по окружности и медленно перетекает.
+    // Ровное кольцо одной обводкой — это опять чертёж.
+    const SEG = 30;
+    for (let i = 0; i < SEG; i++) {
+      const a0 = i / SEG * Math.PI * 2, a1 = (i + 1.06) / SEG * Math.PI * 2;
+      const heat = 0.34 + 0.66 * Math.pow(
+        0.5 + 0.5 * Math.sin(a0 * 2 + t * 0.55 + seed) * Math.sin(a0 * 3 - t * 0.33), 2);
+      // три наложения: широкое тусклое → узкое раскалённое. Это и есть свечение.
+      ctx.globalAlpha = 0.20 * heat;
+      ctx.strokeStyle = 'rgba(214,74,48,1)'; ctx.lineWidth = 5.0 * u;
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, core, core * sq, 0, a0, a1); ctx.stroke();
+      ctx.globalAlpha = 0.55 * heat;
+      ctx.strokeStyle = 'rgba(242,158,96,1)'; ctx.lineWidth = 2.2 * u;
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, core, core * sq, 0, a0, a1); ctx.stroke();
+      ctx.globalAlpha = 0.85 * heat * heat;
+      ctx.strokeStyle = 'rgba(255,236,206,1)'; ctx.lineWidth = 0.9 * u;
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, core, core * sq, 0, a0, a1); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // ── 5. ПОДПИСЬ ─────────────────────────────────────────
+    // Число миров — прямым текстом: «звезда почернее» игрок не считает,
+    // «7 МИРОВ» считает сразу. Без рамки и без плашки: рамка — снова чертёж.
+    if (Rpx > 11) {
+      ctx.font = '700 ' + (10.5 * u).toFixed(2) + 'px ui-monospace, "Consolas", monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      const lbl = w + (w === 1 ? ' МИР' : (w < 5 ? ' МИРА' : ' МИРОВ'));
+      ctx.lineWidth = 3.4 * u; ctx.strokeStyle = 'rgba(4,9,16,0.95)';
+      ctx.strokeText(lbl, s.x, s.y - R * 0.92);
+      ctx.fillStyle = 'rgba(250,206,160,0.95)';
+      ctx.fillText(lbl, s.x, s.y - R * 0.92);
+    }
+
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+</script>
+<script>
+function bg(g,W,H){
+  g.fillStyle='#05070c'; g.fillRect(0,0,W,H);
+  g.save(); g.globalAlpha=.30; g.fillStyle='#7d2230';
+  g.beginPath(); g.moveTo(0,H*.18); g.lineTo(W*.72,0); g.lineTo(W,H*.62);
+  g.lineTo(W*.44,H); g.lineTo(0,H*.86); g.closePath(); g.fill();
+  g.globalAlpha=.85; g.strokeStyle='#c8455c'; g.lineWidth=1.6; g.stroke(); g.restore();
+  const n=g.createRadialGradient(W*.20,H*.76,4,W*.20,H*.76,W*.30);
+  n.addColorStop(0,'rgba(60,90,190,.34)'); n.addColorStop(1,'rgba(60,90,190,0)');
+  g.fillStyle=n; g.beginPath(); g.arc(W*.20,H*.76,W*.30,0,7); g.fill();
+}
+function star(g,x,y,nm){
+  const gl=g.createRadialGradient(x,y,0,x,y,14);
+  gl.addColorStop(0,'rgba(255,244,214,.95)'); gl.addColorStop(1,'rgba(255,214,140,0)');
+  g.fillStyle=gl; g.beginPath(); g.arc(x,y,14,0,7); g.fill();
+  g.fillStyle='#ffe9bd'; g.beginPath(); g.arc(x,y,3.2,0,7); g.fill();
+  if(nm){ g.font='600 10px ui-monospace,monospace'; g.textAlign='center';
+    g.lineWidth=3; g.strokeStyle='rgba(4,9,16,.9)'; g.strokeText(nm,x,y-17);
+    g.fillStyle='#cfe0f2'; g.fillText(nm,x,y-17); }
+}
+const CASES=[['1 съеденный мир',1],['4 мира',4],['7 миров — как в живой базе',7]];
+const cells=[];
+const row=document.getElementById('row');
+CASES.forEach(([cap,worlds])=>{
+  const d=document.createElement('div'); d.className='cell';
+  d.innerHTML='<div class="cap">'+cap+'</div>';
+  const c=document.createElement('canvas'); c.width=430; c.height=300;
+  d.appendChild(c); row.appendChild(d);
+  cells.push({g:c.getContext('2d'), worlds:worlds});
+});
+const CX=215, CY=150;
+const SYS=[{id:'A',x:CX,y:CY},{id:'B',x:CX-150,y:CY-95},{id:'C',x:CX+160,y:CY-80},
+           {id:'D',x:CX+130,y:CY+105},{id:'E',x:CX-140,y:CY+100}];
+const LANES=[{a_id:'A',b_id:'B'},{a_id:'A',b_id:'C'},{a_id:'A',b_id:'D'},{a_id:'A',b_id:'E'}];
+const NAMES={B:'Полынь',C:'Веритас',D:'Рокабай',E:'Сигма'};
+function frame(){
+  cells.forEach(cell=>{
+    const g=cell.g;
+    GM.systems=SYS; GM.lanes=LANES; GM.anchors=[{system_id:'A',worlds:cell.worlds}];
+    GMM.vw=430; GMM.vh=300; GMM.s=1; GMM.tx=0; GMM.ty=0;
+    bg(g,430,300);
+    g.strokeStyle='rgba(120,180,255,.42)'; g.lineWidth=1;
+    LANES.forEach(l=>{ const a=SYS.find(s=>s.id===l.a_id), b=SYS.find(s=>s.id===l.b_id);
+      g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b.x,b.y); g.stroke(); });
+    SYS.slice(1).forEach(s=>star(g,s.x,s.y,NAMES[s.id]));
+    star(g,CX,CY,'Ничейная пустошь');
+    gmmPaintAnchors(g, GMM.s);
+  });
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
