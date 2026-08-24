@@ -1,4 +1,4 @@
-/* ── Общий чат «Гиперсвязь» (Realtime Broadcast, без БД) ──
+/* ── Чат «Гиперсвязь»: комнаты (рельса слева) + эфир ──
    Открывается модалкой по центру, как окно тикетов. Киберпанк-канон:
    срезанные углы = clip-path на слое-подложке, НЕ border. Акцент один — --te. */
 
@@ -62,56 +62,101 @@ body.route-map #ch-fab { display: none !important; }
 }
 
 /* Шапка */
-.ch-hd { display: flex; align-items: center; gap: 14px; padding: 16px 22px 12px; }
+.ch-hd { display: flex; align-items: center; gap: 14px; padding: 14px 22px 10px; }
 .ch-hd-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ch-hd-k {
-  font-family: var(--font-mono, monospace); font-size: 9px; letter-spacing: .28em;
-  color: var(--te, #3ec0d0); text-transform: uppercase; white-space: nowrap;
-}
 .ch-hd-t {
   font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 22px;
   letter-spacing: calc(.04em * var(--deco-ls-mult, 1)); color: var(--t1, #e8edf2); white-space: nowrap; line-height: 1.1;
 }
+/* Связь — одна точка: слово читают один раз, дальше нужен только цвет */
 .ch-status {
-  margin-left: auto; font-family: var(--font-mono, monospace); font-size: 9.5px; letter-spacing: .12em;
-  color: var(--te, #3ec0d0); white-space: nowrap;
-  text-shadow: 0 0 8px color-mix(in srgb, var(--te, #3ec0d0) 60%, transparent);
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  background: var(--te, #3ec0d0); box-shadow: 0 0 7px color-mix(in srgb, var(--te, #3ec0d0) 70%, transparent);
 }
-.ch-status.down { color: var(--warn, #d0a840); text-shadow: none; }
+.ch-status.down { background: var(--warn, #d0a840); box-shadow: none; animation: ch-pulse 1.4s ease-in-out infinite; }
 .ch-x { background: none; border: none; color: var(--t3, #8aa0b0); font-size: 16px; cursor: pointer; padding: 4px 8px; }
 .ch-x:hover { color: var(--err, #e05050); }
 
-/* Тело: лог + сайдбар «на связи» */
+/* Тело: рельса комнат слева, эфир справа */
 .ch-body { flex: 1; min-height: 0; display: flex; gap: 0; }
-.ch-main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0 0 18px 22px; }
+.ch-main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0 22px 18px 0; }
 .ch-side {
-  width: 218px; flex-shrink: 0; display: flex; flex-direction: column;
-  margin: 0 18px 18px 18px; padding: 12px 14px; min-height: 0;
+  width: 224px; flex-shrink: 0; display: flex; flex-direction: column;
+  margin: 0 16px 18px 18px; padding: 12px 12px; min-height: 0;
   background: color-mix(in srgb, var(--b2, #141a22) 75%, transparent);
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
 }
+/* Комнат бывает много — рельса делится: список комнат сверху (он и растёт),
+   «На связи» прижат снизу и своей высоты не отбирает. */
+.ch-rooms { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; margin-bottom: 12px; }
+.ch-room-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -4px; padding: 0 4px; }
+.ch-grp {
+  font-family: var(--font-mono, monospace); font-size: 8.5px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--t4, #6a7a88); margin: 10px 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ch-grp:first-child { margin-top: 0; }
+.ch-room {
+  position: relative; display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+  border: none; cursor: pointer; padding: 6px 8px; background: transparent; color: var(--t2, #b6c4d0);
+  font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 600; font-size: 13px;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.ch-room:hover { background: var(--w2, #232c36); color: var(--t1, #e8edf2); }
+.ch-room.on { background: var(--te, #3ec0d0); color: #04240f; }
+.ch-room-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-room-lock { opacity: .7; margin-right: 5px; }
+.ch-room-b {
+  flex-shrink: 0; padding: 0 4px; font-style: normal; font-family: var(--font-mono, monospace); font-size: 9.5px;
+  background: var(--te, #3ec0d0); color: #04240f;
+}
+.ch-room.on .ch-room-b { background: #04240f; color: var(--te, #3ec0d0); }
+.ch-room-x { flex-shrink: 0; padding: 0 2px; font-size: 11px; opacity: .7; }
+.ch-room-x:hover { opacity: 1; color: var(--err, #e05050); }
+.ch-room-add {
+  margin-top: 8px; border: 1px dashed var(--w3, #2a3340); background: none; cursor: pointer;
+  color: var(--t3, #8aa0b0); padding: 5px 8px; font-size: 11.5px; font-family: inherit; text-align: left;
+}
+.ch-room-add:hover { color: var(--te, #3ec0d0); border-color: var(--te, #3ec0d0); }
+/* Два поиска: по комнатам (рельса) и по эфиру (шапка) — разные вопросы */
+.ch-q, .ch-fq {
+  border: 1px solid var(--w3, #2a3340); background: var(--b1, #0d1117); color: var(--t1, #e8edf2);
+  padding: 5px 8px; font-size: 12px; font-family: inherit; outline: none;
+}
+.ch-q { margin-bottom: 8px; }
+.ch-q:focus, .ch-fq:focus { border-color: var(--te, #3ec0d0); }
+.ch-fq { margin-left: auto; width: 168px; }
+.ch-fq + .ch-status { margin-left: 12px; }
+.ch-found {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  font-family: var(--font-mono, monospace); font-size: 9.5px; color: var(--t3, #8aa0b0);
+}
+.ch-found-x { border: none; background: none; color: var(--te, #3ec0d0); cursor: pointer; font: inherit; padding: 0; }
+.ch-hit { background: color-mix(in srgb, var(--te, #3ec0d0) 35%, transparent); color: inherit; }
+/* Форма «завести комнату» — узкая колонка, поэтому в две строки */
+.ch-new { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ch-new-s, .ch-new-n {
+  border: 1px solid var(--w3, #2a3340); background: var(--b1, #0d1117);
+  color: var(--t1, #e8edf2); padding: 5px 8px; font-size: 12px; font-family: inherit; outline: none;
+  width: 100%; min-width: 0;
+}
+.ch-new-go {
+  border: none; cursor: pointer; padding: 5px 12px; background: var(--te, #3ec0d0); color: #04240f;
+  font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 12px; text-transform: uppercase;
+}
+/* Список комнат для телефона (рельса там скрыта) */
+.ch-room-sel { display: none; }
 .ch-side-t {
   font-family: var(--font-mono, monospace); font-size: 9px; letter-spacing: .22em; text-transform: uppercase;
   color: var(--t3, #8aa0b0); margin-bottom: 10px;
 }
 .ch-side-t b { color: var(--te, #3ec0d0); font-weight: 400; }
-.ch-side-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.ch-side-list { flex: 0 1 auto; max-height: 34%; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .ch-who { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; font-size: 12px; }
 .ch-who-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--fc, var(--te)); align-self: center; flex-shrink: 0;
   box-shadow: 0 0 5px var(--fc, var(--te)); }
 .ch-who-n { font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 600; color: var(--t1, #e8edf2); }
 .ch-who-f { font-family: var(--font-mono, monospace); font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--fc, var(--t3)); width: 100%; padding-left: 12px; }
 
-/* Дисклеймер */
-.ch-note {
-  display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 6px 11px;
-  font-family: var(--font-mono, monospace); font-size: 9.5px; letter-spacing: .04em;
-  color: var(--t3, #8aa0b0);
-  background: color-mix(in srgb, var(--te, #3ec0d0) 6%, transparent);
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
-}
-.ch-note-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--te, #3ec0d0); flex-shrink: 0;
-  box-shadow: 0 0 6px var(--te, #3ec0d0); animation: ch-pulse 2.4s ease-in-out infinite; }
 @keyframes ch-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 
 /* Лог */
@@ -196,12 +241,17 @@ body.route-map #ch-fab { display: none !important; }
   /* На весь экран срезанные углы ни к чему — распрямляем подложки */
   .ch-modal::before, .ch-modal::after { clip-path: none; inset: 0; }
   .ch-side { display: none; }
+  /* Рельсы нет — комнаты переключает список над эфиром */
+  .ch-room-sel {
+    display: block; width: 100%; margin: 0 0 8px; padding: 7px 8px;
+    border: 1px solid var(--w3, #2a3340); background: var(--b2, #141a22); color: var(--t1, #e8edf2);
+    font-size: 13px; font-family: inherit; outline: none;
+  }
+  .ch-fq { width: 108px; }
   .ch-hd { padding: calc(12px + env(safe-area-inset-top)) 14px 10px; }
   .ch-hd-t { font-size: 19px; }
-  .ch-status { font-size: 8.5px; }
   .ch-main { padding: 0 14px calc(12px + env(safe-area-inset-bottom)); }
   .ch-log { padding-right: 2px; }
-  .ch-note { font-size: 9px; padding: 6px 10px; }
   .ch-input-row { padding: 10px 0 0; gap: 8px; }
   .ch-inp { padding: 12px 13px; font-size: 16px; }   /* 16px — iOS не зумит при фокусе */
   .ch-send { padding: 0 16px; }

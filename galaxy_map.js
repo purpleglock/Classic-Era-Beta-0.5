@@ -136,6 +136,7 @@ const GM = {
   showBlocked: false,            // режим «закрытые границы» (куда нашим флотам нельзя)
   showOccup: false,              // ВОЙНА: слой «Оккупация» — флаги оккупантов над занятыми системами
   occup: null,                   // [{system_id,occupier,occupier_name,occupier_color,owner,...}] (RPC occupations_all; null=не грузили)
+  anchors: null,                 // ◈ ПРЕСТОЛ: якоря — переплавленные системы, оставшиеся за ним (RPC angel_anchors)
   blockedFids: null,             // fid фракций, закрывших границы для нас (RPC borders_blocked_fids)
   showTheatre: false,            // ☠ РЕЖИМ «Театр Легиона» (гасит мирные слои, см. gmToggleTheatre)
   theatre: null,                 // данные RPC legion_theatre() (null = не грузили)
@@ -192,9 +193,30 @@ function gmExitEdit() {
 }
 
 // ── Загрузка данных ─────────────────────────────────────────
+// ⚠️ ГОНКА С АВТОРИЗАЦИЕЙ. Слои «мои флоты / чужие флоты / оборона» приходят
+// ТОЛЬКО из RPC, а те шли под условием `user` — глобала, который выставляется
+// уже ПОСЛЕ restoreSession() (сетевой getSession). Если карту открыли сразу
+// (F5 на #map, прямая ссылка), loadGalaxyData успевала отработать раньше: сами
+// системы и трассы публичны и рисовались, а на месте RPC подставлялись пустые
+// массивы — карта «догружалась», и флотов на ней не было вообще. Само это не
+// чинилось: повторный заход в течение минуты обновление пропускает.
+// Теперь сессию спрашиваем у ХРАНИЛИЩА (getToken — синхронно, до SDK), а если
+// её на момент загрузки и правда нет — ждём authSettled и перезабираем слой.
+// Пустой слой из-за ОШИБКИ RPC и пустой слой «нечего показывать» выглядели на
+// карте одинаково — молчком. Ошибку теперь хотя бы слышно в консоли.
+function gmRpcSoft(fn) {
+  return apiFetch('rpc/' + fn, { method: 'POST', body: '{}' })
+    .catch(e => { console.warn('[map] rpc ' + fn + ':', e && e.message || e); return []; });
+}
+function gmHasSession() {
+  if (typeof user !== 'undefined' && user) return true;
+  try { return typeof getToken === 'function' && getToken() !== SB_ANON; } catch (e) { return false; }
+}
 async function loadGalaxyData() {
+  // ⚠️ НЕ `user`: тот появляется позже (см. выше). `auth` = сессия в хранилище.
+  const auth = gmHasSession();
   try {
-    const [sys, lanes, facs, secs, routes, econ, salvos, mines, drones, outposts, opShips, mzaShips, fleets, fleetsVis, mzaVis, armies, guards, angel] = await Promise.all([
+    const [sys, lanes, facs, secs, routes, econ, salvos, mines, drones, outposts, opShips, mzaShips, fleets, fleetsVis, mzaVis, armies, guards, angel, anchors] = await Promise.all([
       dbGet('map_systems', 'select=*'),
       dbGet('map_hyperlanes', 'select=*'),
       dbGet('map_factions', 'select=*&order=sort.asc'),
@@ -209,18 +231,18 @@ async function loadGalaxyData() {
       // ОБОРОНА: видимые мне минные поля, аванпосты и мои корабли-носители аванпостов.
       // RPC требуют авторизации и фракции игрока → для гостей/без фракции вернут
       // ошибку, а если _defense_*.sql ещё не применён — функции нет. Везде → [].
-      user ? apiFetch('rpc/minefields_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/droneposts_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/outposts_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/outpost_ships_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/mza_ships_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/fleets_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      auth ? gmRpcSoft('minefields_visible') : Promise.resolve([]),
+      auth ? gmRpcSoft('droneposts_visible') : Promise.resolve([]),
+      auth ? gmRpcSoft('outposts_visible') : Promise.resolve([]),
+      auth ? gmRpcSoft('outpost_ships_mine') : Promise.resolve([]),
+      auth ? gmRpcSoft('mza_ships_mine') : Promise.resolve([]),
+      auth ? gmRpcSoft('fleets_mine') : Promise.resolve([]),
       // ВИДИМОСТЬ ЧУЖИХ: флоты всех держав (состав скрыт без разведки) + вскрытые
       // факельщика. _fleet_intel.sql может быть не накачен → []. Гостям не нужно.
-      user ? apiFetch('rpc/fleets_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/mza_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      auth ? gmRpcSoft('fleets_visible') : Promise.resolve([]),
+      auth ? gmRpcSoft('mza_visible') : Promise.resolve([]),
       // МАРШ: мои армии на колониях (таблицы может не быть — _wellbeing_armies.sql)
-      user ? apiFetch('rpc/armies_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      auth ? gmRpcSoft('armies_mine') : Promise.resolve([]),
       // ПОСТЫ ДРЕВНИХ СТРАЖЕЙ (guardian_posts) — даллерианские мегасооружения из ихора.
       // RPC существовала с самого _ichor_megastructures.sql, но её НЕ ЗВАЛА ни одна
       // строка JS: на карте Стражей не было вообще. Видны всем (политика select true),
@@ -229,6 +251,9 @@ async function loadGalaxyData() {
       // ПРЕСТОЛ: кто сейчас ангел. Отдаёт только fid и позу — точное состояние
       // печатей сервер чужим не показывает вовсе (см. _angel_core.sql).
       apiFetch('rpc/angel_status', { method: 'POST', body: '{}' }).catch(() => null),
+      // ПРЕСТОЛ: якоря — переплавленные системы, оставшиеся за ним. Без разведки
+      // и без тумблера: пятно на карте и есть полоса здоровья кризиса.
+      apiFetch('rpc/angel_anchors', { method: 'POST', body: '{}' }).catch(() => []),
     ]);
     GM.systems = (sys || []).map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
     GM._cbox = null; // сброс кэша области звёзд
@@ -247,6 +272,7 @@ async function loadGalaxyData() {
     GM.armies = Array.isArray(armies) ? armies : [];      // МАРШ: мои армии (гарнизоны/на марше)
     GM.guardians = Array.isArray(guards) ? guards : [];   // МЕГАСООРУЖЕНИЯ: Посты Древних Стражей (ихор, видны всем)
     GM.angel = (angel && angel.exists && !angel.fell) ? angel : null;   // ПРЕСТОЛ: ковчег на карте
+    GM.anchors = Array.isArray(anchors) ? anchors : [];   // ПРЕСТОЛ: якоря кризиса (переплавленные системы)
     GM.sectors = (secs || []).map(s => ({ ...s, system_ids: s.system_ids || [] }));
     GM.econ = {};   // system_id → { status, prosperity } для режима «бедность»
     (econ || []).forEach(e => { if (e && e.system_id) GM.econ[e.system_id] = { status: e.status, prosperity: +e.prosperity }; });
@@ -256,9 +282,25 @@ async function loadGalaxyData() {
     // прокладке трасс летящих флотов (не только для слоя карты). Список приходит
     // ПОЗЖЕ первой запечки геометрии (гонка!) → по прибытии перестраиваем
     // оборону (трассы флотов) и перерисовываем, если карта открыта.
-    if (user) gmLoadBlocked().then(() => {
+    if (auth) gmLoadBlocked().then(() => {
       if (GMM.active && GMM.cv && GMM.cv.isConnected) { gmmBuildDefense(); GMM.dirty = true; gmmKick(); }
     });
+    // Сессии на момент загрузки не было → флотов/обороны в GM нет вовсе.
+    // Ждём, пока авторизация осядет, и добираем слой ОДИН раз (gmmRefreshDefense
+    // тянет те же RPC и сам пересобирает/перерисовывает оборону).
+    if (!auth && !GM._authRetry) {
+      GM._authRetry = true;
+      (async () => {
+        for (let i = 0; i < 60 && !gmHasSession(); i++) await new Promise(r => setTimeout(r, 250));
+        if (!gmHasSession()) return;                  // так и остались гостем
+        // Перезабираем ВЕСЬ заход, а не только флоты: без сессии мимо кассы
+        // прошли и GM.myFid (своя держава), и закрытые границы, и оборона.
+        GM.dataAt = 0;
+        try { await loadGalaxyData(); } catch (e) { return; }
+        if (GMM.active && GMM.cv && GMM.cv.isConnected) { gmmBuildWorld(); gmmRaster(); }
+        else if (document.getElementById('gm-svg') && typeof gmDraw === 'function') gmDraw();
+      })();
+    }
     // мета фракций (флаг/герб, лидер) из анкет — необязательно
     GM.facMeta = {};
     try {
@@ -2174,7 +2216,18 @@ function gmDefRpc(fn, body) {
 async function gmReloadDefense(reopenSysId) {
   if (!user) return;
   try {
-    const [mines, drones, outposts, ships, mzas, fleets, salvos, fleetsVis, mzaVis, armies, legion, guards, angel] = await Promise.all([
+    // ⚠️ ПОРЯДОК ИМЁН = ПОРЯДОК ЗАПРОСОВ. Здесь он разъехался начиная с
+    // девятой позиции: `angel_status` разбирался как `mzaVis`, и дальше всё
+    // сдвигалось на один. На каждом обновлении карты выходило:
+    //   GM.angel     ← guardian_posts   → `.exists` нет → ковчег ИСЧЕЗАЛ с карты
+    //   GM.mzaVis    ← angel_status     → объект, не массив → []
+    //   GM.armies    ← mza_visible
+    //   GM.legion    ← armies_mine
+    //   GM.guardians ← legion_contacts
+    // Пять слоёв разом, молча: `Array.isArray` глотал подмену без единой ошибки.
+    // Первая загрузка рисовала всё верно, поэтому баг ловился только «оно было
+    // и пропало». Добавляя запрос — вставлять имя на ту же позицию.
+    const [mines, drones, outposts, ships, mzas, fleets, salvos, fleetsVis, angel, mzaVis, armies, legion, guards, anchors] = await Promise.all([
       gmDefRpc('minefields_visible').catch(() => GM.minefields || []),
       gmDefRpc('droneposts_visible').catch(() => GM.droneposts || []),
       gmDefRpc('outposts_visible').catch(() => GM.outposts || []),
@@ -2192,6 +2245,9 @@ async function gmReloadDefense(reopenSysId) {
       // клиент только рисует то, что ему выдали, и не знает большего.
       gmDefRpc('legion_contacts_visible').catch(() => GM.legion || []),
       gmDefRpc('guardian_posts_visible').catch(() => GM.guardians || []),   // МЕГАСООРУЖЕНИЯ: Посты Стражей
+      // ◈ ПРЕСТОЛ: якоря — системы, которые он переплавил и держит за собой.
+      // Видны всем и без разведки: это полоса здоровья кризиса, прятать её не от кого.
+      gmDefRpc('angel_anchors').catch(() => GM.anchors || []),
     ]);
     GM.minefields = Array.isArray(mines) ? mines : [];
     GM.droneposts = Array.isArray(drones) ? drones : [];
@@ -2205,6 +2261,7 @@ async function gmReloadDefense(reopenSysId) {
     GM.armies = Array.isArray(armies) ? armies : (GM.armies || []);   // МАРШ
     GM.legion = Array.isArray(legion) ? legion : (GM.legion || []);   // ЛЕГИОН: сигнатуры
     GM.guardians = Array.isArray(guards) ? guards : (GM.guardians || []);   // Посты Древних Стражей
+    GM.anchors = Array.isArray(anchors) ? anchors : (GM.anchors || []);   // ◈ ПРЕСТОЛ: якоря кризиса
     GM.salvos = Array.isArray(salvos) ? salvos : (GM.salvos || []);
     if (GMM.active) { gmmBuildDefense(); gmmBuildSalvos(); GMM.dirty = true; gmmKick(); }
     if (GM._rosterOn) gmRosterRender();   // живой список юнитов
@@ -5428,6 +5485,7 @@ function gmmBlit() {
   // как у орбит: всегда верный размер, без рассинхрона зум↔объекты.
   ctx.save();
   ctx.setTransform(GMM.s * dpr, 0, 0, GMM.s * dpr, GMM.tx * dpr, GMM.ty * dpr);
+  gmmPaintAnchors(ctx, GMM.s); // ◈ ПРЕСТОЛ: пятно якорей — ПОД звёздами, это территория, а не значок
   gmmPaintStars(ctx, GMM.s);
   gmmPaintOccup(ctx, GMM.s);   // ВОЙНА: флаги оккупантов — поверх звёзд, тот же мировой трансформ
   gmmPaintMelt(ctx, GMM.s);    // ◈ ПРЕСТОЛ, фаза 2: над переплавляемым миром
@@ -10804,6 +10862,58 @@ async function gmLoadOccup() {
     GM.occup = Array.isArray(r) ? r : [];
   } catch (e) { GM.occup = GM.occup || []; }   // срез не накачен → слой просто пуст
   return GM.occup;
+}
+// ◈ ПРЕСТОЛ: ЯКОРЯ — ПЯТНО НА КАРТЕ.
+// ⚠️ ЭТО НЕ ЗНАЧОК НАД СИСТЕМОЙ, А ТЕРРИТОРИЯ. Радиус берём в МИРОВЫХ единицах
+// (не делим на camS): при среднем расстоянии между звёздами ~200 пятна соседних
+// якорей сливаются в одно поле — и на общем зуме кризис читается как расползающееся
+// чёрное пятно, а не как россыпь иконок. Значок бы этого не дал ни при каком размере.
+//
+// ⚠️ БЕЗ ТУМБЛЕРА И БЕЗ РАЗВЕДКИ, как переплавка и сам ковчег. Якоря — это полоса
+// здоровья кризиса (пока они стоят, печати зарастают, см. _angel_anchors.sql):
+// прятать её не от кого, а спрятанная за выключенным тумблером она бы просто
+// не существовала для игрока (ровно так уже терялись мины и мегасооружения,
+// см. map-defense-visible-to-all).
+//
+// РИСУЕТСЯ ПОД ЗВЁЗДАМИ (вызов до gmmPaintStars): пятно не должно съедать
+// иконки систем — по ним игрок и выбирает, куда лететь снимать якорь.
+function gmmPaintAnchors(ctx, camS) {
+  const lst = GM.anchors;
+  if (!lst || !lst.length || !GM.systems || !GM.systems.length) return;
+  const byId = {};
+  lst.forEach(a => { if (a && a.system_id) byId[a.system_id] = a; });
+  const mg = 400;
+  const t = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  ctx.save();
+  // 'lighter' тут НЕ годится: пятно тёмное, а сложение осветляет. Обычный
+  // source-over с малой альфой сам даёт нужное сгущение на перекрытиях.
+  GM.systems.forEach(s => {
+    const a = byId[s.id]; if (!a) return;
+    const X = s.x * camS + GMM.tx, Y = s.y * camS + GMM.ty;
+    if (X < -mg || X > GMM.vw + mg || Y < -mg || Y > GMM.vh + mg) return;
+    const _scY = s.y * camS + GMM.ty, _dyW = (gmmTY(_scY) - _scY) / camS;
+    ctx.save(); ctx.translate(0, _dyW);
+
+    // Чем больше миров он тут переплавил, тем шире пятно.
+    const R = 240 * (1 + 0.16 * Math.min(4, (+a.worlds || 1) - 1));
+    const g = ctx.createRadialGradient(s.x, s.y, R * 0.05, s.x, s.y, R);
+    g.addColorStop(0.00, 'rgba(24,6,10,0.72)');
+    g.addColorStop(0.42, 'rgba(58,14,20,0.34)');
+    g.addColorStop(1.00, 'rgba(58,14,20,0.00)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(s.x, s.y, R, 0, Math.PI * 2); ctx.fill();
+
+    // Медный ободок — единственный акцент, тот же тон, что у отметки в фазе 2.
+    // Дышит еле-еле: пятно должно казаться живым, но не мигать.
+    const puls = 0.55 + 0.16 * Math.sin(t * 0.9 + s.x * 0.01);
+    ctx.globalAlpha = puls;
+    ctx.strokeStyle = 'rgba(242,158,96,0.55)';
+    ctx.lineWidth = 2.2 / camS;
+    ctx.beginPath(); ctx.arc(s.x, s.y, R * 0.30, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  });
+  ctx.restore();
 }
 // ◈ ПРЕСТОЛ, ФАЗА 2: ПЕРЕПЛАВКА МИРА.
 // ⚠️ БЕЗ ТУМБЛЕРА И БЕЗ РАЗВЕДКИ, как и сам ковчег: пять часов над колонией
