@@ -2286,7 +2286,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .grp-hdr-t:hover img{filter:brightness(1.1)}
 
 /* ── PROSE / CONTENT ── */
-.prose{line-height:1.88;color:var(--t1);font-size:14.5px}
+.prose{line-height:1.88;color:var(--t1);font-size:14.5px;text-align:left;text-wrap:pretty;hyphens:manual;-webkit-hyphens:manual;overflow-wrap:break-word}
 .prose h1{
   font-family: var(--font-display);font-size:22px;font-weight:700;
   color:var(--t1);margin:40px 0 20px;letter-spacing: calc(3px * var(--deco-ls-mult, 1));text-transform:uppercase;

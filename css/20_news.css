@@ -120,7 +120,7 @@
 
 .fn-card-title { font-family: var(--fn-disp); font-weight: 700; line-height: 1.12; letter-spacing: calc(.01em * var(--deco-ls-mult, 1));
   color: var(--t1, #e8edf2); font-size: 18px; margin: 0;
-  overflow-wrap: break-word; word-break: break-word; hyphens: auto; }
+  overflow-wrap: break-word; word-break: normal; hyphens: manual; -webkit-hyphens: manual; }
 .fn-card-lead .fn-card-title { font-size: 26px; }
 .fn-card-excerpt { font-family: var(--fn-read); font-size: 13px; line-height: 1.55; color: var(--t2, #c0ccd6);
   margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -922,7 +922,7 @@ textarea.fn-c-body {
   border: var(--deco-frame-w, 1px) solid var(--w2, #2a3340); border-radius: var(--radius-sm);
   background: var(--b1, #0d1117);
   max-height: 36vh; overflow: auto; overscroll-behavior: contain;
-  max-width: 100%; box-sizing: border-box; overflow-wrap: anywhere;
+  max-width: 100%; box-sizing: border-box; overflow-wrap: break-word;
   --fn-accent: var(--gd, #3a7fbf);
 }
 .fn-c-preview:empty { display: none; }
@@ -1246,7 +1246,7 @@ textarea.fn-c-verdict { min-height: 110px; resize: vertical; font-size: 14px; li
 .fn-art-body p, .fn-art-body li, .fn-art-body blockquote,
 .fn-art-body h1, .fn-art-body h2, .fn-art-body h3,
 .fn-c-preview p, .fn-c-preview li, .fn-c-preview blockquote {
-  overflow-wrap: anywhere; word-break: break-word; hyphens: auto;
+  overflow-wrap: break-word; word-break: normal; hyphens: manual; -webkit-hyphens: manual; text-wrap: pretty;
 }
 /* моноширинные блоки и таблицы прокручиваются сами, а не растягивают депешу */
 .fn-art-body pre, .fn-c-preview pre { max-width: 100%; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
@@ -1255,7 +1255,7 @@ textarea.fn-c-verdict { min-height: 110px; resize: vertical; font-size: 14px; li
 /* fx-обёртки внутри статьи не задают ширину больше колонки */
 .fn-art-body .fx-schizo, .fn-art-body .fx-glitch, .fn-art-body .fx-jitter, .fn-art-body .fx-scanner,
 .fn-c-preview .fx-schizo, .fn-c-preview .fx-glitch, .fn-c-preview .fx-jitter, .fn-c-preview .fx-scanner {
-  max-width: 100%; overflow-wrap: anywhere;
+  max-width: 100%; overflow-wrap: break-word;
 }
 
 @media (max-width: 600px) {
