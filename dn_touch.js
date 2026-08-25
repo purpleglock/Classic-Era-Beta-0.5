@@ -92,6 +92,15 @@ function layout(W, H){
   };
   L.pw   = slot();
   L.zoom = slot();
+  // ВЕЕР МОЩНОСТИ: раскрывается ВЛЕВО от своей кнопки, внутрь экрана. Держать
+  // палец и вести, как мышью по колесу, на телефоне нельзя — палец закрывает
+  // сам веер, поэтому это два отдельных тычка: открыть и выбрать.
+  L.pwFan = [];
+  const FA = [230, 194, 158, 122];                    // сверху вниз, по дуге
+  for (let i = 0; i < A.POWER_KEYS.length; i++){
+    const a = FA[i] * Math.PI/180;
+    L.pwFan.push({ x: L.pw.x + Math.cos(a)*80*u, y: L.pw.y + Math.sin(a)*80*u, r: 27*u, i: i });
+  }
   L.mods = [];
   const acts = (S.me && S.me.C.acts) || [];
   for (let i = 0; i < acts.length; i++){ const s = slot(); s.i = i; L.mods.push(s); }
@@ -103,6 +112,7 @@ function inBox(b, x, y){ return x>=b.x0 && x<=b.x1 && y>=b.y0 && y<=b.y1; }
 // отрыва: иначе палец, соскользнувший со стика в поле наводки, начинал
 // крутить башни, и борт «залипал» на последнем руле.
 const P = new Map();
+let fan = false;                       // раскрыт ли веер мощности
 
 function down(id, x, y){
   const s = S.me;
@@ -114,13 +124,21 @@ function down(id, x, y){
   // незачем: в миссии его нет вовсе, а в свободном бою хватит «войти сразу».
   if (S.spawn){ S.keys.add('Enter'); setTimeout(()=>S.keys.delete('Enter'), 60); return; }
 
+  // ⚠️ ПОКА ВЕЕР РАСКРЫТ, ОН ЗАБИРАЕТ ВЕСЬ ЭКРАН. Иначе тычок мимо лепестка
+  // уходил бы в огонь или наводку, и выбор мощности превращался бы в лотерею.
+  if (fan){
+    P.set(id, { role:'tap' });
+    for (const b of L.pwFan) if (hit(b, x, y)){ pickPower(b.i); fan = false; return; }
+    fan = false;                                       // мимо — просто закрыть
+    return;
+  }
   if (hit(L.fire, x, y)){
     P.set(id, { role:'fire' }); S.fire1 = true;
     if (s.tur) s.tur.forEach(T=>{ if (T.cd < 0.09 && T.rel<=0) T.cd = 0; });   // залп в тот же кадр
     return;
   }
   if (hit(L.zoom, x, y)){ P.set(id, { role:'tap' }); S.zoom = !S.zoom; if (window.DNS) DNS.click(); return; }
-  if (hit(L.pw,   x, y)){ P.set(id, { role:'tap' }); cyclePower(); return; }
+  if (hit(L.pw,   x, y)){ P.set(id, { role:'tap' }); fan = true; if (window.DNS) DNS.click(); return; }
   for (const m of L.mods) if (hit(m, x, y)){
     P.set(id, { role:'tap' });
     const a = s.C.acts[m.i]; if (a) A.useAbil(s, a.k);
@@ -192,16 +210,21 @@ function stick(ox, oy, x, y){
   L.knob = { x: L.stick.x + S.tRud*R*0.70, y: L.stick.y - S.tVert*R*0.70 };
 }
 
-// Мощность по кругу вместо колеса: держать E и вести мышью пальцем неудобно,
-// а статей всего четыре — тычок по кнопке проходит их подряд.
-function cyclePower(){
-  const s = S.me; if (!s) return;
-  const K = A.POWER_KEYS;
-  const i = Math.max(0, K.indexOf(s.pw));
-  s.pw = K[(i+1) % K.length];
-  s.pwT = 1.4;
-  if (window.DNS) DNS.click();
-  A.say('Мощность: ' + DN.POWER[s.pw].name);
+// ⚠️ ВЫБОР МОЩНОСТИ ИДЁТ ЧЕРЕЗ ШТАТНЫЙ wheelPick, А НЕ СВОИМ ПРИСВОЕНИЕМ.
+// Раньше кнопка ПЕРЕБИРАЛА режимы по кругу и ставила s.pw напрямую. Три беды
+// сразу: до щита надо было тыкать трижды; задержка перекидки (POWER_SWAP) и
+// порог «энергии не хватает» не проверялись вовсе; а главное — энергия копится
+// ТОЛЬКО в режиме «ровный ход», и когда она вытекала, stepPower сам ронял борт
+// в off. Следующий тычок в цикле снова давал «двигатели» — отсюда и «он всегда
+// только ускоряет». Теперь лепесток выбирается напрямую, а решение принимает та
+// же дверь, что и колесо на клавише E: одни правила, один звук, одна строка.
+function pickPower(i){
+  const n = A.POWER_KEYS.length;
+  // обратная к wheelSeg: середина i-го сектора, отсчёт от «вверх»
+  const a = (i + 0.5) * (Math.PI*2/n) - Math.PI/2;
+  S.wheel.ax = Math.cos(a)*80;
+  S.wheel.ay = Math.sin(a)*80;
+  A.wheelPick();
 }
 
 // ── Рисование. Всё контурами и заливкой, без единого символа шрифта: эмодзи в
@@ -218,6 +241,7 @@ function draw(x, W, H, s){
   drawThrottle(x, k, s);
   drawFire(x, k);
   drawColumn(x, k, s);
+  if (fan) drawFan(x, k, s);            // поверх всего: он забирает весь экран
 
   x.restore();
   x.textAlign='center'; x.textBaseline='middle';
@@ -228,8 +252,20 @@ function draw(x, W, H, s){
 // вверх-вниз выглядели пустым местом. Сверху и снизу — двойная стрелка
 // (всплытие/погружение), по бокам — перо руля.
 function drawStick(x, k){
-  const B = L.stick;
-  ring(x, B.x, B.y, B.r, 'rgba(255,255,255,0.13)', 1.5);
+  const B = L.stick, s = S.me;
+  // ⚠️ ЖИВУЧЕСТЬ ЖИВЁТ НА ОБОДЕ СТИКА, а не отдельным прибором над полем боя.
+  // Обод и так был пустой декоративной линией, палец на нём лежит, и глаз при
+  // манёвре смотрит именно сюда. Дуги идут от «12 часов» по часовой: наружная —
+  // корпус, под ней тоньше — щит. Энергии здесь НЕТ: она дугой на кнопке
+  // мощности, и рисовать её дважды — та же ошибка, из-за которой низ экрана уже
+  // один раз превратился в свалку.
+  if (s){
+    const A0 = -Math.PI/2, SW = Math.PI*2;
+    ring(x, B.x, B.y, B.r, 'rgba(255,255,255,0.06)', 4);
+    A.arc(x, B.x, B.y, B.r, A0, A0 + SW*clamp(s.hp/s.hpMax,0,1), 'rgba(120,225,245,0.72)', 4);
+    ring(x, B.x, B.y, B.r-6, 'rgba(255,255,255,0.05)', 2.5);
+    A.arc(x, B.x, B.y, B.r-6, A0, A0 + SW*clamp(s.sh/s.shMax,0,1), 'rgba(150,195,255,0.62)', 2.5);
+  }
   ring(x, B.x, B.y, B.r*0.30, 'rgba(255,255,255,0.08)', 1);
   // крестовина осей
   x.strokeStyle='rgba(255,255,255,0.07)'; x.lineWidth=1;
@@ -241,10 +277,10 @@ function drawStick(x, k){
   // указатели: подсвечиваются ровно той долей, что ушла в руль/вертикаль
   const hi = v => 'rgba(120,225,245,'+(0.28 + 0.62*clamp(Math.abs(v),0,1)).toFixed(2)+')';
   const dim = 'rgba(170,200,215,0.30)';
-  chevron(x, B.x, B.y-B.r*0.80, 0, -1, 9*k, (S.tVert>0.02)?hi(S.tVert):dim, true);
-  chevron(x, B.x, B.y+B.r*0.80, 0,  1, 9*k, (S.tVert<-0.02)?hi(S.tVert):dim, true);
-  chevron(x, B.x-B.r*0.80, B.y, -1, 0, 9*k, (S.tRud<-0.02)?hi(S.tRud):dim, false);
-  chevron(x, B.x+B.r*0.80, B.y,  1, 0, 9*k, (S.tRud>0.02)?hi(S.tRud):dim, false);
+  chevron(x, B.x, B.y-B.r*0.72, 0, -1, 9*k, (S.tVert>0.02)?hi(S.tVert):dim, true);
+  chevron(x, B.x, B.y+B.r*0.72, 0,  1, 9*k, (S.tVert<-0.02)?hi(S.tVert):dim, true);
+  chevron(x, B.x-B.r*0.72, B.y, -1, 0, 9*k, (S.tRud<-0.02)?hi(S.tRud):dim, false);
+  chevron(x, B.x+B.r*0.72, B.y,  1, 0, 9*k, (S.tRud>0.02)?hi(S.tRud):dim, false);
 
   // ручка
   const kn = L.knob || { x:B.x, y:B.y };
@@ -355,6 +391,44 @@ function drawColumn(x, k, s){
       x.fillText(Math.ceil(cd), b.x, b.y+b.r+9*k);
     }
   });
+}
+
+// ── ВЕЕР МОЩНОСТИ. Четыре лепестка с подписями: без слова значок «щит» и
+// значок «орудия» на кнопке под пальцем не различить, а выбор здесь редкий и
+// важный — секунда на чтение дешевле, чем отведённая не туда мощность.
+const PW_NAME = { eng:'ХОД', wpn:'ОРУДИЯ', shd:'ЩИТ', off:'РОВНО' };
+function drawFan(x, k, s){
+  // затемнение: веер модальный, и это должно быть видно
+  x.fillStyle = 'rgba(4,8,12,0.55)';
+  x.fillRect(0, 0, L.W, L.H);
+
+  A.POWER_KEYS.forEach((key, i) => {
+    const b = L.pwFan[i]; if (!b) return;
+    const on = s.pw === key;
+    // недоступен: перекидка ещё идёт или запаса не хватит на отвод
+    const barred = s.pwT > 0 || (key !== 'off' && s.en < s.enMax*0.08);
+    const edge = on   ? 'rgba(150,240,255,0.95)'
+               : barred ? 'rgba(255,255,255,0.12)'
+                        : 'rgba(120,225,245,0.55)';
+    disc(x, b, on ? 'rgba(120,225,245,0.30)' : 'rgba(10,18,26,0.88)', edge);
+    const col = on ? 'rgba(220,245,255,0.95)'
+                   : (barred ? 'rgba(140,160,175,0.45)' : 'rgba(200,230,245,0.9)');
+    A.icon(x, b.x, b.y, key === 'off' ? 'eng' : key, col);
+    if (key === 'off'){                       // «никуда не отведена» — перечёркнуто
+      x.strokeStyle = col; x.lineWidth = 1.5;
+      x.beginPath();
+      x.moveTo(b.x-11*k, b.y+11*k); x.lineTo(b.x+11*k, b.y-11*k);
+      x.stroke();
+    }
+    x.fillStyle = col;
+    x.font = Math.round(9*k) + 'px "Courier New", monospace';
+    x.fillText(PW_NAME[key] || key, b.x, b.y + b.r + 10*k);
+  });
+
+  // запас энергии дужкой у самой кнопки: по нему и решают, что можно отвести
+  A.arc(x, L.pw.x, L.pw.y, L.pw.r+5, -Math.PI/2,
+        -Math.PI/2 + Math.PI*2*clamp(s.en/s.enMax,0,1), 'rgba(255,196,90,0.85)', 3);
+  ring(x, L.pw.x, L.pw.y, L.pw.r, 'rgba(255,255,255,0.25)', 1.5);
 }
 
 function ring(x, cx, cy, r, col, w){
