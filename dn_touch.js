@@ -41,23 +41,63 @@ function detect(){
 
 // ── Раскладка. Всё считается от размера холста, а не прибито в пикселях:
 // экраны телефонов расходятся вдвое, и «красиво на моём» здесь не годится.
+//
+// ⚠️ ЭКРАН РАЗБИТ НА ТРИ НЕПЕРЕСЕКАЮЩИЕСЯ ПОЛОСЫ, и это главное правило файла.
+// Раньше кнопки сыпались кучей в нижнюю треть — прямо на прибор борта, который
+// арена рисует по центру внизу, — и низ экрана превращался в свалку колец, где
+// палец не попадал никуда. Теперь:
+//   ЛЕВЫЙ НИЗ  — только стик курса, вокруг него не рисуется НИЧЕГО.
+//   ЛЕВЫЙ КРАЙ выше стика — лестница машинного телеграфа.
+//   ПРАВЫЙ КРАЙ — колонка кнопок, ПРАВЫЙ НИЗ — огонь.
+//   ВСЁ ОСТАЛЬНОЕ (центр и верх, а это большая часть высокого экрана) — наводка.
+// Прибор борта на телефоне арена поднимает выше и рисует урезанным (см. hudPanel):
+// телеграф, модули и мощность там больше не дублируются — они здесь, под пальцем.
 const L = {};
 function layout(W, H){
-  const k = clamp(Math.min(W, H)/420, 0.78, 1.35);   // общий калибр под экран
-  L.k = k;
-  L.stick = { x: 108*k, y: H - 112*k, r: 74*k, kn: 30*k };
-  L.thr   = { x: 22*k, y: H - 300*k, w: 26*k, h: 168*k };
-  L.fire  = { x: W - 86*k, y: H - 104*k, r: 54*k };
-  L.zoom  = { x: W - 172*k, y: H - 74*k,  r: 30*k };
-  L.pw    = { x: W - 168*k, y: H - 168*k, r: 30*k };
-  L.mods  = [];
+  const u = clamp(Math.min(W, H)/400, 0.82, 1.45);   // общий калибр под экран
+  L.k = u; L.W = W; L.H = H;
+
+  // СТИК КУРСА: вбок — руль, вверх-вниз — ВЫСОТА. Круг большой и один в углу.
+  L.stick = { x: 100*u, y: H - 104*u, r: 82*u, kn: 34*u };
+  // Зона захвата шире картинки: палец ложится в угол «примерно», и гонять его
+  // в нарисованный круг игрок не обязан.
+  L.stickBox = { x0: 0, x1: 214*u, y0: H - 216*u, y1: H };
+
+  // ⚠️ ВЕРХ ЭКРАНА ЗАНЯТ. Там задача миссии, эфир мостика и счёт бортов; всё,
+  // что ползёт вверх по краям, обязано остановиться до этой черты, иначе в
+  // ландшафте лестница и модули уезжали за кадр — то есть их просто не было.
+  const top = 86*u;
+
+  // ТЕЛЕГРАФ: лестница у левого края НАД стиком. Ступень — целая строка во всю
+  // ширину полосы, промахнуться нечем; полосу можно и вести пальцем.
+  const rows = A.THR_STEPS.length;
+  const room = Math.max(72, L.stickBox.y0 - 14*u - top);
+  const rh   = Math.min(46*u, room/rows);
+  L.thr = { x: 8*u, w: 46*u, rh: rh, h: rows*rh, y: L.stickBox.y0 - 14*u - rows*rh, n: rows };
+
+  // ОГОНЬ: зеркало стика в правом углу.
+  L.fire = { x: W - 86*u, y: H - 104*u, r: 66*u };
+
+  // КОЛОНКА У ПРАВОГО КРАЯ: мощность, прицеливание, дальше модули вверх. Один
+  // столбец с равным шагом — глазами не ищешь, пальцем ведёшь вверх. Упёрлись в
+  // верхнюю черту — переносим остаток ВТОРЫМ столбцом внутрь экрана, а не
+  // ужимаем кнопки: кнопка мельче пальца бесполезна.
+  const r = 25*u, gap = 60*u, y0 = H - 214*u;
+  let bx = W - 34*u, by = y0;
+  const slot = () => {
+    if (by - r < top){ bx -= 58*u; by = y0; }          // столбец кончился — следующий
+    const s = { x: bx, y: by, r: r };
+    by -= gap;
+    return s;
+  };
+  L.pw   = slot();
+  L.zoom = slot();
+  L.mods = [];
   const acts = (S.me && S.me.C.acts) || [];
-  for (let i=0;i<acts.length;i++)
-    L.mods.push({ x: W - 44*k, y: H - 250*k - i*66*k, r: 27*k, i:i });
-  // Правое поле наводки: всё правее середины, кроме кружков кнопок.
-  L.aimX = W*0.40;
+  for (let i = 0; i < acts.length; i++){ const s = slot(); s.i = i; L.mods.push(s); }
 }
-function hit(b, x, y){ return b && Math.hypot(x-b.x, y-b.y) <= b.r*1.18; }
+function hit(b, x, y){ return b && Math.hypot(x-b.x, y-b.y) <= b.r*1.15; }
+function inBox(b, x, y){ return x>=b.x0 && x<=b.x1 && y>=b.y0 && y<=b.y1; }
 
 // ── Пальцы. У каждого своя роль, взятая в момент касания и не меняющаяся до
 // отрыва: иначе палец, соскользнувший со стика в поле наводки, начинал
@@ -79,30 +119,37 @@ function down(id, x, y){
     if (s.tur) s.tur.forEach(T=>{ if (T.cd < 0.09 && T.rel<=0) T.cd = 0; });   // залп в тот же кадр
     return;
   }
-  if (hit(L.zoom, x, y)){ P.set(id, { role:'tap' }); S.zoom = !S.zoom; return; }
+  if (hit(L.zoom, x, y)){ P.set(id, { role:'tap' }); S.zoom = !S.zoom; if (window.DNS) DNS.click(); return; }
   if (hit(L.pw,   x, y)){ P.set(id, { role:'tap' }); cyclePower(); return; }
   for (const m of L.mods) if (hit(m, x, y)){
     P.set(id, { role:'tap' });
     const a = s.C.acts[m.i]; if (a) A.useAbil(s, a.k);
     return;
   }
+  // ТЕЛЕГРАФ. Полоса захвата вдвое шире нарисованной лестницы, и ступень можно
+  // не только ткнуть, но и ВЫВЕСТИ пальцем: роль держится до отрыва, поэтому
+  // соскочить с лестницы в наводку по дороге нельзя.
   const T = L.thr;
-  if (x < T.x + T.w*2.4 && y > T.y - T.h*0.15 && y < T.y + T.h*1.15){
-    P.set(id, { role:'tap' });
-    // ступени сверху вниз: полный … назад
-    const n = A.THR_STEPS.length;
-    const i = clamp(Math.floor((y - T.y) / (T.h/n)), 0, n-1);
-    s.step = n-1-i;
-    if (window.DNS) DNS.click();
-    return;
+  if (x < T.x + T.w*2.2 && y > T.y - 10 && y < T.y + T.h + 10){
+    P.set(id, { role:'thr' }); throttle(y); return;
   }
-  if (x < L.aimX){ P.set(id, { role:'stick', ox:x, oy:y }); stick(x, y, x, y); return; }
+  // СТИК: прямоугольник левого нижнего угла целиком.
+  if (inBox(L.stickBox, x, y)){ P.set(id, { role:'stick', ox:x, oy:y }); stick(x, y, x, y); return; }
   P.set(id, { role:'aim', px:x, py:y });
+}
+
+// Ступень по высоте пальца на лестнице: сверху ПОЛНЫЙ, снизу НАЗАД.
+function throttle(y){
+  const s = S.me, T = L.thr; if (!s) return;
+  const i = clamp(Math.floor((y - T.y) / T.rh), 0, T.n-1);
+  const st = T.n-1-i;
+  if (s.step !== st){ s.step = st; if (window.DNS) DNS.click(); }
 }
 
 function move(id, x, y){
   const p = P.get(id); if (!p) return;
   if (p.role === 'stick'){ stick(p.ox, p.oy, x, y); return; }
+  if (p.role === 'thr'){ throttle(y); return; }
   if (p.role === 'aim'){
     // ⚠️ ЗНАКИ ТЕ ЖЕ, ЧТО У МЫШИ. Вправо — прицел вправо, ВНИЗ — прицел вниз.
     // Инверсии здесь нет и не должно быть: она уже была разобрана в арене.
@@ -125,14 +172,24 @@ function up(id){
 
 // Стик: отклонение от точки КАСАНИЯ, а не от нарисованного центра — палец
 // ложится куда попало, и подгонять его под картинку игрок не обязан.
+//
+// ⚠️ ВЕРТИКАЛЬ ЖИВЁТ ЗДЕСЬ, И ДРУГОГО ОРГАНА У НЕЁ НЕТ. Ход вверх-вниз — это
+// подруливающие, а не «нос вверх», поэтому он и лёг на ту же ручку, что руль:
+// отдельная пара кнопок «выше/ниже» отняла бы у правой руки огонь. Мёртвая
+// зона мелкая (палец дрожит, но не настолько), отклик поджат квадратом —
+// у центра ручка ведёт мягко, у обода отдаёт полный упор.
 function stick(ox, oy, x, y){
   const R = L.stick.r;
-  let dx = clamp((x-ox)/R, -1, 1), dy = clamp((y-oy)/R, -1, 1);
-  const dead = 0.16;                                  // мёртвая зона: палец дрожит
-  const f = v => Math.abs(v) < dead ? 0 : (v - Math.sign(v)*dead)/(1-dead);
-  S.tRud  = f(dx);
-  S.tVert = -f(dy);                                   // вверх по экрану = всплытие
-  L.knob = { x: L.stick.x + f(dx)*R*0.72, y: L.stick.y - S.tVert*R*0.72 };
+  const dead = 0.10;
+  const f = v => {
+    v = clamp(v, -1, 1);
+    if (Math.abs(v) < dead) return 0;
+    const t = (Math.abs(v) - dead) / (1 - dead);
+    return Math.sign(v) * (t*t*0.45 + t*0.55);          // мягко у центра, упор у обода
+  };
+  S.tRud  = f((x-ox)/R);
+  S.tVert = -f((y-oy)/R);                               // вверх по экрану = всплытие
+  L.knob = { x: L.stick.x + S.tRud*R*0.70, y: L.stick.y - S.tVert*R*0.70 };
 }
 
 // Мощность по кругу вместо колеса: держать E и вести мышью пальцем неудобно,
@@ -154,61 +211,136 @@ function draw(x, W, H, s){
   if (!s || !s.alive || S.spawn) return;
   layout(W, H);
   const k = L.k;
+  x.save();
+  x.textAlign='center'; x.textBaseline='middle';
 
-  // стик
-  ring(x, L.stick.x, L.stick.y, L.stick.r, 'rgba(255,255,255,0.10)', 1.5);
-  ring(x, L.stick.x, L.stick.y, L.stick.r*0.32, 'rgba(255,255,255,0.08)', 1);
-  const kn = L.knob || { x:L.stick.x, y:L.stick.y };
-  x.fillStyle = (S.tRud||S.tVert) ? 'rgba(120,225,245,0.30)' : 'rgba(255,255,255,0.10)';
-  x.beginPath(); x.arc(kn.x, kn.y, L.stick.kn, 0, 6.28); x.fill();
-  ring(x, kn.x, kn.y, L.stick.kn, 'rgba(150,225,245,0.55)', 1.5);
+  drawStick(x, k);
+  drawThrottle(x, k, s);
+  drawFire(x, k);
+  drawColumn(x, k, s);
 
-  // телеграф: четыре ступени, текущая горит
-  const T = L.thr, n = A.THR_STEPS.length, sh = T.h/n;
-  for (let i=0;i<n;i++){
-    const step = n-1-i, on = s.step===step;
-    x.fillStyle = on ? 'rgba(120,225,245,0.85)' : 'rgba(255,255,255,0.10)';
-    x.fillRect(T.x, T.y + i*sh + 3, T.w, sh-6);
+  x.restore();
+  x.textAlign='center'; x.textBaseline='middle';
+}
+
+// ── СТИК КУРСА. Кольцо, крестовина и ЧЕТЫРЕ УКАЗАТЕЛЯ по сторонам: без них
+// ручка читалась как «джойстик хода», и вертикаль игрок просто не находил —
+// вверх-вниз выглядели пустым местом. Сверху и снизу — двойная стрелка
+// (всплытие/погружение), по бокам — перо руля.
+function drawStick(x, k){
+  const B = L.stick;
+  ring(x, B.x, B.y, B.r, 'rgba(255,255,255,0.13)', 1.5);
+  ring(x, B.x, B.y, B.r*0.30, 'rgba(255,255,255,0.08)', 1);
+  // крестовина осей
+  x.strokeStyle='rgba(255,255,255,0.07)'; x.lineWidth=1;
+  x.beginPath();
+  x.moveTo(B.x-B.r*0.82, B.y); x.lineTo(B.x+B.r*0.82, B.y);
+  x.moveTo(B.x, B.y-B.r*0.82); x.lineTo(B.x, B.y+B.r*0.82);
+  x.stroke();
+
+  // указатели: подсвечиваются ровно той долей, что ушла в руль/вертикаль
+  const hi = v => 'rgba(120,225,245,'+(0.28 + 0.62*clamp(Math.abs(v),0,1)).toFixed(2)+')';
+  const dim = 'rgba(170,200,215,0.30)';
+  chevron(x, B.x, B.y-B.r*0.80, 0, -1, 9*k, (S.tVert>0.02)?hi(S.tVert):dim, true);
+  chevron(x, B.x, B.y+B.r*0.80, 0,  1, 9*k, (S.tVert<-0.02)?hi(S.tVert):dim, true);
+  chevron(x, B.x-B.r*0.80, B.y, -1, 0, 9*k, (S.tRud<-0.02)?hi(S.tRud):dim, false);
+  chevron(x, B.x+B.r*0.80, B.y,  1, 0, 9*k, (S.tRud>0.02)?hi(S.tRud):dim, false);
+
+  // ручка
+  const kn = L.knob || { x:B.x, y:B.y };
+  x.fillStyle = (S.tRud||S.tVert) ? 'rgba(120,225,245,0.30)' : 'rgba(10,18,26,0.45)';
+  x.beginPath(); x.arc(kn.x, kn.y, B.kn, 0, 6.28); x.fill();
+  ring(x, kn.x, kn.y, B.kn, 'rgba(150,225,245,0.60)', 1.8);
+}
+
+// Стрелка-«галка», смотрящая в сторону (dx,dy). Двойная — у вертикали: так она
+// отличается от руля с одного взгляда. Всё линиями: шрифтовых значков в
+// интерфейсе проекта нет и не будет.
+function chevron(x, cx, cy, dx, dy, r, col, dbl){
+  x.strokeStyle=col; x.lineWidth=2; x.lineCap='round'; x.lineJoin='round';
+  // перпендикуляр к направлению — по нему разводятся «крылья» галки
+  const nx = -dy, ny = dx;
+  const one = off => {
+    const ox = cx - dx*off, oy = cy - dy*off;
+    x.beginPath();
+    x.moveTo(ox + nx*r - dx*r*0.9, oy + ny*r - dy*r*0.9);
+    x.lineTo(ox, oy);
+    x.lineTo(ox - nx*r - dx*r*0.9, oy - ny*r - dy*r*0.9);
+    x.stroke();
+  };
+  one(0);
+  if (dbl) one(r*0.85);
+}
+
+// ── МАШИННЫЙ ТЕЛЕГРАФ. Лестница с подписями ступеней и стрелкой фактического
+// хода слева. Строка целиком — одна ступень, поэтому мимо не попадёшь.
+const THR_NAME = ['НАЗАД','СТОП','СРЕДН','ПОЛНЫЙ'];
+function drawThrottle(x, k, s){
+  const T = L.thr;
+  x.fillStyle='rgba(8,14,20,0.42)';
+  x.fillRect(T.x-3, T.y-4, T.w+6, T.h+8);
+  ring2(x, T.x-3, T.y-4, T.w+6, T.h+8, 'rgba(255,255,255,0.08)');
+  for (let i=0;i<T.n;i++){
+    const step = T.n-1-i, on = s.step===step, yy = T.y + i*T.rh;
+    x.fillStyle = on ? 'rgba(120,225,245,0.85)' : 'rgba(255,255,255,0.09)';
+    x.fillRect(T.x, yy+3, T.w, T.rh-6);
+    x.fillStyle = on ? 'rgba(6,14,20,0.95)' : 'rgba(180,205,220,0.65)';
+    x.font = Math.round(9*k)+'px "Courier New", monospace';
+    x.save(); x.translate(T.x+T.w/2, yy+T.rh/2);
+    x.fillText(THR_NAME[step], 0, 0);
+    x.restore();
   }
+  // фактический ход — риска у правой кромки лестницы
+  const v = clamp(s.vel.length()/s.C.spd, 0, 1.45)/1.45;
+  const ay = T.y + T.h - v*T.h;
+  x.fillStyle='rgba(255,196,90,0.9)';
+  x.beginPath();
+  x.moveTo(T.x+T.w+2, ay); x.lineTo(T.x+T.w+10, ay-4); x.lineTo(T.x+T.w+10, ay+4);
+  x.closePath(); x.fill();
+}
+function ring2(x, px, py, w, h, col){ x.strokeStyle=col; x.lineWidth=1; x.strokeRect(px,py,w,h); }
 
-  // огонь
-  const canFire = (S.onTarget||0) > 0;
-  disc(x, L.fire, S.fire1 ? 'rgba(255,90,120,0.34)' : 'rgba(10,18,26,0.45)',
+// ── ОГОНЬ.
+function drawFire(x, k){
+  const B = L.fire, canFire = (S.onTarget||0) > 0;
+  disc(x, B, S.fire1 ? 'rgba(255,90,120,0.34)' : 'rgba(10,18,26,0.45)',
        canFire ? 'rgba(255,120,150,0.9)' : 'rgba(255,255,255,0.18)');
-  // значок: перекрестье с засечками
   x.strokeStyle = canFire ? 'rgba(255,190,205,0.95)' : 'rgba(170,195,210,0.6)'; x.lineWidth = 2;
-  const r = L.fire.r*0.42;
-  x.beginPath(); x.arc(L.fire.x, L.fire.y, r*0.55, 0, 6.28); x.stroke();
+  const r = B.r*0.40;
+  x.beginPath(); x.arc(B.x, B.y, r*0.55, 0, 6.28); x.stroke();
   for (let i=0;i<4;i++){
     const a = i*Math.PI/2;
     x.beginPath();
-    x.moveTo(L.fire.x+Math.cos(a)*r*0.8, L.fire.y+Math.sin(a)*r*0.8);
-    x.lineTo(L.fire.x+Math.cos(a)*r*1.3, L.fire.y+Math.sin(a)*r*1.3);
+    x.moveTo(B.x+Math.cos(a)*r*0.8, B.y+Math.sin(a)*r*0.8);
+    x.lineTo(B.x+Math.cos(a)*r*1.3, B.y+Math.sin(a)*r*1.3);
     x.stroke();
   }
+}
 
-  // прицеливание
-  disc(x, L.zoom, S.zoom?'rgba(120,225,245,0.28)':'rgba(10,18,26,0.45)',
-       S.zoom?'rgba(150,240,255,0.9)':'rgba(255,255,255,0.16)');
-  x.strokeStyle = 'rgba(200,230,245,0.85)'; x.lineWidth = 1.8;
-  x.beginPath(); x.arc(L.zoom.x-3*k, L.zoom.y-3*k, 9*k, 0, 6.28); x.stroke();
-  x.beginPath(); x.moveTo(L.zoom.x+4*k, L.zoom.y+4*k); x.lineTo(L.zoom.x+12*k, L.zoom.y+12*k); x.stroke();
-
-  // мощность: тот же значок, что в приборе арены
+// ── КОЛОНКА У ПРАВОГО КРАЯ: мощность, прицеливание, модули — снизу вверх.
+function drawColumn(x, k, s){
+  // мощность
   const on = s.pw!=='off' && s.en>0;
   disc(x, L.pw, on?'rgba(120,225,245,0.26)':'rgba(10,18,26,0.45)',
        on?'rgba(150,240,255,0.85)':'rgba(255,255,255,0.16)');
   A.icon(x, L.pw.x, L.pw.y, s.pw==='off'?'eng':s.pw,
          on?'rgba(220,245,255,0.95)':'rgba(150,175,190,0.55)');
-  if (s.pw==='off'){                       // «мощность не отведена» — перечёркнуто
+  if (s.pw==='off'){
     x.strokeStyle='rgba(150,175,190,0.55)'; x.lineWidth=1.5;
-    x.beginPath(); x.moveTo(L.pw.x-11*k, L.pw.y+11*k); x.lineTo(L.pw.x+11*k, L.pw.y-11*k); x.stroke();
+    x.beginPath(); x.moveTo(L.pw.x-10*k, L.pw.y+10*k); x.lineTo(L.pw.x+10*k, L.pw.y-10*k); x.stroke();
   }
   // запас энергии — дужкой по кромке кнопки, чтобы не искать его глазами внизу
-  A.arc(x, L.pw.x, L.pw.y, L.pw.r+5, -Math.PI/2, -Math.PI/2 + Math.PI*2*clamp(s.en/s.enMax,0,1),
-        'rgba(255,196,90,0.85)', 3);
+  A.arc(x, L.pw.x, L.pw.y, L.pw.r+5, -Math.PI/2,
+        -Math.PI/2 + Math.PI*2*clamp(s.en/s.enMax,0,1), 'rgba(255,196,90,0.85)', 3);
 
-  // модули: те же круги с откатом, что в приборе, но под пальцем
+  // прицеливание
+  disc(x, L.zoom, S.zoom?'rgba(120,225,245,0.28)':'rgba(10,18,26,0.45)',
+       S.zoom?'rgba(150,240,255,0.9)':'rgba(255,255,255,0.16)');
+  x.strokeStyle = 'rgba(200,230,245,0.85)'; x.lineWidth = 1.8;
+  x.beginPath(); x.arc(L.zoom.x-3*k, L.zoom.y-3*k, 8*k, 0, 6.28); x.stroke();
+  x.beginPath(); x.moveTo(L.zoom.x+3*k, L.zoom.y+3*k); x.lineTo(L.zoom.x+11*k, L.zoom.y+11*k); x.stroke();
+
+  // модули
   (s.C.acts||[]).forEach((a,i)=>{
     const b = L.mods[i]; if (!b) return;
     const live = s.abOn[a.k]>0, cd = s.ab[a.k]||0;
@@ -217,6 +349,11 @@ function draw(x, W, H, s){
     if (cd>0) A.arc(x, b.x, b.y, b.r, -Math.PI/2, -Math.PI/2 + Math.PI*2*(1-cd/a.cd), 'rgba(120,225,245,0.9)', 2.5);
     A.icon(x, b.x, b.y, 'act:'+a.kind,
            live?'rgba(220,245,255,0.95)':(cd>0?'rgba(150,175,190,0.55)':'rgba(200,230,245,0.9)'));
+    if (cd>0){
+      x.fillStyle='rgba(220,240,250,0.9)';
+      x.font=Math.round(10*k)+'px "Courier New", monospace';
+      x.fillText(Math.ceil(cd), b.x, b.y+b.r+9*k);
+    }
   });
 }
 
