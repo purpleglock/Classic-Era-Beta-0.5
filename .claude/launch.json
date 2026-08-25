@@ -250,6 +250,26 @@
         "8253"
       ],
       "port": 8253
+    },
+    {
+      "name": "dn-arena",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8261"
+      ],
+      "port": 8261
+    },
+    {
+      "name": "dn-arena2",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8263"
+      ],
+      "port": 8263
     }
   ]
 }

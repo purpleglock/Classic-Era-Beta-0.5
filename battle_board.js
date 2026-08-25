@@ -4869,7 +4869,18 @@ async function renderHotspots() {
   }
   const rows = battles.map(b => {
     const forming = b.status === 'forming';
-    const fleets = (b.my_fleets || []).map(f => esc(f.name || 'Флот')).join(', ') || '—';
+    // Одно имя на сто бортов (воинство Престола — сотня «ОФАНИМ-АЛЬФА»)
+    // превращало карточку в стену текста: схлопываем тёзок в «имя ×N» и
+    // показываем первые шесть, остальные — счётчиком.
+    const fcnt = new Map();
+    for (const f of (b.my_fleets || [])) {
+      const nm = (f && f.name) || 'Флот';
+      fcnt.set(nm, (fcnt.get(nm) || 0) + 1);
+    }
+    const fparts = [...fcnt.entries()].map(([nm, n]) => esc(nm) + (n > 1 ? ` <b>×${n}</b>` : ''));
+    const fleets = (fparts.length > 6
+      ? fparts.slice(0, 6).join(', ') + ` <span class="hs-hint">и ещё ${fparts.length - 6}</span>`
+      : fparts.join(', ')) || '—';
     return `<div class="hs-card${forming ? '' : ' hs-card-hot'}">
         <div class="hs-card-top">
           <span class="hs-kind">${b.kind === 'duel' ? '🥊 дуэль Бойцовского клуба' : b.kind === 'intercept' ? '🛑 перехват на трассе' : '⚔ встреча флотов'}</span>

@@ -13,7 +13,10 @@ const ROOT = path.join(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 
 const COPY_DIRS  = ['css', 'assets', 'legal'];
-const COPY_FILES = ['index.html', 'LICENSE'];
+// ⚠️ arena.html — ВТОРАЯ ЖИВАЯ СТРАНИЦА САЙТА. Кабинет открывает её кадром
+// (ведомство `arena`), поэтому в деплой она обязана попасть наравне с index.html:
+// без строки ниже раздел «Арена» на боевом сайте показывает пустой кадр.
+const COPY_FILES = ['index.html', 'arena.html', 'LICENSE'];
 
 const BANNER = '/*! (c) 2025-2026. Proprietary. All rights reserved. Unauthorized copying prohibited. */';
 

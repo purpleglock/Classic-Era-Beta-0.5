@@ -1,0 +1,332 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Арена «Дредноут»</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- ═══════════════════════════════════════════════════════════════
+     АРЕНА. Отдельная страница, а не раздел кабинета: ни авторизации, ни
+     Supabase, ни экономики — но БОЕВЫЕ ДАННЫЕ ИГРОВЫЕ. В кабинет она входит
+     кадром (cabinet.js, ведомство `arena`): рамка кадра держит полосу возврата,
+     сама страница про кабинет знает ровно одно — кнопку «В КАБИНЕТ» внизу.
+     Борта собирает dn_kit.js (DNK) из тех же источников, что и верфь:
+     constructors_kv.js — корпуса, броня, модули; turret_gen.js — оружейная
+     верфь; armor_alchemy.js — свои сплавы; constructors.js — формулы прочности
+     и цены. Модели кораблей, как и раньше, берутся из боевой сцены (bgBuildShip),
+     ради чего подключён battle_board.js (bbGeo — силуэт корпуса).
+     ═══════════════════════════════════════════════════════════════ -->
+<style>
+  html,body{margin:0;height:100%;background:#04070c;color:#cfe6f2;font:14px/1.5 "Courier New",monospace;overflow:hidden}
+  #gl,#hud{position:fixed;inset:0;width:100%;height:100%;display:block}
+  /* ⚠️ touch-action НУЖЕН НА ХОЛСТЕ. Без него браузер сам решает, что ведение
+     пальцем — это скролл страницы, и наводка отдаётся через раз. */
+  #gl{touch-action:none}
+  #hud{pointer-events:none}
+  .veil{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,7,12,.86);z-index:5;overflow:auto}
+  .box{width:min(720px,94vw);border:1px solid #1e3a4a;background:#070d14;padding:22px 24px;margin:auto}
+  h1{font-size:19px;letter-spacing:.14em;margin:0 0 4px;color:#7fe3f5}
+  .sub{color:#6d8698;font-size:12px;margin-bottom:16px}
+  .lab{color:#6d8698;font-size:11px;letter-spacing:.12em;margin:14px 0 6px}
+  .row{display:flex;flex-wrap:wrap;gap:6px}
+  button{font:inherit;color:#cfe6f2;background:#0d1720;border:1px solid #23404f;padding:7px 12px;cursor:pointer}
+  button:hover{background:#12222e}
+  button.on{border-color:#5adcf0;color:#9ff0ff;background:#102630}
+  .go{margin-top:18px;width:100%;padding:11px;border-color:#5adcf0;color:#9ff0ff;letter-spacing:.14em}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+  th,td{text-align:left;padding:3px 6px;border-bottom:1px solid #14232e;color:#9fb6c4}
+  th{color:#5f7d8e;font-weight:400}
+  td.n{text-align:right;color:#cfe6f2}
+  .about{color:#8fb0c2;font-size:12px;margin-top:8px;font-style:italic}
+  .keys{margin-top:14px;font-size:12px;color:#7e97a7}
+  .keys b{color:#bfe0ee;font-weight:400}
+  .cols{display:flex;gap:18px;flex-wrap:wrap}
+  .cols>div{flex:1 1 300px;min-width:280px}
+  #dn-over{display:none}
+  /* ── ВЫБОР ЗАДАНИЯ. Строки, а не кнопки в ряд: у задания есть название,
+       подзаголовок и брифинг, и всё это должно читаться до нажатия. ── */
+  .tabs{display:flex;flex-direction:column;gap:6px}
+  .tab{text-align:left;padding:9px 12px;line-height:1.35}
+  .tab .t{color:#cfe6f2;letter-spacing:.1em}
+  .tab .s{color:#6d8698;font-size:11px}
+  .tab.on .t{color:#9ff0ff}
+  .brief{color:#8fb0c2;font-size:12px;margin:10px 0 2px;border-left:2px solid #23404f;padding-left:10px}
+  /* На телефоне поля ввода мельчить нельзя: по ним попадают пальцем. */
+  @media (max-width:640px){
+    .box{padding:16px 14px}
+    button{padding:10px 12px}
+    .cols>div{min-width:0}
+  }
+</style>
+
+<canvas id="gl"></canvas>
+<canvas id="hud"></canvas>
+
+<div class="veil" id="dn-start">
+  <div class="box">
+    <h1>АРЕНА «ДРЕДНОУТ»</h1>
+    <div class="sub">Прямое управление бортом в реальном времени. Корпус, броня, орудия и модули — те же, что в игре: цифры взяты из верфи, а не выдуманы для стенда.</div>
+
+    <!-- ВЫБОР ЗАДАНИЯ. Учебный бой — это прежний стенд целиком, он никуда не
+         делся и стоит первой строкой: на нём ставят руку. Ниже — сюжет. -->
+    <div class="lab">ЗАДАНИЕ</div>
+    <div class="tabs" id="tabs"></div>
+    <div class="brief" id="brief"></div>
+
+    <div id="free-only">
+    <div class="lab">ВАШ ПРОЕКТ</div>
+    <div class="row" id="cls"></div>
+    <div class="about" id="about"></div>
+
+    <div class="cols">
+      <div>
+        <div class="lab">БОРТ И БРОНЯ</div>
+        <table id="tt"></table>
+      </div>
+      <div>
+        <div class="lab">ОРУДИЯ НА ПАЛУБЕ</div>
+        <table id="tw"></table>
+        <div class="lab">СНАРЯЖЕНИЕ (клавиши 1…6)</div>
+        <table id="tm"></table>
+      </div>
+    </div>
+
+    <div class="lab">ВЫУЧКА ПРОТИВНИКА</div>
+    <div class="row" id="diff"></div>
+
+    <div class="lab">РАЗМЕР СХВАТКИ</div>
+    <div class="row" id="bud"></div>
+    <div class="about" id="wing"></div>
+    </div><!-- /free-only -->
+
+    <!-- Борт миссии не выбирают: он задан сюжетом. Показываем его карточку тем
+         же составом полей, что и у проекта в свободном бою. -->
+    <div id="msn-only" style="display:none">
+      <div class="cols">
+        <div>
+          <div class="lab">ВАШ БОРТ</div>
+          <table id="mtt"></table>
+        </div>
+        <div>
+          <div class="lab">ОРУДИЯ НА ПАЛУБЕ</div>
+          <table id="mtw"></table>
+          <div class="lab">СНАРЯЖЕНИЕ (клавиши 1…6)</div>
+          <table id="mtm"></table>
+        </div>
+      </div>
+      <div class="lab">ВЫУЧКА ПРОТИВНИКА</div>
+      <div class="row" id="mdiff"></div>
+    </div>
+
+    <div class="lab">УПРАВЛЕНИЕ</div>
+    <div class="row" id="ctl"></div>
+
+    <div class="keys" id="keys-touch" style="display:none">
+      <b>Левый стик</b> — руль и подруливающие (вбок · вверх-вниз)<br>
+      <b>Ступени слева</b> — телеграф: полный · малый · стоп · назад<br>
+      <b>Ведение пальцем справа</b> — наводка башен<br>
+      <b>Круг справа внизу</b> — огонь (держать) &nbsp; <b>лупа</b> — прицеливание<br>
+      <b>Столбик справа</b> — модули проекта &nbsp; <b>винт</b> — мощность по кругу
+    </div>
+    <div class="keys" id="keys-kbd">
+      <b>W / S</b> — ступень хода (полный назад · стоп · малый · полный)<br>
+      <b>A / D</b> — руль &nbsp; <b>Space</b> — вверх &nbsp; <b>Shift</b> — вниз<br>
+      <b>Мышь</b> — наводка башен: стреляют только те, чей сектор достаёт<br>
+      <b>ЛКМ</b> — батареи &nbsp; <b>ПКМ</b> (держать) — прицеливание: зум и точный огонь<br>
+      <b>E</b> (держать) — колесо мощности: двигатели · орудия · щит<br>
+      <b>1…6</b> — модули вашего проекта &nbsp; <b>M</b> — звук &nbsp; <b>G</b> — счётчик кадров &nbsp; <b>Esc</b> — курсор<br>
+      После гибели — экран возвращения в строй: борт <b>1…6</b>, точка входа <b>Q / Z / R</b>, <b>Enter</b> — сразу
+    </div>
+    <button class="go" id="go">В БОЙ</button>
+    <!-- Возврат. Внутри кадра кабинета своей навигации у страницы нет, поэтому
+         дверь наружу обязана быть на экране выбора: без неё игрок, открывший
+         арену прямой ссылкой, упирается в тупик. -->
+    <button class="go" id="dn-exit" style="border-color:#23404f;color:#8fb0c2;margin-top:8px">← В КАБИНЕТ</button>
+  </div>
+</div>
+
+<div class="veil" id="dn-over">
+  <div class="box">
+    <h1>БОЙ ОКОНЧЕН</h1>
+    <div class="sub" id="dn-over-txt"></div>
+    <button class="go" id="again">ЕЩЁ РАЗ</button>
+  </div>
+</div>
+
+<!-- ⚠️ ПОРЯДОК ПОДКЛЮЧЕНИЯ ЗНАЧИМ. dn_kit.js читает KV (constructors_kv.js),
+     TG (turret_gen.js), ARMOR_ALCHEMY и функции прочности/цены из
+     constructors.js — все они обязаны быть подняты раньше него, а сам он —
+     раньше dn_arena.js, который спрашивает у него борта на старте. -->
+<script src="constructors_kv.js"></script>
+<script src="constructors.js"></script>
+<script src="turret_gen.js"></script>
+<script src="armor_alchemy.js"></script>
+<script src="battle_board.js"></script>
+<script>
+  // battle_gl.js рассчитан на живой бой: часть его функций смотрит в BB (снимок
+  // с сервера, радиус гекса). Здесь боя нет — кладём пустой справочник, чтобы
+  // те функции, которые нам нужны (bgBuildShip и его геометрия), не спотыкались.
+  if (typeof BB === 'undefined') window.BB = {};
+  if (BB.R == null) BB.R = 34;
+</script>
+<script type="module">
+  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+  window.THREE = THREE;
+  window.dispatchEvent(new Event('three-ready'));
+</script>
+<script src="battle_gl.js"></script>
+<!-- ⚠️ МЕТКА ВРЕМЕНИ — ТОЛЬКО НА МАШИНЕ РАЗРАБОТЧИКА. Правки здесь идут часто, а
+     браузер кэширует скрипт агрессивно: полдня можно ловить «баг», которого в
+     коде уже нет (ровно это и случилось с трассером). Но с тех пор арена стала
+     разделом кабинета: на боевом сайте сбивать кэш шести файлов каждому входу
+     — лишний трафик, поэтому вне localhost метки нет. -->
+<script>
+  window.DN_V = /^(localhost|127\.|0\.0\.0\.0|\[?::1)/.test(location.host) ? Date.now() : '';
+  document.write('<scr'+'ipt src="dn_sfx.js?v='+DN_V+'"></scr'+'ipt>');
+  document.write('<scr'+'ipt src="dn_voxel.js?v='+DN_V+'"></scr'+'ipt>');
+  document.write('<scr'+'ipt src="dn_kit.js?v='+DN_V+'"></scr'+'ipt>');
+  document.write('<scr'+'ipt src="dn_arena.js?v='+DN_V+'"></scr'+'ipt>');
+  // ⚠️ ПОСЛЕ dn_arena.js И ТОЛЬКО ПОСЛЕ. Оба берут DN.state и DN.api прямо при
+  // разборе файла: подними их раньше — получишь «DN is not defined».
+  document.write('<scr'+'ipt src="dn_mission.js?v='+DN_V+'"></scr'+'ipt>');
+  document.write('<scr'+'ipt src="dn_touch.js?v='+DN_V+'"></scr'+'ipt>');
+</script>
+<script>
+  let SHIP='vereten', DIFF='normal', BUD=500, TASK='free';
+
+  // Выход. Кадру (cabinet.js) хватает сообщения — он снимает наложение сам;
+  // открытой напрямую странице деваться некуда, кроме приёмной кабинета.
+  document.getElementById('dn-exit').onclick = () => {
+    if (window.parent && window.parent !== window) { try { parent.postMessage('dn-arena-exit', '*'); return; } catch (e) {} }
+    location.href = 'index.html#economy';
+  };
+  const pct = v => Math.round((v||0)*100)+'%';
+  const $ = id => document.getElementById(id);
+
+  // Карточка борта: одна и та же вёрстка для проекта из свободного боя и для
+  // штучного борта миссии — иначе игрок сравнивает несравнимое.
+  function shipCard(S, tt, tw, tm){
+    $(tt).innerHTML =
+      '<tr><th>корпус</th><td class="n">'+S.hullName+'</td></tr>'+
+      '<tr><th>броня</th><td class="n">'+S.armor.name+'</td></tr>'+
+      '<tr><th>прочность / щит</th><td class="n">'+S.hp+' / '+S.shield+'</td></tr>'+
+      '<tr><th>стойкость к кинетике</th><td class="n">'+pct(S.res.kinetic)+'</td></tr>'+
+      '<tr><th>к энергии</th><td class="n">'+pct(S.res.energy)+'</td></tr>'+
+      '<tr><th>к ракетам</th><td class="n">'+pct(S.res.missile)+(S.pd?' (+ПРО '+pct(S.pd)+')':'')+'</td></tr>'+
+      '<tr><th>ход / разворот</th><td class="n">'+S.spd+' / '+S.yaw.toFixed(2)+'</td></tr>'+
+      '<tr><th>цена проекта</th><td class="n">'+S.gs.toLocaleString('ru')+' ГС</td></tr>';
+    const byW = {};
+    S.mounts.forEach(m=>{ if(!m.w) return; (byW[m.w.name+m.w.caliber] ||= {w:m.w,n:0}).n++; });
+    $(tw).innerHTML =
+      '<tr><th>установка</th><th>канал</th><th>залп</th><th>дальность</th></tr>'+
+      Object.values(byW).map(o=>
+        '<tr><td>'+o.n+'× '+o.w.caliber+' мм / '+o.w.barrels+' ств.</td>'+
+        '<td>'+o.w.ru+'</td><td class="n">'+o.w.salvo+'</td>'+
+        '<td class="n">'+o.w.hex+' гекс</td></tr>').join('');
+    $(tm).innerHTML = S.acts.length
+      ? '<tr><th>модуль</th><th>откат</th></tr>'+S.acts.map((a,i)=>
+          '<tr><td>'+(i+1)+'. '+a.name+'</td><td class="n">'+Math.round(a.cd)+' с</td></tr>').join('')
+      : '<tr><td>активных модулей на палубе нет</td></tr>';
+  }
+
+  // Выучка противника нужна обоим режимам — рисуем её одной функцией в разные
+  // контейнеры, а не двумя копиями кода, которые разойдутся на первой же правке.
+  function paintDiff(host){
+    const dh=$(host); dh.innerHTML='';
+    Object.keys(DN.DIFF).forEach(k=>{
+      const b=document.createElement('button');
+      b.textContent=DN.DIFF[k].name;
+      b.className = k===DIFF?'on':'';
+      b.onclick=()=>{ DIFF=k; paint(); };
+      dh.appendChild(b);
+    });
+  }
+
+  function paintTasks(){
+    const host=$('tabs'); host.innerHTML='';
+    DNM.LIST.forEach(t=>{
+      const b=document.createElement('button');
+      b.className='tab'+(t.id===TASK?' on':'');
+      b.innerHTML='<div class="t">'+t.name+'</div><div class="s">'+t.sub+'</div>';
+      b.onclick=()=>{ TASK=t.id; paint(); };
+      host.appendChild(b);
+    });
+    const cur = DNM.LIST.find(t=>t.id===TASK) || DNM.LIST[0];
+    $('brief').textContent = cur.text;
+    const msn = cur.kind==='mission';
+    $('free-only').style.display = msn?'none':'';
+    $('msn-only').style.display  = msn?'':'none';
+    $('go').textContent = msn ? 'НАЧАТЬ ОПЕРАЦИЮ' : 'В БОЙ';
+    if (msn){ shipCard(DNM.brandt(), 'mtt', 'mtw', 'mtm'); paintDiff('mdiff'); }
+  }
+
+  // Тумблер управления. Определяется само, но переключить надо ДАВАТЬ: на
+  // планшете с клавиатурой автоопределение угадывает неверно в обе стороны.
+  function paintCtl(){
+    const host=$('ctl'); host.innerHTML='';
+    [['Клавиатура и мышь',false],['Сенсорное (телефон)',true]].forEach(([n,v])=>{
+      const b=document.createElement('button');
+      b.textContent=n; b.className = (!!DN.state.touch===v)?'on':'';
+      b.onclick=()=>{ DNT.set(v); paint(); };
+      host.appendChild(b);
+    });
+    $('keys-touch').style.display = DN.state.touch?'':'none';
+    $('keys-kbd').style.display   = DN.state.touch?'none':'';
+  }
+
+  function paint(){
+    paintTasks(); paintCtl();
+    if (TASK!=='free') return;
+    const box=document.getElementById('cls'); box.innerHTML='';
+    DN.SHIPS().forEach(k=>{
+      const b=document.createElement('button');
+      b.textContent=DNK.preset(k).name;
+      b.className = k===SHIP?'on':'';
+      b.onclick=()=>{ SHIP=k; paint(); };
+      box.appendChild(b);
+    });
+    const S = DNK.preset(SHIP);
+    document.getElementById('about').textContent = S.about || '';
+
+    // ── БОРТ, ОРУДИЯ, СНАРЯЖЕНИЕ: то же, что показала бы карточка в верфи ──
+    shipCard(S, 'tt', 'tw', 'tm');
+    paintDiff('diff');
+
+    // Размер схватки задаётся ЗАПАСОМ СИЛЫ на сторону, а не числом бортов:
+    // сколько таких проектов в него влезет — столько и выйдет, у обеих сторон.
+    const bh=document.getElementById('bud'); bh.innerHTML='';
+    [['стычка',250],['схватка',500],['сражение',1000],['бойня',2000]].forEach(([n,v])=>{
+      const b=document.createElement('button');
+      b.textContent=n; b.className = v===BUD?'on':'';
+      b.onclick=()=>{ BUD=v; paint(); };
+      bh.appendChild(b);
+    });
+    const w = DNK.wing(S, BUD);
+    document.getElementById('wing').textContent =
+      'На таком борте вас в строю будет около '+w+' — столько же выставит и противник по своей силе.';
+  }
+
+  function boot(){
+    if (!DN.mount(document.getElementById('gl'))){
+      document.getElementById('dn-start').innerHTML='<div class="box">WebGL недоступен — стенд не поднимется.</div>';
+      return;
+    }
+    DN.hud(document.getElementById('hud'));
+    DNT.set(DNT.detect());                 // телефон определяется сам, тумблер ниже
+    DNT.bind(document.getElementById('gl'));
+    paint();
+    document.getElementById('go').onclick = ()=>{
+      document.getElementById('dn-start').style.display='none';
+      if (window.DNS) DNS.boot();          // WebAudio заводится только по клику
+      const task = DNM.LIST.find(t=>t.id===TASK) || DNM.LIST[0];
+      if (task.kind==='mission') DN.start({ diff:DIFF, mission:task.id });
+      else DN.start({ cls:SHIP, diff:DIFF, budget:BUD });
+      // ⚠️ ЗАХВАТ КУРСОРА — ТОЛЬКО ДЛЯ МЫШИ. На телефоне его нет, а сам вызов
+      // роняет промис-ошибку в консоль и пугает при разборе настоящих поломок.
+      if (!DN.state.touch) document.getElementById('gl').requestPointerLock();
+    };
+    document.getElementById('again').onclick = ()=>{
+      document.getElementById('dn-over').style.display='none';
+      document.getElementById('dn-start').style.display='flex';
+    };
+  }
+  if (window.THREE) boot(); else window.addEventListener('three-ready', boot);
+  window.onerror = e => console.error('[dn]', e);
+</script>

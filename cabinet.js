@@ -221,6 +221,8 @@ const CAB_DEPT = {
   // надо. Новости и достижения двери не получили — они на столе приёмной.
   fight:    { nm: 'Бойцовский клуб', sh: 'Клуб', sub: 'дуэли на выданных кораблях и ставки', ic: 'dice', grp: 'play',
               open: () => heroVNFightOpen(), close: () => heroVNFightClose() },
+  arena:    { nm: 'Арена «Дредноут»', sh: 'Арена', sub: 'прямое управление бортом: учебный бой и миссия', ic: 'war', grp: 'play',
+              open: () => dnArenaOpen(), close: () => dnArenaClose() },
   geo:      { nm: 'Георазведка', sh: 'Георазведка', sub: 'поиск залежей на своих планетах', ic: 'ping', grp: 'play',
               open: () => heroVNGeoOpen(), close: () => heroVNGeoClose() },
   stars:    { nm: 'Всмотреться в Разлом', sh: 'Разлом', sub: 'псионический хор и его дары', ic: 'chalice', grp: 'play',
@@ -279,6 +281,42 @@ function cabBack() {
   cabCloseAll(null);
   CAB.dept = null;
   cabPaint();
+}
+
+// ── АРЕНА «ДРЕДНОУТ» ───────────────────────────────────────────
+// Единственная забава, живущая ОТДЕЛЬНОЙ СТРАНИЦЕЙ (arena.html), а не разделом:
+// у неё свой WebGL-цикл, свой HUD на втором холсте и свой перехват клавиш и
+// пальца (dn_touch.js). Вживлять это в кабинет значило бы драться за body,
+// за Esc и за размер холста с картой и боевой доской, которые уже поднимают
+// свой THREE. Кадр разводит их по разным окнам, а полоса сверху возвращает
+// игрока в приёмную — сама арена о кабинете знает только сообщение 'dn-arena-exit'.
+let _dnArenaMsg = null;
+function dnArenaOpen() {
+  if (document.getElementById('dn-arena-wrap')) return;
+  const w = document.createElement('div');
+  w.id = 'dn-arena-wrap';
+  w.style.cssText = 'position:fixed;inset:0;z-index:9000;background:#04070c;display:flex;flex-direction:column';
+  w.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-bottom:1px solid #1e3a4a;
+                font:12px/1.4 'Courier New',monospace;letter-spacing:.12em;color:#7fe3f5;flex:0 0 auto">
+      <button type="button" onclick="cabBack()"
+        style="font:inherit;color:#cfe6f2;background:#0d1720;border:1px solid #23404f;padding:6px 12px;cursor:pointer">← В КАБИНЕТ</button>
+      <span>АРЕНА «ДРЕДНОУТ»</span>
+    </div>
+    <iframe id="dn-arena-fr" src="arena.html" title="Арена «Дредноут»"
+      allow="fullscreen; autoplay" style="flex:1 1 auto;width:100%;border:0;display:block"></iframe>`;
+  document.body.appendChild(w);
+  document.body.style.overflow = 'hidden';
+  // Кнопка возврата есть и внутри страницы (экран выбора задания) — её нажатие
+  // приходит сюда сообщением: изнутри кадра до cabBack не дотянуться.
+  _dnArenaMsg = e => { if (e.data === 'dn-arena-exit') cabBack(); };
+  window.addEventListener('message', _dnArenaMsg);
+}
+function dnArenaClose() {
+  const w = document.getElementById('dn-arena-wrap');
+  if (w) w.remove();                       // кадр сносим целиком: с ним умирает и цикл боя
+  document.body.style.overflow = '';
+  if (_dnArenaMsg) { window.removeEventListener('message', _dnArenaMsg); _dnArenaMsg = null; }
 }
 
 // Переход в ведомство ОТКУДА УГОДНО (ссылки внутри тел разделов: «продайте на
