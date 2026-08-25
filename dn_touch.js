@@ -92,15 +92,16 @@ function layout(W, H){
   };
   L.pw   = slot();
   L.zoom = slot();
-  // ВЕЕР МОЩНОСТИ: раскрывается ВЛЕВО от своей кнопки, внутрь экрана. Держать
-  // палец и вести, как мышью по колесу, на телефоне нельзя — палец закрывает
-  // сам веер, поэтому это два отдельных тычка: открыть и выбрать.
+  // ВЫБОР МОЩНОСТИ: столбец лепестков ВЛЕВО-ВВЕРХ от своей кнопки, внутрь
+  // экрана. Держать палец и вести, как мышью по колесу, на телефоне нельзя —
+  // палец закрывает сам выбор, поэтому это два тычка: открыть и выбрать.
+  // ⚠️ ДУГОЙ ИХ РАСКЛАДЫВАТЬ НЕ НАДО. По дуге радиусом 80 шаг между лепестками
+  // выходит 46 при диаметре 51: кружки налезают друг на друга, а подписи падают
+  // на соседей. Столбец даёт честный шаг и место под слово сбоку.
+  const fr = 26*u, fgap = 58*u;
   L.pwFan = [];
-  const FA = [230, 194, 158, 122];                    // сверху вниз, по дуге
-  for (let i = 0; i < A.POWER_KEYS.length; i++){
-    const a = FA[i] * Math.PI/180;
-    L.pwFan.push({ x: L.pw.x + Math.cos(a)*80*u, y: L.pw.y + Math.sin(a)*80*u, r: 27*u, i: i });
-  }
+  for (let i = 0; i < A.POWER_KEYS.length; i++)
+    L.pwFan.push({ x: L.pw.x - 70*u, y: L.pw.y - (A.POWER_KEYS.length-1-i)*fgap, r: fr, i: i });
   L.mods = [];
   const acts = (S.me && S.me.C.acts) || [];
   for (let i = 0; i < acts.length; i++){ const s = slot(); s.i = i; L.mods.push(s); }
@@ -421,8 +422,10 @@ function drawFan(x, k, s){
       x.stroke();
     }
     x.fillStyle = col;
-    x.font = Math.round(9*k) + 'px "Courier New", monospace';
-    x.fillText(PW_NAME[key] || key, b.x, b.y + b.r + 10*k);
+    x.font = Math.round(10*k) + 'px "Courier New", monospace';
+    x.textAlign = 'right';
+    x.fillText(PW_NAME[key] || key, b.x - b.r - 9*k, b.y);
+    x.textAlign = 'center';
   });
 
   // запас энергии дужкой у самой кнопки: по нему и решают, что можно отвести
@@ -446,7 +449,11 @@ function bind(cv){
   const pt = e => { const r = cv.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; };
   cv.addEventListener('pointerdown', e=>{
     if (!S.touch || e.pointerType==='mouse') return;
-    e.preventDefault(); cv.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    // ⚠️ ЗАХВАТ — НЕ ОБЯЗАТЕЛЬНАЯ ЧАСТЬ. setPointerCapture кидает, если указателя
+    // уже нет (быстрый отрыв, синтетическое событие), и необработанное
+    // исключение здесь убивает ВЕСЬ ввод с пальца: до down() дело не доходит.
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
     const [x,y]=pt(e); down(e.pointerId, x, y);
   }, { passive:false });
   cv.addEventListener('pointermove', e=>{
