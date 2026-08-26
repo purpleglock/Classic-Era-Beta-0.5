@@ -44,9 +44,207 @@ function brandt(){
            aa:  { klass:'aa',     tech:'laser',  caliber:45,  barrelLen:60, barrels:4, layout:'quad',    size:0.9 } },
     modules:['md_cloak','md_repdrones','md_ampl','sidis_defense'],
     about:'Стелс-линкор особой постройки. Гасит сигнатуру целиком, бьёт с одного захода и уходит до того, как его успевают взять в клещи.' });
+  BR.hullBuild = brandtHull;          // штучный силуэт, см. §1б
+  BR.deckAt    = brandtDeck;          // установки садятся на хребет, не мимо борта
+  BR.turFlat   = 0.46;                // установки утоплены: копьё, а не ёжик
   BR.hp = Math.round(BR.hp*BRANDT_HULL);
   BR.shield = Math.round(BR.shield*BRANDT_FIELD);
   return BR;
+}
+
+// ── §1б. КОРПУС «БРАНДТАУХЕРА» ───────────────────────────────
+// ⚠️ ЭТО НЕ ПОРТРЕТ КЛАССА, А ШТУЧНЫЙ СИЛУЭТ. bgBuildShip строит типового
+// линкора — он правильный, но он ОДИН НА ВСЕХ, а сюжетный борт обязан
+// узнаваться с первого кадра. Форма: длинная плоская ПЛИТА с ножевым носом,
+// острыми скулами и блочной кормой; светлая палуба сверху, почти чёрный корпус
+// под ней, вдоль борта — полосы свечения. Стелс-линкор выглядит лезвием.
+//
+// Строится ЛОФТОМ ПО СЕЧЕНИЯМ, как и bgHullGeo, а не примитивами: обвод задаётся
+// таблицей станций, поэтому нос можно свести в лезвие, а корму раздать в блок.
+// Геометрия ЕДИНИЧНОЙ длины, нос в +X, центр в начале координат — это условие
+// движка (`grp.scale.setScalar(spec.len)` в shipProto).
+
+// ⚠️ СЕЧЕНИЕ ШЕСТИУГОЛЬНОЕ, А НЕ ПРЯМОУГОЛЬНОЕ. Первый заход строил ПЛОСКУЮ
+// ПЛИТУ — и борт вышел плотом: доска с башнями поверху. На референсе это
+// ГРАНЁНОЕ КОПЬЁ: узкий плоский гребень по хребту, от него вниз-наружу идут
+// скулы до самой широкой линии, оттуда вниз-внутрь — к узкому днищу. Именно
+// излом на скуле даёт длинный блик по всей длине и тень под ним, на которой
+// весь силуэт и держится.
+//   wT — полуширина гребня, hw — полуширина по скуле, wB — полуширина днища,
+//   yT — гребень, yC — скула, yB — днище.
+function loft6(sec){
+  const pos = [], uv = [], idx = [];
+  const quad = (a,b,c,d)=>{
+    const i0 = pos.length/3;
+    [a,b,c,d].forEach(v=>pos.push(v[0],v[1],v[2]));
+    uv.push(0,0, 1,0, 1,1, 0,1);
+    idx.push(i0,i0+1,i0+2, i0,i0+2,i0+3);
+  };
+  // шесть точек обвода по часовой, если смотреть с носа
+  const ring = S0 => [
+    [S0.x, S0.yT,  S0.wT], [S0.x, S0.yC,  S0.hw], [S0.x, S0.yB,  S0.wB],
+    [S0.x, S0.yB, -S0.wB], [S0.x, S0.yC, -S0.hw], [S0.x, S0.yT, -S0.wT],
+  ];
+  for (let i=0;i<sec.length-1;i++){
+    const A = ring(sec[i]), B = ring(sec[i+1]);
+    for (let k=0;k<6;k++) quad(A[k], B[k], B[(k+1)%6], A[(k+1)%6]);
+  }
+  const cap = (S0, front)=>{
+    const R = ring(S0), c = [S0.x, (S0.yT+S0.yB)/2, 0], i0 = pos.length/3;
+    // веером от оси: торец у копья почти вырождается, треугольники честнее квада
+    for (let k=0;k<6;k++){
+      const p = R[k], q = R[(k+1)%6], b0 = pos.length/3;
+      if (front){ pos.push(c[0],c[1],c[2], p[0],p[1],p[2], q[0],q[1],q[2]); }
+      else      { pos.push(c[0],c[1],c[2], q[0],q[1],q[2], p[0],p[1],p[2]); }
+      uv.push(0.5,0.5, 0,0, 1,0);
+      idx.push(b0, b0+1, b0+2);
+    }
+    void i0;
+  };
+  cap(sec[0], true); cap(sec[sec.length-1], false);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('uv',       new THREE.Float32BufferAttribute(uv,2));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+
+// ⚠️ ЭТО НЕ КОПЬЁ С ХРЕБТОМ, А НАВИСАЮЩАЯ ПЛИТА НАД УТОПЛЕННЫМ КОРПУСОМ.
+// По крупным планам видно главное: и нос, и корма — это СВЁРНУТЫЕ В ТОЧКУ
+// КРОМКИ ВЕРХНЕЙ ПЛИТЫ, а сам корпус до них не доходит. Плита свешивается
+// вперёд и назад, под ней — глубокий подрез, и именно в нём горят полосы.
+// Нос кончается не иглой по центру, а СРЕЗОМ У ВЕРХНЕЙ КРОМКИ: днище от него
+// уходит вниз-назад. Пока я строил симметричное веретено, этого не было.
+const BR_P = [   // ВЕРХНЯЯ ПЛИТА
+// ⚠️ КОРМА ТУПАЯ И ПОЛНОВЫСОТНАЯ, КЛИН ИДЁТ ТОЛЬКО К НОСУ. Вот главная ошибка,
+// которую я повторял три захода: сводил В ТОЧКУ ОБА КОНЦА — и борт выходил
+// линзой-листом, тонкой щепкой при формально верных 7:1. На арте силуэт это
+// ДЛИННЫЙ КЛИН: у кормы полная высота и полная ширина, срез вертикальный, а
+// вперёд обвод убывает монотонно до острия. Отсюда и вся масса корабля.
+//  x       wT     hw     wB     yT      yC      yB
+  { x: 0.500, wT:0.003, hw:0.004, wB:0.003, yT: 0.020, yC: 0.017, yB: 0.014 },  // остриё носа
+  { x: 0.400, wT:0.009, hw:0.015, wB:0.008, yT: 0.024, yC: 0.018, yB: 0.010 },
+  { x: 0.250, wT:0.020, hw:0.031, wB:0.018, yT: 0.030, yC: 0.020, yB: 0.006 },
+  { x: 0.050, wT:0.032, hw:0.047, wB:0.029, yT: 0.036, yC: 0.024, yB: 0.002 },
+  { x:-0.040, wT:0.036, hw:0.052, wB:0.032, yT: 0.038, yC: 0.026, yB: 0.001 },
+  { x:-0.060, wT:0.038, hw:0.054, wB:0.034, yT: 0.058, yC: 0.040, yB: 0.000 },  // УСТУП вверх
+  { x:-0.250, wT:0.043, hw:0.060, wB:0.038, yT: 0.062, yC: 0.042, yB:-0.002 },
+  { x:-0.430, wT:0.045, hw:0.062, wB:0.040, yT: 0.064, yC: 0.043, yB:-0.004 },
+  { x:-0.500, wT:0.045, hw:0.062, wB:0.040, yT: 0.064, yC: 0.043, yB:-0.004 },  // ТУПОЙ СРЕЗ
+];
+const BR_B = [   // КОРПУС ПОД ПЛИТОЙ: уже её, тоже тупой в корме
+  { x: 0.200, wT:0.008, hw:0.014, wB:0.007, yT: 0.004, yC:-0.001, yB:-0.006 },
+  { x: 0.020, wT:0.022, hw:0.032, wB:0.019, yT: 0.000, yC:-0.014, yB:-0.030 },
+  { x:-0.180, wT:0.030, hw:0.044, wB:0.026, yT:-0.002, yC:-0.026, yB:-0.050 },
+  { x:-0.380, wT:0.033, hw:0.048, wB:0.028, yT:-0.004, yC:-0.031, yB:-0.058 },
+  { x:-0.500, wT:0.033, hw:0.048, wB:0.028, yT:-0.004, yC:-0.031, yB:-0.058 },
+];
+// ⚠️ КОРПУС ПЕРЕВЁРНУТ. Таблицы ниже описывают обвод «плитой вверх», но борт
+// собирается ЗЕРКАЛЬНО: массивная часть с огнями уходит НАВЕРХ, тонкая кромка —
+// вниз. Так силуэт и садится на арт. Зеркалим одним местом, чтобы таблицы
+// оставались читаемыми: верх и низ меняются ролями, порядок yT>yB сохраняется.
+function brFlip(T){
+  return T.map(k=>({ x:k.x, wT:k.wB, hw:k.hw, wB:k.wT, yT:-k.yB, yC:-k.yC, yB:-k.yT }));
+}
+// Палуба под установки — верх ПЛИТЫ (её плоский гребень).
+function brandtDeck(x){
+  // после переворота выше оказывается то корпус, то плита — берём тот, что выше
+  const a = brAt(brFlip(BR_P), x), b = brAt(brFlip(BR_B), x);
+  return (b.yT > a.yT) ? { hw:b.wT, y:b.yT } : { hw:a.wT, y:a.yT };
+}
+function brAt(T, x){
+  for (let i=1;i<T.length;i++){
+    if (x >= T[i].x || i===T.length-1){
+      const A=T[i-1], B=T[i], k=(x-A.x)/((B.x-A.x)||1);
+      return { hw:A.hw+(B.hw-A.hw)*k, wT:A.wT+(B.wT-A.wT)*k, yC:A.yC+(B.yC-A.yC)*k, yT:A.yT+(B.yT-A.yT)*k };
+    }
+  }
+  return { hw:T[0].hw, wT:T[0].wT, yC:T[0].yC, yT:T[0].yT };
+}
+
+function brandtHull(tone){
+  const grp = new THREE.Group();
+  const plate = (typeof bgHullMat==='function') ? bgHullMat(tone)       : new THREE.MeshStandardMaterial({color:0x8fa6b8, metalness:0.6, roughness:0.45});
+  const body  = (typeof bgHullMat==='function') ? bgHullMat(tone, true) : new THREE.MeshStandardMaterial({color:0x2a3038, metalness:0.6, roughness:0.7});
+  const glow  = (typeof bgGlowMat==='function') ? bgGlowMat(0xc06cff, 0.9) : new THREE.MeshBasicMaterial({color:0xc06cff});
+  const warm  = (typeof bgGlowMat==='function') ? bgGlowMat(0xffcf94, 0.9) : new THREE.MeshBasicMaterial({color:0xffcf94});
+  const add = (geo, mat)=>{ const m=new THREE.Mesh(geo, mat); grp.add(m); return m; };
+
+  // ⚠️ НИЖНИЕ ДВЕ ТРЕТИ ОБЯЗАНЫ ПОПАДАТЬ В СИЛУЭТ. Пока корпус под плитой был
+  // взят `dim`-материалом, он тонул в чёрном фоне: в кадре оставалась одна
+  // светлая плита, и борт читался щепкой при почти верных пропорциях (7:1
+  // против 7.7 у арта). Высоты не хватало НЕ в геометрии, а в свете.
+  const P = brFlip(BR_P), B = brFlip(BR_B);
+  add(loft6(P), plate);
+  add(loft6(B), plate);
+
+  // ⚠️ КОРМА ДОДЕЛАНА: блок машинного отделения ПОД плитой и позади корпуса,
+  // гранёный, с подрезом. Раньше корма просто сходила на нет — борт выглядел
+  // обрубленным.
+  add(loft6(brFlip([          // блок машинного отделения
+    { x:-0.300, wT:0.016, hw:0.028, wB:0.014, yT:-0.048, yC:-0.058, yB:-0.068 },
+    { x:-0.460, wT:0.024, hw:0.040, wB:0.021, yT:-0.046, yC:-0.062, yB:-0.080 },
+    { x:-0.520, wT:0.022, hw:0.036, wB:0.019, yT:-0.048, yC:-0.062, yB:-0.078 },
+  ])), body);
+  add(loft6(brFlip([          // гребень вдоль кормовой трети
+    { x: 0.020, wT:0.004, hw:0.006, wB:0.003, yT:-0.030, yC:-0.038, yB:-0.044 },
+    { x:-0.170, wT:0.006, hw:0.010, wB:0.004, yT:-0.044, yC:-0.060, yB:-0.074 },
+    { x:-0.330, wT:0.006, hw:0.010, wB:0.004, yT:-0.048, yC:-0.062, yB:-0.076 },
+  ])), body);
+
+  // ПОЛОСЫ В ПОДРЕЗЕ — по кромке корпуса, следуя его сужению
+  const strip = (x0, x1, dy, mat, th, k)=>{
+    const N=10, secs=[];
+    for (let i=0;i<=N;i++){
+      const x = x0+(x1-x0)*i/N, P0 = brAt(BR_B, x), q=0.0011;
+      secs.push({ x:x, wT:q, hw:q, wB:q, yT:P0.yC+dy+th, yC:P0.yC+dy, yB:P0.yC+dy-th });
+    }
+    [1,-1].forEach(sz=>{
+      const g2 = loft6(secs), pos = g2.attributes.position;
+      for (let i=0;i<pos.count;i++) pos.setZ(i, pos.getZ(i) + sz*brAt(B, pos.getX(i)).hw*(k||0.98));
+      pos.needsUpdate = true; g2.computeVertexNormals();
+      add(g2, mat);
+    });
+  };
+  strip( 0.14, -0.44,  0.010, glow, 0.0040, 1.00);   // верхняя, у самой кромки плиты
+  strip( 0.06, -0.42, -0.012, glow, 0.0024, 0.97);
+  for (let i=0;i<10;i++) strip(-0.01-i*0.040, -0.036-i*0.040, -0.001, warm, 0.0019, 1.01);
+
+  // светящиеся щели на кормовом срезе плиты — они же видны на арте
+  [1,-1].forEach(sz=>{
+    for (let i=0;i<4;i++){
+      const m = add(loft6(brFlip([
+        { x:-0.452-i*0.004, wT:0.0016, hw:0.0016, wB:0.0016, yT:0.052, yC:0.048, yB:0.044 },
+        { x:-0.468-i*0.004, wT:0.0016, hw:0.0016, wB:0.0016, yT:0.052, yC:0.048, yB:0.044 },
+      ])), glow);
+      m.position.z = sz*(0.008+i*0.005);
+    }
+  });
+
+  // ДЮЗЫ под кормовым блоком. Факел растёт по +Y (арена тянет `scale.y`),
+  // а узел развёрнут так, что +Y смотрит В КОРМУ.
+  const nz = [];
+  [1,-1].forEach(sz=>{
+    // СОПЛО: гранёный раструб, а не пустое место перед факелом
+    // ⚠️ СОПЛА ПО СРЕДНЕЙ ЛИНИИ КОРМЫ. У кромки они читались наростом сверху.
+    const noz = add(loft6([
+      { x:-0.470, wT:0.009, hw:0.016, wB:0.009, yT: 0.014, yC: 0.000, yB:-0.014 },
+      { x:-0.540, wT:0.011, hw:0.019, wB:0.011, yT: 0.016, yC: 0.000, yB:-0.016 },
+      { x:-0.556, wT:0.009, hw:0.015, wB:0.009, yT: 0.012, yC: 0.000, yB:-0.012 },
+    ]), body);
+    noz.position.z = sz*0.016;
+    const fg = loft6([
+      { x:0,    wT:0.006, hw:0.011, wB:0.006, yT:0.011, yC:0, yB:-0.011 },
+      { x:0.09, wT:0.001, hw:0.002, wB:0.001, yT:0.002, yC:0, yB:-0.002 },
+    ]);
+    fg.rotateZ(Math.PI/2);
+    const fl = add(fg, glow);
+    fl.rotation.z = Math.PI/2;
+    fl.position.set(-0.558, 0.000, sz*0.016);
+    nz.push(fl);
+  });
+  grp.userData.nz = nz;
+  return grp;
 }
 
 // ── §2. КАТАЛОГ ──────────────────────────────────────────────
@@ -89,6 +287,25 @@ const decor = [];                // всё, что миссия добавила
 function add(node){ S.scene.add(node); decor.push(node); return node; }
 function clearDecor(){ decor.forEach(n=>S.scene.remove(n)); decor.length = 0; }
 
+// Развести обломки пояса из шара вокруг точки.
+// ⚠️ НЕ УБИВАТЬ, А ОТОДВИГАТЬ. Первый заход ставил камню `dead=1` — казалось,
+// это тот же флаг, которым его гасит попадание. Не тот: `stepRocks` вычёркивает
+// мёртвый камень из списка, но его меш (а это InstancedMesh на сотни ячеек)
+// остаётся в сцене осиротевшим и рисуется мусором — кадр забивало плоскостями.
+// Камень живой и валидный, ему просто не место здесь: сдвигаем `pos`, а меш
+// подтянется сам на ближайшем VOX.step.
+function clearRocks(at, r){
+  (S.rocks||[]).forEach(k=>{
+    if (k.dead) return;
+    const need = r + k.r;
+    if (k.pos.distanceTo(at) >= need) return;
+    const dir = k.pos.clone().sub(at);
+    if (dir.lengthSq() < 1) dir.set(1, 0.2, 0.3);
+    k.pos.copy(at).addScaledVector(dir.normalize(), need + 140);
+    if (k.mesh) k.mesh.position.copy(k.pos);
+  });
+}
+
 // Поставить борт в точку и развернуть носом на цель. Свой respawn у арены
 // ставит борта по БАЗАМ сторон — в миссии баз нет, есть места по сценарию.
 function place(s, pos, look){
@@ -120,39 +337,140 @@ function unit(key, mine, name, pos, look, role){
 }
 
 // ── §5. КОСМОПОРТ ────────────────────────────────────────────
+// ⚠️ ПОРТ БЫЛ МЕЛЬЧЕ КОРАБЛЯ, КОТОРЫЙ ЕГО АТАКУЕТ. Кольцо радиусом 84 — это 170
+// единиц в поперечнике, при линкоре в 250 длиной. Оттого «жалкие посты»: игрок
+// подходит к галактической столице и видит деталь размером с себя. Сооружение
+// обязано подавлять масштабом, иначе никакой постановки кадра не спасёт.
+const R_RING = 300;                  // радиус причального кольца
 // ⚠️ СТАНЦИЯ — НЕ КОРАБЛЬ БЕЗ ДВИГАТЕЛЯ. Соблазн был велик: взять дредноут,
 // обнулить ему ход и назвать станцией. Так нельзя — игрок читает силуэт раньше
 // подписи, и «космопорт», у которого нос и корма, ломает сцену. Здесь свой
 // узел: причальное кольцо, ферма, узел управления. Башен у него нет вовсе:
 // космопорт защищает ГАРНИЗОН, в этом и смысл первой задачи.
+// ⚠️ ПОРТ СТРОИТСЯ ТЕМ ЖЕ ЖЕЛЕЗОМ, ЧТО И БОРТА. Первый заход был собран из
+// TorusGeometry, CylinderGeometry и SphereGeometry — то есть ровно из того
+// словаря, которого проект избегает везде. Кольцо-бублик, труба-мачта и шар-
+// ступица рядом с гранёными плитованными корпусами читаются как чужая деталь
+// из другой игры. Здесь только `bgTaper` (тело с РАЗНЫМ сечением на концах) и
+// `bgHullMat` (плита с бампом, тем же тоном стороны) — см. battle_gl.js:
+// «коробка с одинаковыми торцами и есть тот самый квадратик, который видно за
+// версту; скос всего в четверть уже превращает её в надстройку».
 function stationMesh(){
   const g = new THREE.Group();
-  const hull = new THREE.MeshStandardMaterial({ color:0x9aabb6, metalness:0.55, roughness:0.55 });
-  const dark = new THREE.MeshStandardMaterial({ color:0x3a4854, metalness:0.5,  roughness:0.75 });
-  const core = new THREE.Mesh(new THREE.CylinderGeometry(26,26,86,10), hull); g.add(core);
-  const hub  = new THREE.Mesh(new THREE.SphereGeometry(34,14,10), dark); g.add(hub);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(84,8,8,28), hull);
-  ring.rotation.x = Math.PI/2; g.add(ring);
-  for (let i=0;i<4;i++){                       // спицы к кольцу
-    const a = i*Math.PI/2;
-    const sp = new THREE.Mesh(new THREE.BoxGeometry(78,7,7), dark);
-    sp.position.set(Math.cos(a)*42, 0, Math.sin(a)*42);
-    sp.rotation.y = -a; g.add(sp);
+  const TAP = (typeof bgTaper === 'function') ? bgTaper : null;
+  // ⚠️ ОСНОВНАЯ МАССА — ТУСКЛАЯ. `bgHullMat('foe')` без `dim` даёт светлую плиту
+  // с розовым подсветом стороны: на корвете это намёк, а на сооружении в шестьсот
+  // единиц — заливка, и порт светится как леденец. Яркая плита остаётся только
+  // на палубах и причальных площадках, где она читается как освещённое место.
+  const hull = (typeof bgHullMat === 'function') ? bgHullMat('foe', true)
+             : new THREE.MeshStandardMaterial({ color:0x564850, metalness:0.62, roughness:0.62 });
+  const dark = hull;
+  const lit  = (typeof bgHullMat === 'function') ? bgHullMat('foe')
+             : new THREE.MeshStandardMaterial({ color:0xa8909a, metalness:0.62, roughness:0.44 });
+
+  // одно тело: длина по X, скос задаётся долями kw/kl, sx кренит верх вдоль X
+  const put = (l,h,w,kw,kl,sx, mat, x,y,z, ry,rz)=>{
+    const geo = TAP ? TAP(l,h,w,kw,kl,sx) : new THREE.BoxGeometry(l,h,w);
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x||0, y||0, z||0);
+    m.rotation.set(0, ry||0, rz||0);
+    g.add(m); return m;
+  };
+  const RAD = t => -t;                 // длина тела смотрит ОТ центра наружу
+  const TAN = t => -(t + Math.PI/2);   // длина тела идёт по касательной
+
+  // ПРИЧАЛЬНОЕ КОЛЬЦО — не бублик, а ФЕРМА из шестнадцати звеньев. Гранёный
+  // обод сразу читается как построенное, а не отлитое.
+  const NSEG = 16, CH = 2*R_RING*Math.sin(Math.PI/NSEG) + 8;
+  for (let i=0;i<NSEG;i++){
+    const t = i/NSEG*Math.PI*2;
+    put(CH, 30, 46, 0.66, 0.94, 0, hull, Math.cos(t)*R_RING, 0, Math.sin(t)*R_RING, TAN(t));
+    // раскос между звеньями: тонкая наклонная стойка, «ферменность» обода
+    const t2 = (i+0.5)/NSEG*Math.PI*2;
+    put(30, 44, 13, 0.5, 0.7, 0, dark, Math.cos(t2)*R_RING, 0, Math.sin(t2)*R_RING, RAD(t2));
   }
-  [-1,1].forEach(sy=>{                          // причальные фермы сверху и снизу
-    const t = new THREE.Mesh(new THREE.BoxGeometry(12,34,12), dark);
-    t.position.y = sy*58; g.add(t);
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(30,30,5,8), hull);
-    pad.position.y = sy*76; g.add(pad);
+
+  // СТУПИЦА — ярусами, как рубка у борта: снизу шире, кверху уже.
+  [[190,74,190,0.78],[150,62,150,0.74],[104,52,104,0.7]].forEach(([l,h,w,k],i)=>
+    put(l,h,w,k,k,0, i?hull:dark, 0, i*62 - 34, 0));
+
+  // МАЧТА — четыре сужающихся яруса вместо трубы
+  // ⚠️ МАЧТА НЕ ГЛАВНАЯ. В четыре яруса она вымахивала выше диаметра кольца, и
+  // порт читался как башня с ободом у подножия. Главное здесь — ПРИЧАЛ.
+  let my = 30, mw = 82;
+  for (let i=0;i<3;i++){
+    put(mw, 84, mw, 0.82, 0.82, 0, i===1?lit:hull, 0, my + 42, 0);
+    my += 80; mw *= 0.82;
+  }
+  put(18, 42, 18, 0.4, 0.4, 0, hull, 0, my + 20, 0);            // шпиль антенн
+  // нижняя мачта — короче, порт растёт в обе стороны
+  put(74, 96, 74, 0.78, 0.78, 0, dark, 0, -96, 0);
+  [-1,1].forEach(sy=> put(200, 20, 200, 0.86, 0.86, 0, lit, 0, sy*(sy>0?170:150), 0));   // палубы
+
+  // СПИЦЫ: шесть ферм от ступицы к ободу
+  for (let i=0;i<6;i++){
+    const t = i*Math.PI/3;
+    put(R_RING-86, 22, 30, 0.6, 0.9, 0, dark,
+        Math.cos(t)*(R_RING+86)/2, 0, Math.sin(t)*(R_RING+86)/2, RAD(t));
+  }
+
+  // ПРИЧАЛЫ: четыре рукава наружу, площадка и кран на каждом
+  const BERTH = [];
+  for (let i=0;i<4;i++){
+    const t = i*Math.PI/2 + Math.PI/4, cx = Math.cos(t), cz = Math.sin(t);
+    put(150, 26, 34, 0.62, 0.88, 0, dark, cx*(R_RING+78), 0, cz*(R_RING+78), RAD(t));
+    put(86, 16, 86, 0.8, 0.8, 0, lit, cx*(R_RING+152), 0, cz*(R_RING+152), RAD(t));
+    put(16, 88, 16, 0.5, 0.6, 0, dark, cx*(R_RING+152), 48, cz*(R_RING+152), RAD(t));   // стойка крана
+    put(78, 12, 12, 0.5, 0.7, 22, dark, cx*(R_RING+172), 92, cz*(R_RING+172), RAD(t));  // стрела
+    BERTH.push([cx, cz, t]);
+  }
+
+  // ГРУЗ: штабеля на площадках — мелочь, которая говорит, что порт РАБОТАЕТ
+  BERTH.slice(0,3).forEach(([cx,cz,t])=>{
+    for (let k=0;k<6;k++){
+      const row = k%3, col = (k/3)|0;
+      put(30, 16, 17, 0.9, 0.96, 0, k%2?hull:dark,
+          cx*(R_RING+128) - cz*(row-1)*20, 16 + col*17, cz*(R_RING+128) + cx*(row-1)*20, RAD(t));
+    }
   });
-  // огни: станция должна ЖИТЬ, пока её не разобрали
-  for (let i=0;i<10;i++){
-    const a = i/10*Math.PI*2;
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:A.glowTex(), color: i%3?0xffd08a:0x7fe3f5,
-      transparent:true, opacity:0.75, depthWrite:false, blending:THREE.AdditiveBlending }));
-    s.position.set(Math.cos(a)*84, 0, Math.sin(a)*84); s.scale.set(22,22,1);
-    g.add(s);
+
+  // ПРИШВАРТОВАННЫЕ БОРТА: гражданские, вдоль рукава, заметно мельче порта
+  BERTH.slice(0,3).forEach(([cx,cz,t],i)=>{
+    const L = 140 + i*28, ax = cx*(R_RING+150), az = cz*(R_RING+150), ay = (i-1)*50;
+    put(L, 34, 44, 0.58, 0.44, L*0.16, dark, ax + cx*26, ay, az + cz*26, RAD(t));
+    put(30, 22, 26, 0.66, 0.7, 0, hull, ax + cx*(26 - L*0.30), ay + 24, az + cz*(26 - L*0.30), RAD(t));
+  });
+
+  // ⚠️ ОГНИ — ОДИН ОБЪЕКТ, А НЕ СОРОК СПРАЙТОВ. Каждый спрайт это свой вызов
+  // отрисовки, а бортов в кадре бывает два десятка (см. шапку buildTurretNodes).
+  const pos = [], col = [];
+  const lamp = (x,y,z,c)=>{ pos.push(x,y,z); col.push(c[0],c[1],c[2]); };
+  const WARM=[1.0,0.80,0.52], COLD=[0.50,0.89,0.96], RED=[1.0,0.30,0.36];
+  for (let i=0;i<NSEG*2;i++){
+    const t=i/(NSEG*2)*Math.PI*2;
+    lamp(Math.cos(t)*R_RING, 16, Math.sin(t)*R_RING, i%3 ? WARM : COLD);
   }
+  BERTH.forEach(([cx,cz])=>{
+    lamp(cx*(R_RING+152), 26, cz*(R_RING+152), COLD);
+    lamp(cx*(R_RING+152), -26, cz*(R_RING+152), COLD);
+  });
+  lamp(0, my + 52, 0, RED); lamp(0, -152, 0, RED);
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  pg.setAttribute('color',    new THREE.Float32BufferAttribute(col, 3));
+  const pts = new THREE.Points(pg, new THREE.PointsMaterial({
+    map:A.glowTex(), size:18, sizeAttenuation:true, vertexColors:true,
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:1 }));
+
+  if (A.bake) A.bake(g);            // вся статика — в пару вызовов
+  g.add(pts);
+  // ⚠️ ОГНИ ОБЯЗАНЫ ИМЕТЬ ПОТОЛОК ЭКРАННОГО РАЗМЕРА. `sizeAttenuation` растит
+  // точку обратно пропорционально дальности: вплотную к кольцу каждая из
+  // полусотни ламп раздувается на пол-экрана, и всё это АДДИТИВНО и БЕЗ записи
+  // глубины ложится слоями друг на друга. Заливка взлетает, кадр умирает —
+  // ровно то «возле станции фпс падает». Геометрия тут ни при чём: её всего
+  // два меша. Размер подрезается по дальности в step().
+  g.userData.lamps = pts;
   return g;
 }
 
@@ -175,7 +493,7 @@ function makeStatic(spec, node, mine){
 
 function stationSpec(hp){
   return { key:'st_azumi', cls:'station', name:'Космопорт «Азуми-Верхний»',
-    len:180, hp:hp, shield:Math.round(hp*0.25), spd:0, acc:0, yaw:0, lift:0, en:100,
+    len:660, hp:hp, shield:Math.round(hp*0.25), spd:0, acc:0, yaw:0, lift:0, en:100,
     gun:{ rng:900, spd:900, ru:'—', mag:1 }, mounts:[], acts:[],
     res:{ kinetic:0.20, energy:0.15, missile:0.10 }, pd:0 };
 }
@@ -329,7 +647,7 @@ function begin(id){
   M = {
     id:id, st:'strike', t:0, alert:0, alerted:false,
     planet:buildPlanet(), beams:[], waveT:CFG.waveGap, waves:0,
-    hold:0, shield:1, allies:[], garrison:[], station:null,
+    hold:0, shield:1, gap:0, allies:[], garrison:[], station:null,
     capNode:null, evacNode:null, note:'', noteT:0, q:[], cur:null,
   };
 
@@ -338,6 +656,14 @@ function begin(id){
   stn.pos.set(CFG.station[0], CFG.station[1], CFG.station[2]);
   stn.node.position.copy(stn.pos);
   M.station = stn;
+
+  // ⚠️ АРЕНА СЫПЛЕТ КАМНИ, НЕ ЗНАЯ ПРО СООРУЖЕНИЕ. Пояс раскидывается по всему
+  // объёму до того, как миссия что-либо поставит, и глыба в сотню единиц
+  // втыкается прямо в причальное кольцо: кадр сразу читается как поломка, а не
+  // как порт. Расчищаем ему место — заодно и перед носом у игрока, чтобы старт
+  // не начинался с уклонения от валуна в упор.
+  clearRocks(stn.pos, R_RING + 320);
+  clearRocks(V(CFG.start[0], CFG.start[1], CFG.start[2]), 300);
 
   // ⚠️ ГАРНИЗОН СПИТ. Это и есть «застать врасплох»: борта стоят на дежурстве
   // без хода, с холодными орудиями, и просыпаются ТОЛЬКО от первого попадания
@@ -380,19 +706,51 @@ const VOICE = {
   foe: { n:'Республиканский флот', c:'255,90,130' },
   cmd: { n:'Рэдрик Рий',     c:'255,196,90' },
 };
+// ⚠️ РЕПЛИКА — ЭТО ВРЕМЯ, А НЕ СТРОКА. Раньше здесь было «набить 46 знаков в
+// секунду и подождать»: реплика кончалась и следующая стартовала В ТОМ ЖЕ
+// КАДРЕ. Четыре реплики на смене задачи выходили очередью без единой паузы —
+// читать это невозможно, глаз не успевает даже понять, что сменился говорящий.
+// Кино держится на паузах, а не на буквах: пауза ПЕРЕД чужой репликой длиннее,
+// чем перед своей же следующей, а внутри строки держат знаки препинания.
+const TYPE = 26;                     // знаков в секунду: было 46, это скороговорка
+const GAP_SELF = 0.40;               // тот же голос продолжает
+const GAP_TURN = 0.95;               // слово переходит к другому — держим паузу
+
+function charCost(ch){
+  if ('.!?…'.indexOf(ch) >= 0) return 0.30;   // точка — вдох
+  if (',;:—–'.indexOf(ch) >= 0) return 0.13;  // запятая — полувдох
+  return 0;
+}
+function typeTime(t){ let v=0; for (let i=0;i<t.length;i++) v += 1/TYPE + charCost(t[i]); return v; }
+// сколько знаков уже произнесено к моменту age
+function typedCount(c){
+  let v=0, n=0;
+  for (let i=0;i<c.t.length;i++){ v += 1/TYPE + charCost(c.t[i]); if (v > c.age) break; n++; }
+  return n;
+}
+
 function talk(who, text, sec){
   if (!M) return;
-  M.q.push({ w:who, t:text, d: sec || (2.4 + text.length*0.042) });
+  // длительность = набор + время на прочтение + хвост на осмысление
+  const d = sec || (typeTime(text) + clamp(text.length*0.030, 1.0, 2.8) + 0.45);
+  M.q.push({ w:who, t:text, d:d });
 }
+
 function stepTalk(dt){
+  if (M.gap > 0){ M.gap -= dt; return; }        // держим паузу между репликами
   if (M.cur){
     M.cur.age += dt;
-    if (M.cur.age >= M.cur.d) M.cur = null;
+    if (M.cur.age >= M.cur.d){
+      const nx = M.q[0];
+      M.gap = (nx && nx.w === M.cur.w) ? GAP_SELF : GAP_TURN;
+      M.cur = null;
+    }
+    return;
   }
   // ⚠️ ОЧЕРЕДЬ, А НЕ ПЕРЕБИВАНИЕ. Реплики приходят пачками (смена задачи +
   // тревога + потеря борта в одну секунду), и без очереди игрок увидит только
   // последнюю — то есть ничего.
-  if (!M.cur && M.q.length) M.cur = Object.assign({ age:0 }, M.q.shift());
+  if (M.q.length) M.cur = Object.assign({ age:0 }, M.q.shift());
   // очередь не копится бесконечно: старое из неё уже неактуально
   if (M.q.length > 6) M.q.splice(0, M.q.length-6);
 }
@@ -564,7 +922,16 @@ const STEP = {
 
 function alive(list){ return list.filter(u=>u.alive); }
 
+// Подрезка огней станции по дальности — см. §5, потолок экранного размера.
+function stepLamps(){
+  if (!M || !M.station) return;
+  const p = M.station.node.userData.lamps; if (!p) return;
+  const d = S.cam.position.distanceTo(M.station.pos);
+  p.material.size = Math.max(4, Math.min(18, d*0.022));
+}
+
 function step(dt){
+  stepLamps();
   if (!M || S.over) return;
   M.t += dt;
   if (M.noteT > 0) M.noteT -= dt;
@@ -648,33 +1015,93 @@ const GOAL = {
 // Эфир слева, ПОД строкой задачи и НАД приборами. Место выбрано не «где
 // свободно»: слева ничего не рисует ни арена, ни сенсорные кнопки (они у самой
 // кромки внизу), а взгляд, оторвавшись от перекрестья, идёт туда первым.
-// Текст проявляется по буквам — так его успевают прочесть, а не смахнуть глазом.
+//
+// ⚠️ ВЁРСТКА СЧИТАЕТСЯ ПО ПОЛНОЙ РЕПЛИКЕ, А ПРОЯВЛЯЮТСЯ БУКВЫ. Раньше строки
+// набирались из УЖЕ НАБРАННОГО куска: блок перевёрстывался на каждой букве,
+// прыгал и «дышал» — прочесть его спокойно нельзя. Сначала раскладываем весь
+// текст, потом открываем в нём знаки: блок стоит неподвижно, как в кино.
+//
+// ⚠️ КОЛОНКА БЫЛА 0.42 ШИРИНЫ, то есть 157 пикселей на телефоне, шрифтом в 12.
+// Реплика в шесть слов разваливалась на шесть строк бисера. Размер и колонка
+// теперь считаются от экрана.
 function hudTalk(x, W, H){
   const c = M.cur; if (!c) return;
   const V0 = VOICE[c.w] || VOICE.me;
-  const px = 24, py = Math.max(96, H*0.16);
-  const wide = Math.min(430, W*0.42);
-  // на телефоне эфир уезжает выше: там низ и правый край заняты пальцами
-  x.textAlign='left'; x.textBaseline='middle';
-  x.font='11px "Courier New", monospace';
-  x.fillStyle='rgba('+V0.c+',0.95)';
-  x.fillText(V0.n, px, py);
-  // сколько букв уже «пришло»
-  const shown = Math.min(c.t.length, Math.floor(c.age*46));
-  const fade = clamp((c.d - c.age)/0.6, 0, 1);          // последние полсекунды гаснет
-  x.font='12px "Courier New", monospace';
-  x.fillStyle='rgba(214,236,246,'+(0.92*fade).toFixed(2)+')';
-  let line='', ln=0;
-  const words = c.t.slice(0, shown).split(' ');
-  words.forEach(w=>{
+
+  const fs   = Math.round(clamp(W/26, 13, 18));       // тело реплики
+  const ns   = Math.max(10, Math.round(fs*0.74));     // имя говорящего
+  const lh   = Math.round(fs*1.52);
+  const px   = Math.round(clamp(W*0.055, 18, 44));
+  const wide = Math.min(560, W - px*2);
+  const py   = Math.round(Math.max(92, H*0.17));
+
+  // вход и выход: реплика ВСПЛЫВАЕТ, а не возникает
+  const fin  = clamp(c.age/0.30, 0, 1);
+  const fout = clamp((c.d - c.age)/0.50, 0, 1);
+  const al   = Math.min(fin, fout);
+  const rise = (1-fin)*7;
+
+  // раскладка по ПОЛНОМУ тексту — блок не шевелится, пока идут буквы
+  x.font = fs+'px "Courier New", monospace';
+  const lines = [];
+  let line = '';
+  c.t.split(' ').forEach(w=>{
     const probe = line ? line+' '+w : w;
-    if (x.measureText(probe).width > wide){ x.fillText(line, px, py+16+ln*15); ln++; line=w; }
+    if (x.measureText(probe).width > wide){ lines.push(line); line = w; }
     else line = probe;
   });
-  if (line) x.fillText(line, px, py+16+ln*15);
-  // тонкая черта слева — граница «служебного» поля, чтобы текст не висел в пустоте
-  x.fillStyle='rgba('+V0.c+',0.35)';
-  x.fillRect(px-8, py-8, 1.5, 26+ln*15);
+  if (line) lines.push(line);
+
+  const top = py - ns - 10 + rise;
+  const hgt = ns + 10 + lines.length*lh + 10;
+
+  x.save();
+  x.textAlign='left'; x.textBaseline='middle';
+
+  // ⚠️ ПОДЛОЖКИ-ПЛАШКИ НЕТ. Затемняющий прямоугольник читался как таблица: у
+  // него кромка, и на спокойном небе видно именно её, а не реплику. Эфир должен
+  // читаться и на чёрном небе, и на светлом камне, и на вспышке залпа — это
+  // даёт ТЕНЬ ПОД БУКВАМИ, у которой краёв нет вовсе. Ставим её один раз на
+  // весь блок, снимаем в конце (x.restore).
+  x.shadowColor = 'rgba(0,0,0,'+(0.9*al).toFixed(2)+')';
+  x.shadowBlur  = fs*1.1;
+
+  // риска говорящего: его цвет, во всю высоту блока
+  x.fillStyle = 'rgba('+V0.c+','+(0.85*al).toFixed(2)+')';
+  x.fillRect(px-10, top-4, 2, hgt-8);
+  void hgt;
+
+  // ИМЯ — в разрядку. Буквы ставим руками: letterSpacing на канве есть не везде,
+  // а имя короткое, и разрядка отделяет служебную строку от речи лучше кегля.
+  x.font = ns+'px "Courier New", monospace';
+  x.fillStyle = 'rgba('+V0.c+','+(0.95*al).toFixed(2)+')';
+  const nm = V0.n.toUpperCase();
+  let nx = px;
+  for (let i=0;i<nm.length;i++){ x.fillText(nm[i], nx, top+ns*0.5); nx += x.measureText(nm[i]).width + ns*0.22; }
+
+  // РЕЧЬ: раскрываем ровно typedCount знаков по уже готовой раскладке
+  const shown = typedCount(c);
+  x.font = fs+'px "Courier New", monospace';
+  x.fillStyle = 'rgba(226,241,249,'+(0.95*al).toFixed(2)+')';
+  let used = 0, cx = px, cy = top+ns+8;
+  for (let i=0;i<lines.length;i++){
+    const L = lines[i];
+    const y = top + ns + 10 + i*lh + lh*0.5;
+    if (used >= shown) break;
+    const take = Math.min(L.length, shown - used);
+    x.fillText(L.slice(0, take), px, y);
+    if (take < L.length){ cx = px + x.measureText(L.slice(0, take)).width; cy = y; used = shown; break; }
+    used += L.length + 1;                       // +1 за пробел, съеденный переносом
+    cx = px + x.measureText(L).width; cy = y;
+  }
+
+  // каретка, пока говорят: мигает только во время набора
+  if (shown < c.t.length && Math.floor(performance.now()/380)%2===0){
+    x.fillStyle = 'rgba('+V0.c+','+(0.8*al).toFixed(2)+')';
+    x.fillRect(cx+2, cy-fs*0.42, fs*0.52, fs*0.84);
+  }
+  x.restore();
+  x.textAlign='left'; x.textBaseline='middle';
 }
 
 function target(){
@@ -701,12 +1128,26 @@ function hud(x, W, H, s){
   x.fillStyle='rgba(255,255,255,0.10)'; x.fillRect(bx, by, bw, 3);
   x.fillStyle='rgba(120,225,245,0.9)';  x.fillRect(bx, by, bw*clamp(g[2],0,1), 3);
 
-  // громкая строка на несколько секунд: смена задачи, тревога, потеря борта
+  // ⚠️ ГРОМКАЯ СТРОКА ЖИВЁТ ПРИ ЗАДАЧЕ, А НЕ ПОСРЕДИ ЭКРАНА. Она стояла на
+  // 0.28 высоты — то есть ровно под эфиром, и на телефоне трёхстрочная реплика
+  // упиралась в неё вплотную: два разных текста сливались в одну стену, и было
+  // не понять, где кончается голос и начинается объявление. Это ОБЪЯВЛЕНИЕ О
+  // ЗАДАЧЕ («точка взята», «подкрепления»), его место — под самой задачей,
+  // отдельной строкой заголовка. И оно обязано влезать в ширину экрана.
   if (M.noteT > 0){
-    const k = clamp(M.noteT/1.2, 0, 1);
-    x.font='16px "Courier New", monospace';
-    x.fillStyle='rgba(255,196,90,'+(0.35+0.6*k).toFixed(2)+')';
-    x.fillText(M.note, cx, H*0.28);
+    const k  = clamp(M.noteT/1.2, 0, 1);
+    const nf = Math.round(clamp(W/30, 12, 18));
+    x.font = nf+'px "Courier New", monospace';
+    x.fillStyle = 'rgba(255,196,90,'+(0.35+0.6*k).toFixed(2)+')';
+    // длинное объявление переносим, а не выпускаем за кромку
+    const lim = W - 32, parts = [];
+    let ln = '';
+    M.note.split(' ').forEach(w=>{
+      const probe = ln ? ln+' '+w : w;
+      if (x.measureText(probe).width > lim){ parts.push(ln); ln = w; } else ln = probe;
+    });
+    if (ln) parts.push(ln);
+    parts.forEach((L,i)=> x.fillText(L, cx, by + 22 + i*(nf+5)));
   }
 
   hudTalk(x, W, H);

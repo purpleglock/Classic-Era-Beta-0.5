@@ -102,6 +102,7 @@ const DN = {
   me:null, ships:[], shots:[], fx:[], rocks:[], dust:null,
   keys:new Set(), aim:{yaw:0,pit:0}, locked:false, shake:0,
   wheel:{ open:false, ax:0, ay:0 }, zoom:false, zoomK:0,
+  camZoom:1,                      // колесо мыши: множитель отхода камеры
   spawn:null,                     // экран возвращения в строй {t, cls, spot}
   hud:null, hx:null, feed:[], score:{kills:0,deaths:0},
   arena:3400, waves:false, sens:1, diff:'normal', rein:{mine:0,foe:0},
@@ -301,7 +302,14 @@ const PROTO = {};
 function shipProto(spec, mine){
   const key = spec.key + (mine?'|m':'|f');
   if (PROTO[key]) return PROTO[key];
-  const grp = (typeof bgBuildShip==='function') ? bgBuildShip(spec.cls, mine?'mine':'foe', null) : new THREE.Group();
+  // ⚠️ У ПРОЕКТА МОЖЕТ БЫТЬ СВОЙ КОРПУС. bgBuildShip строит ПОРТРЕТ КЛАССА —
+  // типовой линкор, типовой корвет. Штучному борту (сюжетному, легендарному)
+  // этого мало: он обязан узнаваться силуэтом с первого кадра. Если проект
+  // принёс свой `hullBuild`, строим им; кэш всё равно ключуется по key проекта,
+  // так что типовые борта ничего не теряют.
+  const grp = (typeof spec.hullBuild === 'function')
+    ? spec.hullBuild(mine?'mine':'foe')
+    : ((typeof bgBuildShip==='function') ? bgBuildShip(spec.cls, mine?'mine':'foe', null) : new THREE.Group());
   const turs = buildTurretNodes(grp, spec, mine);
   // сливаем ВСЮ статику корпуса вместе с барбетами башен, не трогая поворотные узлы
   bakeShip(grp, turs.map(t=>t.yawG));
@@ -510,6 +518,7 @@ function stepZone(s){
 
 // ── §4. Ввод ─────────────────────────────────────────────────
 function bindInput(){
+  if (DN.cv) bindWheel(DN.cv);
   const cv=DN.cv;
   addEventListener('keydown', e=>{
     if (e.repeat) return;
@@ -571,6 +580,19 @@ function bindInput(){
 }
 
 // ── §5. Колесо мощности ──────────────────────────────────────
+// ⚠️ КОЛЕСО ДЕЛАЕТ ДВА РАЗНЫХ ДЕЛА, И ЭТО НАМЕРЕННО. Пока держат E, оно ведёт
+// круг мощности (там прокрутка страницы всё равно не нужна); в остальное время
+// оно ОТВОДИТ И ПРИБЛИЖАЕТ КАМЕРУ. Прокрутку страницы глушим всегда: в бою
+// уехавший вниз документ — это потерянный кадр.
+function bindWheel(cv){
+  cv.addEventListener('wheel', e=>{
+    e.preventDefault();
+    if (DN.wheel.open) return;                  // круг мощности ведут мышью, не колесом
+    const k = Math.exp((e.deltaY > 0 ? 1 : -1) * 0.14);
+    DN.camZoom = clamp(DN.camZoom * k, 0.45, 4.0);
+  }, { passive:false });
+}
+
 function wheelSeg(){
   const w=DN.wheel;
   if (Math.hypot(w.ax,w.ay) < 40) return -1;          // центр = отмена
@@ -672,14 +694,23 @@ function buildTurretNodes(node, spec, mine){
     const W = m.w || spec.gun;
     const big = W ? W.barrels >= 2 : false;
     const K = 0.62 + (W ? Math.min(1.15, W.caliber/380) : 0.4)*0.55;
-    const hw = (typeof bgHullHW==='function') ? bgHullHW(cls, m.x, null) : 0.06;
-    const dp = (typeof bgHullDepth==='function') ? bgHullDepth(cls, m.x, null) : 0.04;
+    // ⚠️ ШТУЧНЫЙ КОРПУС ЗНАЕТ СВОЮ ПАЛУБУ ЛУЧШЕ КЛАССА. bgHullHW/bgHullDepth дают
+    // обвод ТИПОВОГО борта, и на корпусе другой формы (узкое гранёное копьё
+    // вместо широкого линкора) установки садятся мимо железа — висят в пустоте
+    // рядом с бортом. Если проект принёс `deckAt(x)`, палубу берём у него.
+    const prof = (typeof spec.deckAt === 'function') ? spec.deckAt(m.x) : null;
+    const hw = prof ? prof.hw : ((typeof bgHullHW==='function') ? bgHullHW(cls, m.x, null) : 0.06);
+    const dp = prof ? prof.y  : ((typeof bgHullDepth==='function') ? bgHullDepth(cls, m.x, null) : 0.04);
     // ⚠️ УСТАНОВКА МЕНЬШЕ, ЧЕМ КАЖЕТСЯ ПРАВИЛЬНЫМ. Башня на 0.030 длины корпуса
     // — это дом на палубе: у линкора в 250 метров она выходила под восемь
     // метров в поперечнике вместе с барбетом и зрительно съедала обводы. У
     // настоящего корабля башня — низкая шайба, из которой торчат ДЛИННЫЕ тонкие
     // стволы; «деревянность» силуэта берётся ровно из обратных пропорций.
-    const r = Math.min(0.021*K, hw*0.46);
+    // ⚠️ ШТУЧНЫЙ КОРПУС МОЖЕТ ТРЕБОВАТЬ НИЗКИХ УСТАНОВОК. На типовом борте башня
+    // — часть силуэта, но на СТЕЛС-корпусе (плита без надстроек) двенадцать
+    // башен превращают монолит в ёжика и отменяют весь его смысл. `turFlat`
+    // сажает установку ниже и делает её блистером, а не домом на палубе.
+    const r = Math.min(0.021*K, hw*0.46) * (spec.turFlat || 1);
 
     const g = new THREE.Group();
     const barb = new THREE.Mesh(new THREE.CylinderGeometry(r*1.15, r*1.25, r*0.9, 12), mat);
@@ -726,7 +757,7 @@ function buildTurretNodes(node, spec, mine){
     bakeShip(pitG);
 
     const zLim = Math.max(0, hw - r*1.3);
-    g.position.set(m.x, dp*0.86, zLim*m.z);
+    g.position.set(m.x, prof ? dp : dp*0.86, zLim*m.z);
     node.add(g);
     return { node:g, yawG:yawG, pitG:pitG, r:r };
   });
@@ -900,7 +931,15 @@ function fireFrom(s, T, aimPt, over){
 // (или до предела орудий).
 function rangePoint(s, look){
   const o = DN.cam.position;
-  const far = s.C.gun.rng + o.distanceTo(s.pos);
+  // ⚠️ ПУСТОЕ МЕСТО — ЭТО ТОЧКА В ПРЕДЕЛАХ ДАЛЬНОСТИ, А НЕ ЗА НЕЙ. Раньше здесь
+  // стояло «rng + до камеры», то есть точка ложилась РОВНО НА ПРЕДЕЛ дальности
+  // от борта. Установки разнесены по палубе, и половина из них оказывалась за
+  // этим пределом на пару метров: проверка reach у них не проходила, огонь не
+  // открывался вовсе. На игроке это читалось так: стоит прицелу соскользнуть с
+  // силуэта — и борт МОЛЧИТ, хотя цель в секторе и вдвое ближе предела. Не
+  // промах, а отказ стрелять. Ставим точку с запасом внутрь: пусть орудия бьют
+  // и мажут — промах здесь честная валюта (см. шапку stepGuns), отказ — нет.
+  const far = o.distanceTo(s.pos) + s.C.gun.rng*0.90;
   let bd = far;
   DN.ships.forEach(u=>{
     if (u===s||!u.alive||u.mine===s.mine) return;
@@ -1720,7 +1759,7 @@ function stepCam(dt){
   const backish = clamp(-look.dot(shipDir(s,t2)), 0, 1);          // 1 = смотрим себе в корму
   const pivot = DN.camAnchor.clone().addScaledVector(right, s.C.len*CAM.side*(1-backish*0.85));
 
-  let dist = s.C.len*(CAM.dist - DN.zoomK*1.1);
+  let dist = s.C.len*(CAM.dist - DN.zoomK*1.1) * (DN.camZoom||1);
   // камера не должна оказаться внутри обломка
   DN.rocks.forEach(r=>{
     if (r.dead) return;
@@ -2027,8 +2066,20 @@ function hudArcs(x, cx, cy, s){
   // сколько стволов накрывает каждое направление
   const seg = new Array(N).fill(0);
   let maxN = 1;
+  // ⚠️ СЧИТАЮТСЯ ТОЛЬКО ТЕ, КТО ДОСТАЁТ ДО ЦЕЛИ. Прибор считал плотность по
+  // ОДНОМУ УГЛУ и врал: у противоминного калибра дальность вчетверо меньше, чем
+  // у главного, и на боевой дистанции он не стреляет вовсе. Игрок доворачивал
+  // борт так, чтобы цель легла в «плотный сектор», жал огонь — и не происходило
+  // ничего. Прибор, который обещает шесть стволов и даёт ноль, хуже,чем никакой.
+  const dRef = (function(){
+    const t = lockTarget();
+    if (t) return t.pos.distanceTo(s.pos);
+    return rangePoint(s, DN.cam.getWorldDirection(t2).clone()).distanceTo(s.pos);
+  })();
   if (s.tur) s.tur.forEach(T=>{
     if (T.rel>0 || T.mag<=0) return;               // пустая башня в счёт не идёт
+    const W = T.w || s.C.gun;
+    if (W.rng * (s.siege?1.25:1) < dRef) return;   // не достаёт — не обещаем
     for (let i=0;i<N;i++){
       const a = (i+0.5)/N*Math.PI*2;
       if (Math.abs(angDiff(a, T.m.home)) <= T.m.arc/2){ seg[i]++; if (seg[i]>maxN) maxN=seg[i]; }
@@ -2440,5 +2491,6 @@ return { SHIPS:SHIPS, spec:specOf, DEF_SHIP:DEF_SHIP, POWER:POWER, DIFF:DIFF,
          // выводить не надо: всё, что здесь появится, придётся поддерживать.
          api: { makeShip, respawn, damage, kill, say, boom, spark, sprite, spriteFree,
                 glowTex, useAbil, radius, shipDir, baseOf, wheelPick, wheelSeg, angDiff,
+                bake:bakeShip,      // склейка статичной геометрии: см. §5 dn_mission.js
                 THR_STEPS, POWER_KEYS, SPOTS, V, clamp, rnd, arc, icon, wrap } };
 })();

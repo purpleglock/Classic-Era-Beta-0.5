@@ -486,10 +486,15 @@ begin
             order by ready_at asc
   loop
     if pr.kind = 'build' then
+      -- колония могла исчезнуть, пока проект ждал (снос/потеря/захват/бомбардировка МЗА).
+      -- Без проверки insert ломает FK colony_buildings_colony_id_fkey и валит весь тик.
+      if exists (select 1 from public.colonies c
+                 where c.id = pr.colony_id and c.faction_id = p_fid) then
       insert into public.colony_buildings (colony_id, faction_id, owner_id, btype, slots_open, tnp_mode, faith_id)
         values (pr.colony_id, p_fid, pr.owner_id, pr.btype,
                 coalesce((pr.payload->>'free_slots')::int, 1), false,
                 nullif(pr.payload->>'faith_id','')::uuid);       -- МУЛЬТИ: метка веры храма
+      end if;
     elsif pr.kind = 'slot' then
       update public.colony_buildings set slots_open = least(6, slots_open + 1)
         where id = pr.building_id and faction_id = p_fid;
