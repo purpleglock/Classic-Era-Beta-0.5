@@ -20,6 +20,46 @@
   background: color-mix(in srgb, var(--b2, #141a22) 92%, transparent);
   clip-path: polygon(0 0, calc(100% - 9.3px) 0, 100% 9.3px, 100% 100%, 9.3px 100%, 0 calc(100% - 9.3px));
 }
+/* ── Кнопка зовёт, когда есть что сказать ──
+   В покое — приглушённая (эфир молчит, дёргать не за чем), но НЕ безликая:
+   базовый цвет подняли до --t2, иначе иконка растворялась в стене.
+   С непрочитанными: цвет акцента, светящаяся рамка и редкая волна раз в 2.6 с.
+   С упоминанием — тревожный цвет и волна вдвое чаще.
+   ⚠️ Только transform/opacity. Кнопка висит поверх карты; тень/фильтр на ней
+   заставляли бы браузер перерисовывать слой под ней каждый кадр. */
+#ch-fab { color: var(--t2, #b6c4d0); }
+#ch-fab.has { color: var(--te, #3ec0d0); }
+#ch-fab.has::before { background: color-mix(in srgb, var(--te, #3ec0d0) 75%, var(--w3, #2a3340)); }
+#ch-fab.ment { color: var(--warn, #d0a840); }
+#ch-fab.ment::before { background: color-mix(in srgb, var(--warn, #d0a840) 80%, var(--w3, #2a3340)); }
+
+.ch-fab-wave {
+  position: absolute; inset: 0; z-index: -3; pointer-events: none; opacity: 0;
+  background: currentColor;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+#ch-fab.has .ch-fab-wave { animation: ch-wave 2.6s ease-out infinite; }
+#ch-fab.ment .ch-fab-wave { animation-duration: 1.5s; }
+@keyframes ch-wave {
+  0%   { opacity: .5; transform: scale(1); }
+  70%  { opacity: 0;  transform: scale(1.75); }
+  100% { opacity: 0;  transform: scale(1.75); }
+}
+/* Тик на новую реплику: один кивок, класс снимается через 700 мс */
+#ch-fab.nudge { animation: ch-nudge .62s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes ch-nudge {
+  0%   { transform: translateY(0) scale(1); }
+  28%  { transform: translateY(-5px) scale(1.1); }
+  55%  { transform: translateY(0) scale(1); }
+  72%  { transform: translateY(-2px) scale(1.03); }
+  100% { transform: translateY(0) scale(1); }
+}
+/* Уважаем системную просьбу «без движения»: остаётся цвет и бейдж */
+@media (prefers-reduced-motion: reduce) {
+  #ch-fab.has .ch-fab-wave, #ch-fab.nudge, .ch-fab-badge.ment { animation: none; }
+}
+.ch-fab-badge.ment { animation: ch-pulse 1.6s ease-in-out infinite; }
+
 #ch-fab:hover { color: var(--te, #3ec0d0); transform: translateY(-1px); }
 #ch-fab:hover::before { background: color-mix(in srgb, var(--te, #3ec0d0) 60%, var(--w3, #2a3340)); }
 #ch-fab:active { transform: translateY(0); }
@@ -37,15 +77,24 @@ body.route-map #ch-fab { display: none !important; }
 /* ── Оверлей на весь экран (как tk-ov) ── */
 .ch-ov {
   position: fixed; inset: 0; z-index: 9100; display: none; align-items: center; justify-content: center;
-  padding: 28px 14px; background: rgba(4, 6, 10, .82); backdrop-filter: blur(3px);
+  /* Задник глухой: сквозь прежние .82 + blur(3px) читались новости и карточки
+     за окном, и глаз всё время уходил с разговора на страницу под ним.
+     ⚠️ БЕЗ backdrop-filter. Размытие на оверлее во весь экран заставляет
+     браузер перерисовывать ВСЮ страницу под окном на каждый кадр — а под ним
+     живая карта и анимированный кабинет, отсюда и просадка. Непрозрачности
+     .985 хватает: размывать нечего, слоя под окном всё равно не видно. */
+  padding: 24px 14px; background: rgba(3, 5, 8, .985);
 }
 .ch-ov.show { display: flex; }
 
 /* ── Модалка ── */
+/* Окно занимает экран, а не «форточку»: 860×640 задумывались под ленту реплик,
+   но с рельсой комнат, цитатами и реакциями в эфир влезало пять строк —
+   разговор приходилось читать в замочную скважину. Держим потолок (на 4K
+   растягивать строку через весь стол нечитаемо), но упираемся в него поздно. */
 .ch-modal {
-  position: relative; width: 100%; max-width: 860px; height: min(640px, calc(100vh - 56px));
+  position: relative; width: 100%; max-width: min(1240px, 94vw); height: min(880px, calc(100vh - 48px));
   display: flex; flex-direction: column;
-  filter: drop-shadow(0 30px 80px rgba(0, 0, 0, .6));
 }
 .ch-modal::before {
   content: ''; position: absolute; inset: 0; z-index: -2;
@@ -81,7 +130,7 @@ body.route-map #ch-fab { display: none !important; }
 .ch-body { flex: 1; min-height: 0; display: flex; gap: 0; }
 .ch-main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0 22px 18px 0; }
 .ch-side {
-  width: 224px; flex-shrink: 0; display: flex; flex-direction: column;
+  width: 250px; flex-shrink: 0; display: flex; flex-direction: column;
   margin: 0 16px 18px 18px; padding: 12px 12px; min-height: 0;
   background: color-mix(in srgb, var(--b2, #141a22) 75%, transparent);
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
@@ -166,7 +215,7 @@ body.route-map #ch-fab { display: none !important; }
   font-size: 13px; color: var(--t4, #6a7a88); font-style: italic;
 }
 .ch-empty.sm { font-size: 11px; margin: 8px 0; padding: 0; text-align: left; }
-.ch-msg { position: relative; display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px 9px 14px; }
+.ch-msg { position: relative; display: flex; gap: 12px; align-items: stretch; padding: 0 12px 0 3px; }
 .ch-msg::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
   background: linear-gradient(90deg, var(--fc, var(--te)) 0 2px, color-mix(in srgb, var(--b2, #141a22) 82%, transparent) 2px);
@@ -177,28 +226,48 @@ body.route-map #ch-fab { display: none !important; }
 }
 /* Аватарка автора */
 .ch-msg-av { flex-shrink: 0; }
-.ch-msg-main { flex: 1; min-width: 0; }
+.ch-msg-main { flex: 1; min-width: 0; padding: 9px 0 10px; }
+/* ⚠️ АВАТАРКА — НЕ ЗНАЧОК, А ПОРТРЕТ В САМОЙ ПЛАШКЕ.
+   Три подхода забракованы игроком подряд: квадрат («картинка в тексте»),
+   срезанный угол (клин на четверть лица), гекс. Дело было не в форме — форма
+   лишь оправа, а оправа тут не нужна вовсе: рамка любого очертания заставляет
+   рисовать кант, кант вылезает полосой и спорит с цветной полосой державы.
+   Поэтому лица больше не «вставляют» в ленту — лента их ВМЕЩАЕТ: портрет идёт
+   на всю высоту блока, обрезан краем плашки и растворяется вправо под текст
+   (mask-image). Чей блок — читается по лицу и цвету полосы, а не по обводке.
+   ⚠️ Растворение делает mask-image, а НЕ размытие: фильтров на ленте не держим,
+   они роняют кадр вместе со всей страницей (см. историю с backdrop-filter). */
+.ch-msg-av { position: relative; flex-shrink: 0; width: 54px; align-self: stretch; overflow: hidden; }
 .ch-av-img, .ch-av-ini {
-  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--fc, var(--te)) 45%, transparent);
+  display: block; width: 100%; height: 100%; min-height: 44px; object-fit: cover;
+  -webkit-mask-image: linear-gradient(90deg, #000 0 58%, transparent 100%);
+  mask-image: linear-gradient(90deg, #000 0 58%, transparent 100%);
+  opacity: .92;
 }
-.ch-av-img { object-fit: cover; background: var(--b2, #141a22); }
-.ch-av-ini { font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 12px; }
-.ch-msg-hd { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 3px; }
+.ch-av-img { background: var(--b2, #141a22); }
+/* Нет картинки — те же две буквы, но не «плиткой», а крупной подписью в тон
+   державы: колонка остаётся живой, и строй ленты не рвётся. */
+.ch-av-ini {
+  display: flex; align-items: center; justify-content: flex-start; padding-left: 8px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--fc, var(--te)) 22%, transparent), transparent);
+  font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 17px;
+  letter-spacing: .04em; color: color-mix(in srgb, var(--fc, var(--te)) 75%, var(--t2, #b6c4d0));
+}
+.ch-msg-hd { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; line-height: 1.2; }
 .ch-msg-a {
-  font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 13.5px;
-  letter-spacing: calc(.03em * var(--deco-ls-mult, 1)); color: var(--t1, #e8edf2);
+  font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 15px;
+  letter-spacing: calc(.02em * var(--deco-ls-mult, 1)); color: var(--fc, var(--te, #3ec0d0));
 }
 .ch-msg.staff .ch-msg-a { color: var(--ok, #4caf6a); }
 .ch-msg-f {
-  font-family: var(--font-mono, monospace); font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--fc, var(--t3, #8aa0b0)); padding: 1px 7px;
-  background: color-mix(in srgb, var(--fc, var(--t3, #8aa0b0)) 12%, transparent);
-  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+  position: relative; padding-left: 11px;
+  font-family: var(--font-mono, monospace); font-size: 8.5px; letter-spacing: .1em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--fc, var(--t3, #8aa0b0)) 68%, var(--t4, #6a7a88));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46%;
 }
+.ch-msg-f::before { content: '·'; position: absolute; left: 3px; color: var(--t4, #6a7a88); }
 .ch-msg-w { margin-left: auto; font-family: var(--font-mono, monospace); font-size: 9px; color: var(--t4, #6a7a88); }
-.ch-msg-b { font-size: 13px; line-height: 1.55; color: var(--t2, #c0ccd6); word-break: break-word; white-space: pre-wrap; }
+.ch-msg-b { font-size: 13.5px; line-height: 1.6; color: var(--t2, #b6c4d0); word-break: break-word; white-space: pre-wrap; }
 
 /* Ввод. Обводку даёт слой-подложка (clip-path режет border → канон: не border) */
 .ch-input-row { display: flex; gap: 10px; padding: 12px 14px 0 0; }
@@ -255,7 +324,10 @@ body.route-map #ch-fab { display: none !important; }
   .ch-input-row { padding: 10px 0 0; gap: 8px; }
   .ch-inp { padding: 12px 13px; font-size: 16px; }   /* 16px — iOS не зумит при фокусе */
   .ch-send { padding: 0 16px; }
-  .ch-av-img, .ch-av-ini { width: 26px; height: 26px; }
+  .ch-msg-av { width: 44px; }
+  .ch-av-ini { font-size: 15px; padding-left: 6px; }
+  .ch-msg-a { font-size: 14px; }
+  .ch-msg-f { max-width: 100%; }
 }
 
 /* ── Новелла: убрать плавающие кнопки чата и поддержки ─────────────
@@ -267,3 +339,235 @@ html.vn-screen #ch-fab,
 html.vn-screen #tk-fab,
 html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-research,.hp-vn-fight).show) #ch-fab,
 html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-research,.hp-vn-fight).show) #tk-fab { display: none !important; }
+
+/* ══════════════════════════════════════════════════════════════════
+   РАЗГОВОР: склейка блоков, цитата, реакции, правка, «печатает…»
+   Канон тот же: срез угла — clip-path на подложке, акцент один (--te),
+   кнопки-действия рисуются контуром, а не символами.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Лента и пилюля «вниз» лежат в общей обёртке: пилюля висит НАД лентой,
+   а не в потоке — иначе она дёргает высоту лога на каждое новое сообщение. */
+.ch-log-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
+.ch-log-wrap > .ch-log { flex: 1; }
+.ch-down {
+  position: absolute; right: 16px; bottom: 10px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: none;
+  padding: 5px 10px; background: var(--te, #3ec0d0); color: #04240f;
+  font-family: var(--font-mono, monospace); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .5);
+}
+.ch-down:hover { filter: brightness(1.12); }
+
+/* Разделитель дня */
+.ch-day {
+  display: flex; align-items: center; gap: 10px; margin: 6px 0 2px;
+  font-family: var(--font-mono, monospace); font-size: 8.5px; letter-spacing: .22em;
+  text-transform: uppercase; color: var(--t4, #6a7a88);
+}
+.ch-day::before, .ch-day::after { content: ''; flex: 1; height: 1px; background: var(--w3, #2a3340); opacity: .55; }
+
+/* Склейка подряд идущих реплик: подложка та же, но шапки нет, а на месте
+   аватарки — время, всплывающее по наведению. */
+.ch-msg.cont { margin-top: -8px; }
+.ch-msg.cont .ch-msg-main { padding: 3px 0 4px; }
+.ch-msg.cont .ch-msg-av { align-self: flex-start; padding-top: 4px; }
+.ch-msg.cont::before { clip-path: none; }
+.ch-msg-tw {
+  display: inline-block; width: 100%; text-align: right; padding-right: 4px; opacity: 0;
+  font-family: var(--font-mono, monospace); font-size: 8.5px; color: var(--t4, #6a7a88);
+  transition: opacity var(--duration-fast);
+}
+.ch-msg.cont:hover .ch-msg-tw { opacity: 1; }
+.ch-msg.replying::before { background: linear-gradient(90deg, var(--fc, var(--te)) 0 2px, color-mix(in srgb, var(--te, #3ec0d0) 10%, var(--b2, #141a22)) 2px); }
+.ch-msg.editing { outline: 1px dashed color-mix(in srgb, var(--te, #3ec0d0) 60%, transparent); outline-offset: -1px; }
+.ch-msg.gone .ch-msg-b { opacity: .55; }
+.ch-gone { color: var(--t4, #6a7a88); font-size: 12px; }
+.ch-ed { margin-left: 7px; font-family: var(--font-mono, monospace); font-size: 8.5px; color: var(--t4, #6a7a88); }
+.ch-shield { color: var(--ok, #4caf6a); margin-right: 5px; display: inline-flex; vertical-align: -1px; }
+@keyframes ch-flash { 0% { background: color-mix(in srgb, var(--te, #3ec0d0) 32%, transparent); } 100% { background: transparent; } }
+.ch-msg.flash { animation: ch-flash 1.1s ease-out; }
+
+/* Действия над репликой — проявляются по наведению, чтобы лента не рябила */
+/* Панель одна на весь лог и ездит по наведению (chPlaceActs) — поэтому она
+   лежит в .ch-log-wrap, а не внутри реплики. */
+.ch-acts {
+  position: absolute; right: 20px; z-index: 4; display: none; gap: 1px;
+  background: var(--w2, #232c36); padding: 1px;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+}
+.ch-act {
+  display: inline-flex; align-items: center; justify-content: center; width: 23px; height: 21px;
+  border: none; cursor: pointer; background: var(--b2, #141a22); color: var(--t3, #8aa0b0); padding: 0;
+}
+.ch-act:hover { background: var(--te, #3ec0d0); color: #04240f; }
+.ch-act.warn:hover { background: var(--err, #e05050); color: #fff; }
+.ch-ico { display: block; }
+
+.ch-more {
+  align-self: center; margin-bottom: 6px; border: 1px solid var(--w3, #2a3340); background: none; cursor: pointer;
+  color: var(--t3, #8aa0b0); padding: 4px 14px; font-family: var(--font-mono, monospace);
+  font-size: 9px; letter-spacing: .16em; text-transform: uppercase;
+}
+.ch-more:hover { color: var(--te, #3ec0d0); border-color: var(--te, #3ec0d0); }
+
+/* Цитата: одна строка, клик уводит к оригиналу */
+.ch-quo {
+  display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; padding: 3px 8px; cursor: pointer;
+  background: color-mix(in srgb, var(--fc, var(--te)) 9%, transparent);
+  border-left: 2px solid var(--fc, var(--te)); max-width: 100%; overflow: hidden;
+}
+.ch-quo:hover { background: color-mix(in srgb, var(--fc, var(--te)) 18%, transparent); }
+.ch-quo.gone { border-color: var(--w3, #2a3340); background: none; color: var(--t4, #6a7a88); font-style: italic; font-size: 11px; cursor: default; }
+.ch-quo-a { font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 11.5px; color: var(--fc, var(--te)); flex-shrink: 0; }
+.ch-quo-b { font-size: 11.5px; color: var(--t3, #8aa0b0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Реакции */
+.ch-rx-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; align-items: center; }
+.ch-rx {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer; padding: 1px 7px 2px;
+  border: 1px solid var(--w3, #2a3340); background: var(--b2, #141a22); color: var(--t2, #b6c4d0);
+  font-size: 12px; line-height: 1.5; font-family: inherit;
+}
+.ch-rx:hover { border-color: var(--te, #3ec0d0); }
+.ch-rx.mine { border-color: var(--te, #3ec0d0); background: color-mix(in srgb, var(--te, #3ec0d0) 16%, var(--b2, #141a22)); }
+.ch-rx-n { font-family: var(--font-mono, monospace); font-size: 9.5px; color: var(--t3, #8aa0b0); }
+.ch-rx.mine .ch-rx-n { color: var(--te, #3ec0d0); }
+.ch-rx-pal { display: inline-flex; gap: 2px; padding: 1px 3px; background: var(--w2, #232c36); }
+.ch-rx-p { border: none; background: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 3px; }
+.ch-rx-p:hover { transform: scale(1.25); }
+
+/* Разметка внутри реплики */
+.ch-msg-b b { color: var(--t1, #e8edf2); }
+.ch-code {
+  font-family: var(--font-mono, monospace); font-size: 11.5px; padding: 1px 5px;
+  background: var(--b2, #141a22); border: 1px solid var(--w3, #2a3340); color: var(--te, #3ec0d0);
+}
+.ch-link { color: var(--te, #3ec0d0); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--te, #3ec0d0) 45%, transparent); word-break: break-all; }
+.ch-link:hover { border-bottom-color: var(--te, #3ec0d0); }
+.ch-at { color: var(--te, #3ec0d0); font-weight: 600; }
+.ch-at.me { background: color-mix(in srgb, var(--te, #3ec0d0) 22%, transparent); padding: 0 3px; }
+
+/* «Печатает…» — узкая строка под лентой, места не отбирает, когда молчат */
+.ch-typing {
+  height: 0; overflow: hidden; display: flex; align-items: center; gap: 7px;
+  font-size: 11px; color: var(--t3, #8aa0b0); font-style: italic;
+  transition: height var(--duration-fast);
+}
+.ch-typing.on { height: 18px; }
+.ch-dots { display: inline-flex; gap: 3px; }
+.ch-dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--te, #3ec0d0); animation: ch-dot 1.1s ease-in-out infinite; }
+.ch-dots i:nth-child(2) { animation-delay: .18s; }
+.ch-dots i:nth-child(3) { animation-delay: .36s; }
+@keyframes ch-dot { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+/* Плашка «в ответ» / «правишь» над полем */
+.ch-bar {
+  display: flex; align-items: center; gap: 10px; margin: 8px 14px 0 0; padding: 5px 10px;
+  background: color-mix(in srgb, var(--fc, var(--te)) 10%, var(--b2, #141a22));
+  border-left: 2px solid var(--fc, var(--te, #3ec0d0));
+}
+.ch-bar.edit { --fc: var(--warn, #d0a840); }
+.ch-bar-t { flex: 1; min-width: 0; font-size: 11.5px; color: var(--t3, #8aa0b0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-bar-t b { color: var(--fc, var(--te)); }
+.ch-bar-x { border: none; background: none; cursor: pointer; color: var(--t3, #8aa0b0); padding: 2px 4px; display: inline-flex; }
+.ch-bar-x:hover { color: var(--err, #e05050); }
+
+/* Палитра значков */
+.ch-emo {
+  display: grid; grid-template-columns: repeat(16, 1fr); gap: 1px; margin: 8px 14px 0 0; padding: 6px;
+  background: var(--b2, #141a22); border: 1px solid var(--w3, #2a3340); max-height: 118px; overflow-y: auto;
+}
+.ch-emo-b { border: none; background: none; cursor: pointer; font-size: 15px; line-height: 1; padding: 3px 0; }
+.ch-emo-b:hover { background: var(--w2, #232c36); }
+.ch-emo-t {
+  position: absolute; right: 6px; bottom: 6px; z-index: 2; border: none; background: none; cursor: pointer;
+  color: var(--t4, #6a7a88); line-height: 1; padding: 3px 5px; display: inline-flex;
+}
+.ch-emo-t:hover, .ch-emo-t.on { color: var(--te, #3ec0d0); }
+
+/* Подсказка @: список над полем, первый кандидат подсвечен */
+.ch-at-box { display: none; margin: 8px 14px 0 0; background: var(--b2, #141a22); border: 1px solid var(--w3, #2a3340); }
+.ch-at-box.on { display: flex; flex-direction: column; }
+.ch-at-i {
+  border: none; background: none; cursor: pointer; text-align: left; padding: 5px 10px;
+  color: var(--t2, #b6c4d0); font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 600; font-size: 13px;
+}
+.ch-at-i:hover, .ch-at-i.on { background: var(--te, #3ec0d0); color: #04240f; }
+
+/* Ввод стал многострочным: textarea вместо input */
+textarea.ch-inp { resize: none; overflow-y: auto; line-height: 1.45; padding-right: 34px; display: block; }
+.ch-who { cursor: pointer; }
+.ch-who:hover .ch-who-n { color: var(--te, #3ec0d0); }
+.ch-room-b.ment { background: var(--warn, #d0a840); }
+.ch-fab-badge.ment { background: var(--warn, #d0a840); color: #241a04; }
+
+@media (max-width: 640px) {
+  .ch-emo { grid-template-columns: repeat(8, 1fr); margin-right: 0; }
+  .ch-bar, .ch-at-box { margin-right: 0; }
+  .ch-acts { top: -8px; right: 4px; }
+  .ch-down { right: 8px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   СТИКЕРЫ (chat_sticker.js + _chat_stickers.sql)
+   Раскладка целиком в долях — здесь только «коробка» и слои. Ни одной
+   координаты: подпись и окно флага позиционирует stHtml() инлайном,
+   потому что их двигают мышью в админке.
+   ══════════════════════════════════════════════════════════════════ */
+.st-wrap { position: relative; display: block; overflow: hidden; flex-shrink: 0; }
+.st-base { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* Окно под флаг: подложка под ним обязательна — гербы бывают с прозрачным
+   фоном, и без неё флаг «висит в воздухе» поверх рисунка. */
+.st-flag {
+  position: absolute; display: block; overflow: hidden;
+  background: rgba(6, 9, 14, .55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22);
+}
+.st-flag img { width: 100%; height: 100%; display: block; }
+/* Подпись: контур рисует -webkit-text-stroke с paint-order — обводка уходит
+   ПОД букву, иначе штрих съедает тонкие места начертания. */
+.st-txt {
+  position: absolute; display: block; word-break: break-word; overflow: hidden;
+  paint-order: stroke fill; -webkit-text-stroke-linejoin: round;
+  transform-origin: 50% 50%; pointer-events: none;
+}
+
+/* Стикер в ленте: без плашки-подложки — картинка сама себе сообщение */
+.ch-st-msg { margin: 2px 0 1px; }
+.ch-st-msg .st-wrap { max-width: 100%; }
+.ch-st-mini { flex-shrink: 0; line-height: 0; }
+
+/* Палитра */
+.ch-st-pan {
+  margin: 8px 14px 0 0; padding: 8px; background: var(--b2, #141a22);
+  border: 1px solid var(--w3, #2a3340); max-height: 232px; overflow-y: auto;
+}
+.ch-st-pan.empty { font-size: 11.5px; color: var(--t4, #6a7a88); line-height: 1.6; }
+.ch-st-packs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.ch-st-pk {
+  border: 1px solid var(--w3, #2a3340); background: none; cursor: pointer; padding: 3px 10px;
+  color: var(--t3, #8aa0b0); font-family: var(--font-mono, monospace); font-size: 9px;
+  letter-spacing: .14em; text-transform: uppercase;
+}
+.ch-st-pk:hover { color: var(--te, #3ec0d0); border-color: var(--te, #3ec0d0); }
+.ch-st-pk.on { background: var(--te, #3ec0d0); border-color: var(--te, #3ec0d0); color: #04240f; }
+.ch-st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.ch-st-b {
+  border: 1px solid transparent; background: var(--b1, #0d1117); cursor: pointer; padding: 2px;
+  display: flex; align-items: center; justify-content: center; line-height: 0;
+}
+.ch-st-b:hover { border-color: var(--te, #3ec0d0); }
+.ch-st-t {
+  position: absolute; right: 30px; bottom: 6px; z-index: 2; border: none; background: none; cursor: pointer;
+  color: var(--t4, #6a7a88); line-height: 1; padding: 3px 5px; display: inline-flex;
+}
+.ch-st-t:hover, .ch-st-t.on { color: var(--te, #3ec0d0); }
+textarea.ch-inp { padding-right: 58px; }
+.ch-bar.st { --fc: var(--te, #3ec0d0); }
+
+@media (max-width: 640px) {
+  .ch-st-pan { margin-right: 0; max-height: 190px; }
+  .ch-st-msg .st-wrap { width: 168px !important; height: 168px !important; }
+}

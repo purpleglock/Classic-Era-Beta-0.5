@@ -245,7 +245,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['rules', '↯ Правила'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['promo', '🎁 Промокоды'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['saga', '📜 Хроника'], ['intelart', '🕵 Разведка'], ['artifacts', '🎒 Артефакты', (AD.artKinds || []).length], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['rules', '↯ Правила'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['promo', '🎁 Промокоды'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['saga', '📜 Хроника'], ['intelart', '🕵 Разведка'], ['stickers', '🩹 Стикеры', (typeof AST !== 'undefined' && AST.loaded) ? AST.list.length : null], ['artifacts', '🎒 Артефакты', (AD.artKinds || []).length], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -269,6 +269,11 @@ function adPaint() {
       ? adSagaPanel()
       : '<div style="color:#ff7a7a">admin_saga.js не загружен</div>';
     else if (AD.tab === 'intelart')  tabContent = adIntelArtPanel();
+    // Стикеры чата (admin_stickers.js): раскладка подписи и окна под флаг
+    // державы. Отдельный файл — там свой редактор с тягой мышью.
+    else if (AD.tab === 'stickers')  tabContent = (typeof adStickersPanel === 'function')
+      ? adStickersPanel()
+      : '<div style="color:#ff7a7a">admin_stickers.js не загружен</div>';
     else if (AD.tab === 'artifacts') tabContent = adArtKindsPanel();
     else if (AD.tab === 'shipart')   tabContent = adShipArtPanel();
     else if (AD.tab === 'weapons')   tabContent = adWeaponImgPanel();

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Стенд редактора стикеров</title>
+<link rel="stylesheet" href="css/index.css?v=stand">
+<style>body{background:#0d1117;margin:0;font-family:'Rajdhani',system-ui,sans-serif;color:#e8edf2}
+ #pg{padding:20px}</style>
+</head><body>
+<div id="pg"></div>
+<script>
+// ── Заглушки core.js + admin.js: стенд не ходит в базу ──
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toast = (t, k) => console.log('[toast]', k || '', t);
+const AD = { tab: 'stickers' };
+const AD_PORT_SERVER = 'http://127.0.0.1:8787';
+const adPortServerAlive = async () => false;
+const compressImageFile = async f => f;
+// В базе пусто — как у свежей установки. Файлы в папке есть (index.json),
+// значит админка обязана предложить «завести все новые».
+const ROWS = [];
+async function dbGet(t) { return t === 'chat_stickers' ? JSON.parse(JSON.stringify(ROWS)) : []; }
+async function dbPost(t, b) { window.__lastPost = b; return Array.isArray(b) ? b : [b]; }
+async function dbPatch(t, q, b) { window.__lastPatch = b; return [b]; }
+async function dbDel() { return null; }
+function adPaint() { document.getElementById('pg').innerHTML = adStickersPanel(); }
+</script>
+<script src="chat_sticker.js?v=stand"></script>
+<script src="admin_stickers.js?v=stand"></script>
+<script>adPaint();</script>
+</body></html>

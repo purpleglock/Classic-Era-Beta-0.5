@@ -44,7 +44,23 @@ const ALLOWED_DIRS = {
   artifacts: 'assets/artifacts',    // арты артефактов агентуры (<ключ>.webp; каталог spy_artifact_kinds)
   pcworlds:  'assets/precursor/worlds', // сцены хроник сеткой раса × эпоха (?sub=<раса>, имя E8_1.webp)
   pcsaga:    'assets/precursor/saga',   // арт одной хроники (?sub=<мир>: who_<кто>, bg_<узел>, door)
+  stickers:  'assets/stickers',     // стикеры чата (<ключ>.webp; раскладка — в админке)
 };
+
+// ── Список стикеров ───────────────────────────────────────────────────────
+// Тот же index.json, что пишет tools/stickers.bat. Обновляем и здесь: иначе
+// картинка, залитая из админки, есть на диске, но в списке её нет — и на другой
+// машине (или после перезагрузки страницы) админка считает её «незаведённой».
+const ST_EXT = ['.webp', '.png', '.jpg', '.jpeg', '.gif', '.svg'];
+function stickersManifest() {
+  const dir = path.join(ROOT, ALLOWED_DIRS.stickers);
+  fs.mkdirSync(dir, { recursive: true });
+  const list = fs.readdirSync(dir)
+    .filter(f => ST_EXT.includes(path.extname(f).toLowerCase()))
+    .map(f => ({ key: path.basename(f, path.extname(f)), ext: path.extname(f).slice(1).toLowerCase() }));
+  fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify(list), 'utf8');
+  console.log(`[stickers] список обновлён: ${list.length}`);
+}
 
 // ── Сетка «раса × эпоха»: та же раскладка, что у батника ──────────────────
 // Заливка сцен отличается от прочих артов двумя вещами: файл ложится в
@@ -189,6 +205,7 @@ const server = http.createServer((req, res) => {
         // Клиент читает клетки только из манифеста: файл без него невидим.
         if (dirKey === 'pcworlds') { try { PCW.manifest(); } catch (e) { console.error('[upload] манифест', e); } }
         if (dirKey === 'pcsaga')   { try { PCW.sagaManifest(); } catch (e) { console.error('[upload] манифест хроник', e); } }
+        if (dirKey === 'stickers') { try { stickersManifest(); } catch (e) { console.error('[upload] список стикеров', e); } }
         json(res, 200, { ok: true, url: rel, name });
       });
     });
@@ -217,6 +234,7 @@ const server = http.createServer((req, res) => {
     fs.unlink(path.join(absDir, name), (err) => {
       if (err && err.code !== 'ENOENT') { console.error('[delete]', err); return json(res, 500, { ok: false, error: String(err.message || err) }); }
       console.log(`[delete] ${relDir}/${name}`);
+      if (dirKey === 'stickers') { try { stickersManifest(); } catch (e) { console.error('[delete] список стикеров', e); } }
       if (dirKey === 'pcworlds') { try { PCW.manifest(); } catch (e) { console.error('[delete] манифест', e); } }
       if (dirKey === 'pcsaga')   { try { PCW.sagaManifest(); } catch (e) { console.error('[delete] манифест хроник', e); } }
       json(res, 200, { ok: true });

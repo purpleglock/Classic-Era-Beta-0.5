@@ -563,3 +563,54 @@
   border-top: var(--deco-frame-w, 1px) solid var(--w1);
   font-family: var(--font-mono); font-size: 8.5px; letter-spacing: calc(.08em * var(--deco-ls-mult, 1)); color: var(--t4); }
 .bbx-news-tick { color: var(--gd); opacity: var(--deco-tick-op, 1); letter-spacing: 1px; }
+
+/* ══════════════════════════════════════════════════════════════════
+   РЕДАКТОР СТИКЕРОВ (admin_stickers.js)
+   Холст показывает стикер ровно так, как его увидят в чате (рисует общий
+   stHtml), а сверху лежат две прозрачные ручки. Поэтому ручкам нельзя
+   давать фон — только пунктир: любая заливка соврёт о том, как стикер
+   выглядит на самом деле.
+   ══════════════════════════════════════════════════════════════════ */
+.ast-canvas {
+  position: relative; user-select: none; flex-shrink: 0;
+  background:
+    repeating-conic-gradient(#171d26 0 25%, #10151c 0 50%) 0 0 / 18px 18px;
+  box-shadow: inset 0 0 0 1px var(--w3, #2a3340);
+  cursor: default;
+}
+.ast-canvas .st-wrap { width: 100% !important; height: 100% !important; }
+.ast-h {
+  position: absolute; box-sizing: border-box; cursor: move;
+  outline: 1px dashed color-mix(in srgb, var(--te, #3ec0d0) 85%, transparent);
+  outline-offset: 0;
+}
+.ast-h-flag { outline-color: color-mix(in srgb, var(--warn, #d0a840) 90%, transparent); }
+.ast-h:hover { outline-style: solid; }
+.ast-h-lbl {
+  position: absolute; left: 0; top: -14px; font-family: var(--font-mono, monospace);
+  font-size: 8px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--te, #3ec0d0); background: rgba(6, 9, 14, .8); padding: 0 4px; white-space: nowrap;
+}
+.ast-h-flag .ast-h-lbl { color: var(--warn, #d0a840); }
+.ast-grip {
+  position: absolute; width: 11px; height: 11px; background: var(--te, #3ec0d0);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .6);
+}
+.ast-grip-e  { right: -6px; top: 50%; margin-top: -5px; cursor: ew-resize; }
+.ast-grip-se { right: -6px; bottom: -6px; cursor: nwse-resize; background: var(--warn, #d0a840); }
+
+.ast-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.ast-in {
+  flex: 1; min-width: 0; padding: 6px 8px; background: var(--b1, #0d1117);
+  border: 1px solid var(--w3, #2a3340); color: var(--t1, #e8edf2); font-size: 12px; font-family: inherit;
+}
+.ast-in:focus { outline: none; border-color: var(--te, #3ec0d0); }
+.ast-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--t3, #8aa0b0); }
+.ast-sect {
+  font-family: var(--font-mono, monospace); font-size: 9px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--t4, #6a7a88); margin: 14px 0 8px; padding-top: 10px; border-top: 1px solid var(--w2, #2a3340);
+}
+.ast-f { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 11.5px; color: var(--t3, #8aa0b0); }
+.ast-f span { width: 96px; flex-shrink: 0; }
+.ast-f input[type=range] { flex: 1; accent-color: var(--te, #3ec0d0); }
+.ast-f b { width: 44px; text-align: right; font-family: var(--font-mono, monospace); font-size: 10px; color: var(--t2, #b6c4d0); }

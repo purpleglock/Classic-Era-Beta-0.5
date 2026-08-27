@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Стенд чата «Гиперсвязь»</title>
+<link rel="stylesheet" href="css/index.css?v=stand">
+<style>body{background:#0d1117;margin:0;font-family:'Rajdhani',system-ui,sans-serif}
+ .stand{padding:24px;color:#8aa0b0;font-size:13px}</style>
+</head><body>
+<div class="stand">Стенд: чат открывается сам. Проверяем ответ, реакции, правку, склейку, «печатает…».</div>
+<script>
+// ── Заглушки core.js: стенд не ходит ни в базу, ни в realtime ──
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toast = (t) => console.log('[toast]', t);
+const user = { id: 'me', role: 'player' };
+const userProfile = { display_name: 'Setis241', avatar_url: '' };
+const T0 = Date.now();
+const MSG = [
+  { id: 1, author_id: 'kr', room: 'global', name: 'Крафтер', fac: 'Альтруистический машинный кооператив Ерктолов', fc: '#c04040', staff: false, body: 'Не хватает ещё космоджихадистов', created_at: new Date(T0 - 7200e3).toISOString() },
+  { id: 2, author_id: 'kr', room: 'global', name: 'Крафтер', fac: 'Альтруистический машинный кооператив Ерктолов', fc: '#c04040', staff: false, body: 'Я судя по разным добрым делам фраки вообще роботов-коммунистов построил. Осталось разобраться в управлении', created_at: new Date(T0 - 7100e3).toISOString() },
+  { id: 3, author_id: 'kr', room: 'global', name: 'Крафтер', fac: 'Альтруистический машинный кооператив Ерктолов', fc: '#c04040', staff: false, body: 'У меня на территории владений есть Терра, но императора не нашёл... Какой-то **некрон** получается я', created_at: new Date(T0 - 7000e3).toISOString() },
+  { id: 4, author_id: 'me', room: 'global', name: 'Setis241', fac: 'Последний оплот человечества', fc: '#3ec0d0', staff: false, body: '@Крафтер в галактике ещё много терр, может на одной из них и будет Бог-Император. Гляди: https://example.org/terra и `codex.md`', created_at: new Date(T0 - 600e3).toISOString(), re: 3 },
+  { id: 5, author_id: 'kr', room: 'global', name: 'Крафтер', fac: 'Альтруистический машинный кооператив Ерктолов', fc: '#c04040', staff: false, body: 'Главное что бы он не начал крестовый поход. Я так понимаю нам ангелов хватает с излишком', created_at: new Date(T0 - 300e3).toISOString() },
+  { id: 6, author_id: 'md', room: 'global', name: 'Хранитель', fac: '', fc: '', staff: true, body: 'Тише в эфире, ~~смертные~~ уважаемые.', created_at: new Date(T0 - 120e3).toISOString(), del: false },
+  { id: 7, author_id: 'me', room: 'global', name: 'Setis241', fac: 'Последний оплот человечества', fc: '#3ec0d0', staff: false, body: 'принято', created_at: new Date(T0 - 60e3).toISOString(), ed: new Date(T0 - 50e3).toISOString() },
+];
+const RX = [
+  { msg_id: 3, emoji: '💀', author_id: 'me', name: 'Setis241' },
+  { msg_id: 3, emoji: '💀', author_id: 'md', name: 'Хранитель' },
+  { msg_id: 3, emoji: '🔥', author_id: 'kr', name: 'Крафтер' },
+  { msg_id: 5, emoji: '👍', author_id: 'md', name: 'Хранитель' },
+];
+const ROOMS = [
+  { room: 'global', scope: 'global', subj: '', name: 'Общий', subtitle: 'все, кто в игре' },
+  { room: 'fishing', scope: 'fishing', subj: '', name: 'Рыбалка', subtitle: 'у воды' },
+  { room: 'fac:f1', scope: 'fac', subj: 'f1', name: 'Последний оплот человечества', subtitle: 'только состав державы' },
+];
+let NEXT = 100;
+const STICKERS = [
+  { key: 'test-hero', name: 'Герой', pack: 'Общие', ext: 'svg', ord: 10, enabled: true,
+    cfg: { text: { on: true, mode: 'author', x: .06, y: .74, w: .88, size: .12, align: 'center', font: 'poster', color: '#ffffff', stroke: '#04121b', rot: -3, caps: true },
+           flag: { on: true, x: .586, y: .586, w: .293, h: .293, rot: 0, fit: 'cover' } } },
+];
+async function dbGet(t, q = '') {
+  if (t === 'chat_stickers') return STICKERS;
+  if (t === 'chat_messages') return MSG.filter(m => q.includes('room=eq.global')).slice().reverse();
+  if (t === 'chat_reactions') return q.includes('global') ? RX : [];
+  if (t === 'faction_applications') return [{ name: 'Последний оплот человечества', color: '#3ec0d0', herald_url: 'assets/icons/flag-demo.svg' }];
+  return [];
+}
+async function dbPost(t, b) {
+  if (t === 'rpc/chat_my_rooms') return ROOMS;
+  if (t === 'chat_messages') { const row = { id: ++NEXT, author_id: 'me', created_at: new Date().toISOString(), ...b }; MSG.push(row); return [row]; }
+  if (t === 'chat_reactions') { RX.push({ msg_id: b.msg_id, emoji: b.emoji, author_id: 'me', name: b.name }); return [b]; }
+  return [];
+}
+async function dbPatch(t, q, b) {
+  const id = +String(q).split('eq.')[1];
+  const m = MSG.find(x => x.id === id); if (!m) return [];
+  Object.assign(m, b, b.body ? { ed: new Date().toISOString() } : {}, b.del ? { body: 'сообщение удалено' } : {});
+  return [m];
+}
+async function dbDel() { return null; }
+async function apiFetch() { return null; }
+// Realtime не нужен: живую доставку на стенде изображает сама отправка.
+const sb = { channel: () => ({ on() { return this; }, subscribe() { return this; }, untrack: async () => {}, track: async () => {}, presenceState: () => ({}) }), removeChannel() {} };
+</script>
+<script src="chat_sticker.js?v=stand"></script>
+<script src="chat.js?v=stand"></script>
+<script>
+setTimeout(() => {
+  // «На связи» и «печатает…» подкладываем руками — presence/realtime заглушены.
+  CH.online = [
+    { name: 'Крафтер', fac: 'Альтруистический машинный кооператив Ерктолов', fc: '#c04040', staff: false },
+    { name: 'Хранитель', fac: '', fc: '', staff: true },
+    { name: 'Setis241', fac: 'Последний оплот человечества', fc: '#3ec0d0', staff: false },
+  ];
+  CH.typ = { kr: { name: 'Крафтер', at: Date.now() + 6e5 } };
+  chToggle();
+  setTimeout(() => { chRenderOnline(); chRenderTyping(); }, 400);
+}, 200);
+</script>
+</body></html>
