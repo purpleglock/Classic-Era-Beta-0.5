@@ -821,8 +821,8 @@ function chRender() {
       </div>
       <div class="ch-main">
         <select class="ch-room-sel" id="ch-room-sel" onchange="chPickRoom(this.value)"></select>
-        <div class="ch-log-wrap">
-          <div class="ch-log" id="ch-log" onscroll="chOnScroll()" onmouseover="chActsOver(event)" onmouseleave="CH.hover=0;chRenderActs()"></div>
+        <div class="ch-log-wrap" onmouseover="chActsOver(event)" onmouseleave="chActsOut(event)">
+          <div class="ch-log" id="ch-log" onscroll="chOnScroll()"></div>
           <div class="ch-acts" id="ch-acts" style="display:none"></div>
           <button class="ch-down" id="ch-down" onclick="chToBottom()" style="display:none">${chIco('down', 14)}<span id="ch-down-n"></span></button>
         </div>
@@ -1000,12 +1000,27 @@ function chMore() { CH.cap += 150; chRenderLog(); }
 // Рисовать по четыре кнопки в каждой реплике значит держать в DOM больше тысячи
 // узлов со значками ради четырёх, видимых под курсором. Панель одна, а ездит по
 // наведению; при скролле её просто пересчитываем.
+// ⚠️ ПАНЕЛЬ ЛЕЖИТ НАД РЕПЛИКОЙ, ВНЕ ЕЁ ГРАНИЦ — и это ловушка. Пока слушателем
+// была сама лента, курсор, поднимаясь с реплики на панель, ВЫХОДИЛ из ленты:
+// панель гасла, курсор оказывался снова над репликой, панель зажигалась — и
+// так по кругу. Она мигала и не давала нажать.
+// Поэтому: слушает ОБЁРТКА (в ней лежит и лента, и панель), а событие с самой
+// панели цели не меняет — иначе наведение на кнопку означало бы «ни над какой
+// репликой не стою».
 function chActsOver(e) {
+  if (e.target.closest && e.target.closest('#ch-acts')) return;   // курсор на кнопках
   const el = e.target.closest && e.target.closest('.ch-msg');
   const id = el ? +el.id.slice(5) : 0;
   if (id === CH.hover) return chPlaceActs();
   CH.hover = id;
   chRenderActs();
+}
+// Гасим, только когда ушли из обёртки НАСОВСЕМ: переход лента ↔ панель — это
+// тоже mouseleave, но relatedTarget остаётся внутри.
+function chActsOut(e) {
+  const to = e.relatedTarget;
+  if (to && to.closest && to.closest('.ch-log-wrap')) return;
+  CH.hover = 0; chRenderActs();
 }
 function chRenderActs() {
   const box = document.getElementById('ch-acts'); if (!box) return;

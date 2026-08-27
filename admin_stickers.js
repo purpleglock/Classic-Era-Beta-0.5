@@ -134,7 +134,7 @@ function astEditor(s) {
     ${t.on ? `<div class="ast-h ast-h-text" data-what="text" style="left:${(t.x * 100).toFixed(2)}%;top:${(t.y * 100).toFixed(2)}%;width:${(t.w * 100).toFixed(2)}%;height:${(t.size * 1.35 * 100).toFixed(2)}%">
         <span class="ast-h-lbl">подпись</span><i class="ast-grip ast-grip-e" data-grip="w"></i></div>` : ''}
     ${f.on ? `<div class="ast-h ast-h-flag" data-what="flag" style="left:${(f.x * 100).toFixed(2)}%;top:${(f.y * 100).toFixed(2)}%;width:${(f.w * 100).toFixed(2)}%;height:${(f.h * 100).toFixed(2)}%">
-        <span class="ast-h-lbl">флаг</span><i class="ast-grip ast-grip-se" data-grip="wh"></i></div>` : ''}
+        <span class="ast-h-lbl">флаг (под картинкой)</span><i class="ast-grip ast-grip-se" data-grip="wh"></i></div>` : ''}
   </div>`;
 
   const num = (lbl, key, val, min, max, step) => `<label class="ast-f"><span>${lbl}</span>
@@ -189,9 +189,15 @@ function astEditor(s) {
         <label class="ast-chk"><input type="checkbox" ${t.caps ? 'checked' : ''} onchange="astSet('text.caps', this.checked)"> ПРОПИСНЫЕ</label>
       </div>
 
-      <div class="ast-sect">Окно под флаг державы</div>
+      <div class="ast-sect">Флаг державы — в вырез картинки</div>
+      <div style="font-size:10.5px;color:var(--t4,#6a7a88);margin:-4px 0 8px;line-height:1.6">
+        Флаг лежит <b>под</b> рисунком и виден там, где рисунок прозрачный. Обводи ту область,
+        где в картинке дырка — знамя за спиной, вставка в щите, экран. Если картинка сплошная
+        (jpg без прозрачности), включи «поверх», иначе флага не будет видно.
+      </div>
       <div class="ast-row">
         <label class="ast-chk"><input type="checkbox" ${f.on ? 'checked' : ''} onchange="astSet('flag.on', this.checked)"> показывать</label>
+        <label class="ast-chk"><input type="checkbox" ${f.over ? 'checked' : ''} onchange="astSet('flag.over', this.checked)"> поверх картинки</label>
         <select onchange="astSet('flag.fit', this.value)" class="ast-in" style="max-width:150px">
           <option value="cover"${f.fit === 'cover' ? ' selected' : ''}>заполнить (обрежет)</option>
           <option value="contain"${f.fit === 'contain' ? ' selected' : ''}>вписать целиком</option>
@@ -220,7 +226,7 @@ function astRepaint() {
   const c = stCfg(s.cfg), t = c.text, f = c.flag;
   box.innerHTML = stHtml(s, { text: AST.demo, name: 'Setis241', flag: AST_FLAG_DEMO, size: AST.side, box: true })
     + (t.on ? `<div class="ast-h ast-h-text" data-what="text" style="left:${(t.x * 100).toFixed(2)}%;top:${(t.y * 100).toFixed(2)}%;width:${(t.w * 100).toFixed(2)}%;height:${(t.size * 1.35 * 100).toFixed(2)}%"><span class="ast-h-lbl">подпись</span><i class="ast-grip ast-grip-e" data-grip="w"></i></div>` : '')
-    + (f.on ? `<div class="ast-h ast-h-flag" data-what="flag" style="left:${(f.x * 100).toFixed(2)}%;top:${(f.y * 100).toFixed(2)}%;width:${(f.w * 100).toFixed(2)}%;height:${(f.h * 100).toFixed(2)}%"><span class="ast-h-lbl">флаг</span><i class="ast-grip ast-grip-se" data-grip="wh"></i></div>` : '');
+    + (f.on ? `<div class="ast-h ast-h-flag" data-what="flag" style="left:${(f.x * 100).toFixed(2)}%;top:${(f.y * 100).toFixed(2)}%;width:${(f.w * 100).toFixed(2)}%;height:${(f.h * 100).toFixed(2)}%"><span class="ast-h-lbl">флаг (под картинкой)</span><i class="ast-grip ast-grip-se" data-grip="wh"></i></div>` : '');
 }
 // Кнопку «Сохранить» подсвечивает следующая полная перерисовка; во время тяги
 // мышью её не трогаем — иначе каждое движение дёргало бы всю панель.

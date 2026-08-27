@@ -38,7 +38,8 @@ const ST_TEXT_MODES = { author: 'Пишет отправитель', fixed: 'В�
 const ST_CFG_DEF = {
   text: { on: true, mode: 'author', x: .06, y: .72, w: .88, size: .13, align: 'center',
           font: 'poster', color: '#ffffff', stroke: '#000000', rot: 0, caps: true, fixed: '' },
-  flag: { on: true, x: .62, y: .62, w: .3, h: .3, rot: 0, fit: 'cover' },
+  // over=false — флаг лежит ПОД картинкой и виден в её прозрачном вырезе.
+  flag: { on: true, x: .62, y: .62, w: .3, h: .3, rot: 0, fit: 'cover', over: false },
 };
 function stCfg(cfg) {
   const c = (cfg && typeof cfg === 'object') ? cfg : {};
@@ -86,15 +87,22 @@ function stHtml(s, opt) {
       ${t.caps ?? font.caps ? 'text-transform:uppercase;' : ''}
       transform:rotate(${stNum(t.rot, 0)}deg);">${esc(body)}</span>` : '';
 
-  // Окно под флаг: сначала подложка (чтобы прозрачный герб не висел в воздухе),
-  // сверху сам флаг. Нет флага — окна не рисуем вовсе, дырки в стикере не надо.
-  const flag = (f.on && o.flag) ? `<span class="st-flag" style="
+  // ⚠️ ФЛАГ ЛЕЖИТ ПОД КАРТИНКОЙ И ВИДЕН В ЕЁ ВЫРЕЗЕ. Смысл рамки на рисунке —
+  // ПУСТОЕ МЕСТО (прозрачные пиксели), которое флаг собой заполняет: тогда он
+  // часть композиции — знамя за спиной, вставка в щите, экран за персонажем.
+  // Положенный ПОВЕРХ, он был бы наклейкой на рисунке и перекрывал бы его.
+  // Поэтому порядок слоёв: флаг → картинка → подпись.
+  // Для стикеров без выреза (сплошной jpg) есть флажок over: там флаг сверху,
+  // иначе его просто не было бы видно.
+  const flag = (f.on && o.flag) ? `<span class="st-flag${f.over ? ' over' : ''}" style="
       left:${stPct(f.x)};top:${stPct(f.y)};width:${stPct(f.w)};height:${stPct(f.h)};
       transform:rotate(${stNum(f.rot, 0)}deg);">
       <img src="${esc(o.flag)}" alt="" loading="lazy" style="object-fit:${f.fit === 'contain' ? 'contain' : 'cover'}">
     </span>` : '';
 
-  const inner = `<img class="st-base" src="${esc(stUrl(s))}" alt="${esc(s.name || s.key)}" loading="lazy">${flag}${txt}`;
+  const inner = f.over
+    ? `<img class="st-base" src="${esc(stUrl(s))}" alt="${esc(s.name || s.key)}" loading="lazy">${flag}${txt}`
+    : `${flag}<img class="st-base" src="${esc(stUrl(s))}" alt="${esc(s.name || s.key)}" loading="lazy">${txt}`;
   if (o.box) return inner;
   return `<span class="st-wrap" style="width:${side}px;height:${side}px">${inner}</span>`;
 }

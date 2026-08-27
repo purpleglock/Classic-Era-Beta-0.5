@@ -215,7 +215,7 @@ body.route-map #ch-fab { display: none !important; }
   font-size: 13px; color: var(--t4, #6a7a88); font-style: italic;
 }
 .ch-empty.sm { font-size: 11px; margin: 8px 0; padding: 0; text-align: left; }
-.ch-msg { position: relative; display: flex; gap: 12px; align-items: stretch; padding: 0 12px 0 3px; }
+.ch-msg { position: relative; display: flex; gap: 12px; align-items: flex-start; padding: 0 12px 0 3px; }
 .ch-msg::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
   background: linear-gradient(90deg, var(--fc, var(--te)) 0 2px, color-mix(in srgb, var(--b2, #141a22) 82%, transparent) 2px);
@@ -237,9 +237,17 @@ body.route-map #ch-fab { display: none !important; }
    (mask-image). Чей блок — читается по лицу и цвету полосы, а не по обводке.
    ⚠️ Растворение делает mask-image, а НЕ размытие: фильтров на ленте не держим,
    они роняют кадр вместе со всей страницей (см. историю с backdrop-filter). */
-.ch-msg-av { position: relative; flex-shrink: 0; width: 54px; align-self: stretch; overflow: hidden; }
+/* ⚠️ ПОРТРЕТ ОДНОГО РАЗМЕРА У ВСЕХ. Он тянулся на всю высоту плашки
+   (align-self: stretch) — и выходило, что у короткой реплики лицо квадратное,
+   у длинной вытянутое, а у стикера превращалось в вертикальную полосу на 210 px.
+   Высота лица не должна зависеть от длины сообщения: колонка фиксированная,
+   прижата к верху, кадрирование одно и то же везде. */
+.ch-msg-av {
+  position: relative; flex-shrink: 0; width: 54px; height: 54px;
+  align-self: flex-start; margin-top: 9px; overflow: hidden;
+}
 .ch-av-img, .ch-av-ini {
-  display: block; width: 100%; height: 100%; min-height: 44px; object-fit: cover;
+  display: block; width: 100%; height: 100%; object-fit: cover;
   -webkit-mask-image: linear-gradient(90deg, #000 0 58%, transparent 100%);
   mask-image: linear-gradient(90deg, #000 0 58%, transparent 100%);
   opacity: .92;
@@ -324,7 +332,7 @@ body.route-map #ch-fab { display: none !important; }
   .ch-input-row { padding: 10px 0 0; gap: 8px; }
   .ch-inp { padding: 12px 13px; font-size: 16px; }   /* 16px — iOS не зумит при фокусе */
   .ch-send { padding: 0 16px; }
-  .ch-msg-av { width: 44px; }
+  .ch-msg-av { width: 44px; height: 44px; }
   .ch-av-ini { font-size: 15px; padding-left: 6px; }
   .ch-msg-a { font-size: 14px; }
   .ch-msg-f { max-width: 100%; }
@@ -372,7 +380,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
    аватарки — время, всплывающее по наведению. */
 .ch-msg.cont { margin-top: -8px; }
 .ch-msg.cont .ch-msg-main { padding: 3px 0 4px; }
-.ch-msg.cont .ch-msg-av { align-self: flex-start; padding-top: 4px; }
+.ch-msg.cont .ch-msg-av { height: auto; margin-top: 0; padding-top: 4px; }
 .ch-msg.cont::before { clip-path: none; }
 .ch-msg-tw {
   display: inline-block; width: 100%; text-align: right; padding-right: 4px; opacity: 0;
@@ -394,6 +402,9 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
    лежит в .ch-log-wrap, а не внутри реплики. */
 .ch-acts {
   position: absolute; right: 20px; z-index: 4; display: none; gap: 1px;
+  /* Прозрачная кайма сверху: курсор идёт с реплики на кнопки, не пролетая
+     «мимо» — с зазором панель успевала погаснуть между ними. */
+  border-top: 8px solid transparent; margin-top: -8px;
   background: var(--w2, #232c36); padding: 1px;
   clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
 }
@@ -518,18 +529,23 @@ textarea.ch-inp { resize: none; overflow-y: auto; line-height: 1.45; padding-rig
    ══════════════════════════════════════════════════════════════════ */
 .st-wrap { position: relative; display: block; overflow: hidden; flex-shrink: 0; }
 .st-base { display: block; width: 100%; height: 100%; object-fit: contain; }
-/* Окно под флаг: подложка под ним обязательна — гербы бывают с прозрачным
-   фоном, и без неё флаг «висит в воздухе» поверх рисунка. */
+/* ⚠️ ФЛАГ — НИЖНИЙ СЛОЙ. Он лежит ПОД картинкой стикера и виден в её
+   прозрачном вырезе (знамя за спиной, вставка в щите), поэтому здесь ни рамки,
+   ни подложки: любая обводка обвела бы прямоугольник поверх рисунка и выдала
+   бы «наклейку». Форму окну задаёт сам вырез картинки.
+   Класс .over — редкий случай сплошного рисунка без выреза: там флаг сверху,
+   и вот ему кант нужен, иначе он висит в воздухе. */
 .st-flag {
-  position: absolute; display: block; overflow: hidden;
-  background: rgba(6, 9, 14, .55);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22);
+  position: absolute; display: block; overflow: hidden; z-index: 0;
+  background: rgba(6, 9, 14, .35);
 }
+.st-flag.over { z-index: 2; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22); }
+.st-base { position: relative; z-index: 1; }
 .st-flag img { width: 100%; height: 100%; display: block; }
 /* Подпись: контур рисует -webkit-text-stroke с paint-order — обводка уходит
    ПОД букву, иначе штрих съедает тонкие места начертания. */
 .st-txt {
-  position: absolute; display: block; word-break: break-word; overflow: hidden;
+  position: absolute; z-index: 3; display: block; word-break: break-word; overflow: hidden;
   paint-order: stroke fill; -webkit-text-stroke-linejoin: round;
   transform-origin: 50% 50%; pointer-events: none;
 }
