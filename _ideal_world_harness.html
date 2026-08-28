@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Идеальный мир: развёртка и шар</title>
+<!-- Стенд под текстуру идеального мира: слева развёртка как есть, справа —
+     она же, намотанная на шар с терминатором (тем же приёмом, что карта). -->
+<style>
+  body { margin:0; background:#070c14; color:#cfd8e6; font:12px ui-monospace,Consolas,monospace; }
+  .row { padding:8px 12px; }
+  canvas { display:block; }
+  .pair { display:flex; gap:16px; align-items:center; padding:0 12px; flex-wrap:wrap; }
+</style>
+<div class="row" id="msg">…</div>
+<div class="pair">
+  <canvas id="flat" width="512" height="256"></canvas>
+  <canvas id="ball" width="260" height="260"></canvas>
+</div>
+<script>
+(async () => {
+  const raw = await (await fetch('galaxy_map.js?i=1')).text();
+  const src = raw.split(String.fromCharCode(13)).join('');
+  const cut = (name) => {
+    const i = src.indexOf('function ' + name + '(');
+    const j = src.indexOf('\n}\n', i);
+    return src.slice(i, j + 3);
+  };
+  const code = cut('gmIdealTexCanvas');
+  const make = new Function(code + '; let _gmIdealTex=null; return gmIdealTexCanvas;')();
+  const tex = make();
+
+  document.getElementById('flat').getContext('2d').drawImage(tex, 0, 0, 512, 256);
+
+  // шар: клип-круг, двойная отрисовка, терминатор и атмосферный ободок
+  const cv = document.getElementById('ball'), c = cv.getContext('2d');
+  const R = 110, cx = 130, cy = 130;
+  c.save();
+  c.beginPath(); c.arc(cx, cy, R, 0, 6.2832); c.clip();
+  const d = R * 2;
+  c.drawImage(tex, cx - d / 2, cy - d / 2, d, d);
+  const term = c.createRadialGradient(cx - R * 0.35, cy - R * 0.35, R * 0.2, cx, cy, R * 1.15);
+  term.addColorStop(0, 'rgba(255,255,255,0.16)');
+  term.addColorStop(0.55, 'rgba(0,0,0,0)');
+  term.addColorStop(1, 'rgba(0,0,0,0.72)');
+  c.fillStyle = term; c.fillRect(cx - R, cy - R, d, d);
+  c.restore();
+  const rim = c.createRadialGradient(cx, cy, R * 0.92, cx, cy, R * 1.22);
+  rim.addColorStop(0, 'rgba(111,224,200,0.35)');
+  rim.addColorStop(1, 'rgba(111,224,200,0)');
+  c.fillStyle = rim; c.beginPath(); c.arc(cx, cy, R * 1.22, 0, 6.2832); c.fill();
+
+  document.getElementById('msg').textContent = 'Развёртка ' + tex.width + '×' + tex.height + ' — считается в gmIdealTexCanvas().';
+})();
+</script>

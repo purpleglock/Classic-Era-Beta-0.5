@@ -6145,3 +6145,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
    Казна поверх сцены и круглый люк с гербом/портретом главы делали из главной
    второй кабинет и закрывали рисованный фон. Работа и казна живут в кабинете
    (#economy, 30_cabinet.css); новелла — приветствие. Разметку убрал buildHeroVN. */
+
+/* ИДЕАЛЬНЫЙ МИР: точка в досье планет и палитра сцены колонии */
+.hpvnc-dot-ideal{background:#3fc2a0;box-shadow:0 0 6px -1px #6fe0c8}
+.hvp-look-ideal{--hvp-g1:#17564a;--hvp-g2:#071a17}

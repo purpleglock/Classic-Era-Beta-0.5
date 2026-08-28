@@ -4397,6 +4397,7 @@ function _heroColonyBuild(en) {
 // Класс «вида» планеты — тем же правилом, что текстуры большой карты.
 function _hpvcLook(p) {
   if (typeof gmPlanetLook === 'function') { try { return gmPlanetLook(p); } catch (e) {} }
+  if (typeof gmIsIdeal === 'function' && gmIsIdeal(p)) return 'ideal';
   const t = String(p && p.type || '').toLowerCase();
   if (/газ|giant|gas/.test(t)) return 'gas';
   if (/океан|вод|ocean/.test(t)) return 'ocean';
@@ -4623,7 +4624,8 @@ function _heroColonySysBuild(sysId, en) {
     // своя картинка планеты (p.img) → текстура ПОДКЛАССА (planets/cls_<id>.png)
     // → текстура КЛАССА (planets/planet_<look>.png). Раньше схема всегда брала
     // класс — и все миры выглядели одинаковым серым камнем.
-    const texCls = texBase + 'planets/planet_' + look + '.png';
+    const texCls = (look === 'ideal' && typeof gmIdealTexURL === 'function')
+      ? gmIdealTexURL() : texBase + 'planets/planet_' + look + '.png';
     const subId = (typeof gmPlanetSubId === 'function') ? gmPlanetSubId(p) : null;
     const tex = (p.img && String(p.img).trim()) ? texBase + String(p.img).trim()
       : subId ? texBase + 'planets/cls_' + subId + '.png'
@@ -9898,6 +9900,8 @@ function _hvpLook(c) {
 // на canvas-сферу с терминатором и атмосферой (frDrawSphere из faction_reg.js).
 function _hvpTex(look) {
   const base = (typeof GM_BASE !== 'undefined') ? GM_BASE : 'assets/map/';
+  // ИДЕАЛЬНЫЙ МИР: файла у класса нет, развёртка считается картой (gmIdealTexURL).
+  if (look === 'ideal' && typeof gmIdealTexURL === 'function') return gmIdealTexURL();
   return base + 'planets/planet_' + look + '.png';
 }
 // Что это за тело: 'belt' — пояс (рой камней), 'rock' — малое тело (спрайт-камень,
@@ -10255,7 +10259,8 @@ function _hvpBgImg(c, cls) {
   const gen = _hvpCityBg(c, cls);
   if (gen) return gen;                                    // панорама вместо картинки
   const look = _hvpLook(c);
-  const byClass = HVP_ART + 'bg_' + look + '.webp';
+  // Своей панорамы у идеального мира нет — берём земную, она ближе всего.
+  const byClass = HVP_ART + 'bg_' + (look === 'ideal' ? 'terran' : look) + '.webp';
   const personal = (c.planet_pid != null && c.planet_pid !== '') ? HVP_ART + 'bg_p' + c.planet_pid + '.webp' : '';
   const src = personal || byClass;
   const fall = personal

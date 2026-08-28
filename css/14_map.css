@@ -1069,3 +1069,18 @@ textarea.gm-fi{resize:vertical}
 #gm-wrap.gm-editor .gm-linksel img{filter:none;outline:2px solid var(--gd,#7fc4ff);outline-offset:2px}
 #gm-wrap.gm-editor .gm-star::before{transition:none;text-shadow:none}
 #gm-wrap.gm-editor .gm-label{text-shadow:0 1px 3px #000}
+
+/* ── ИДЕАЛЬНЫЙ МИР ─────────────────────────────────────────────────────────
+   Класс, которого не было при сотворении галактики: то, что осталось после
+   переплавки кризисом. На орбитах он обязан читаться СРАЗУ — бирюзовая вода,
+   сочная зелень и тёплый ободок атмосферы, какого нет ни у одного другого
+   класса. Развёртка для крупного плана считается в galaxy_map.js. */
+.gm-look-ideal{box-shadow:0 0 10px -1px #6fe0c8,0 0 3px #000,inset 0 0 4px -1px #d8fff2}
+.gm-look-ideal::before{
+  background:
+    radial-gradient(ellipse 38% 26% at 58% 42%, #3f9a4ac9, transparent 70%),
+    radial-gradient(ellipse 30% 20% at 28% 66%, #2f7a3fc9, transparent 70%),
+    radial-gradient(ellipse 55% 18% at 50% 12%, #ffffff8c, transparent 75%);
+  background-size:200% 100%;
+  mix-blend-mode:overlay;
+  animation:gm-planet-scroll 10s linear infinite}

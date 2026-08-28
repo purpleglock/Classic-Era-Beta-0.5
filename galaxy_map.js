@@ -1885,6 +1885,7 @@ function gmHash01(seed) {
 // Класс «вида» планеты по её типу/зоне — чтобы каменистый, океанический и газовый
 // мир читались по-разному, а не одинаковыми шариками. Возвращает суффикс класса.
 function gmPlanetLook(p) {
+  if (typeof gmIsIdeal === 'function' && gmIsIdeal(p)) return 'ideal';
   const t = (p.type || '').toLowerCase();
   if (/газ|giant|юпитер|gas/.test(t)) return 'gas';
   if (/океан|вод|ocean|water/.test(t)) return 'ocean';
@@ -1916,7 +1917,7 @@ function gmOrbits(sys) {
     const belt = p.kind === 'belt', anom = p.kind === 'anomaly';
     const look = gmPlanetLook(p);
     // размер тела варьируем: газовые гиганты крупнее, камни мельче + лёгкий разброс
-    const base = belt ? 5 : anom ? 8 : look === 'gas' ? 17 : look === 'terran' || look === 'ocean' ? 12 : 10;
+    const base = belt ? 5 : anom ? 8 : look === 'gas' ? 17 : look === 'terran' || look === 'ocean' || look === 'ideal' ? 12 : 10;
     const sz = belt || anom ? base : Math.round(base * (0.85 + hv * 0.4));
     const cls = belt ? ' gm-dot-belt'
       : anom ? ' gm-dot-anom'
@@ -4844,6 +4845,132 @@ function gmmTexImg(src) {
 }
 // Текстура ПОДКЛАССА планеты (глобальная, по id каталога): assets/map/planets/
 // cls_<id>.png. Нет файла → onerror помечает .failed, рендер откатится на класс.
+// ── ТЕКСТУРА ИДЕАЛЬНОГО МИРА ────────────────────────────────
+// ⚠️ Своей картинки у класса НЕТ и взять её неоткуда: `cls_*.png` рисуются
+// руками и заливаются из админки. Пока её не нарисовали, идеальный мир
+// выглядел бы «ещё одним землеподобным» — а он ровно тот мир, ради которого
+// пережили кризис, и обязан читаться с первого взгляда.
+//
+// Поэтому развёртка СЧИТАЕТСЯ: равнопромежуточная текстура 1024×512 печётся
+// один раз в offscreen-канву и дальше живёт как обычная текстура (её же
+// dataURL берут сцены колонии). Океан бирюзовый, материки сочные, облачные
+// вихри и шапки — всё, что отличает живой мир от просто зелёного шарика.
+// Как только появится нарисованный `cls_ideal.png` — он перебьёт эту (см.
+// порядок отката в gmmPaintBody).
+let _gmIdealTex = null, _gmIdealURL = null, _gmIdealImg = null;
+function gmIdealTexCanvas() {
+  if (_gmIdealTex) return _gmIdealTex;
+  const W = 1024, H = 512;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  // детерминированный шум: один и тот же мир между кадрами и перезагрузками
+  let s = 20260828;
+  const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  // Клякса из перекрывающихся эллипсов — так материк получает рваный берег,
+  // а не форму нарисованного пятна.
+  const blob = (x, y, r, col, n, sq) => {
+    c.fillStyle = col;
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * 6.2832, d = rnd() * r;
+      const rx = r * (0.30 + rnd() * 0.45), ry = rx * (sq || (0.45 + rnd() * 0.5));
+      c.beginPath();
+      c.ellipse(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.55, rx, ry, rnd() * 3.14, 0, 6.2832);
+      c.fill();
+    }
+  };
+
+  // ── 1. ОКЕАН: глубина к полюсам, тёплая вода на экваторе ──
+  const oc = c.createLinearGradient(0, 0, 0, H);
+  oc.addColorStop(0.00, '#07354a');
+  oc.addColorStop(0.30, '#0d5f7c');
+  oc.addColorStop(0.50, '#12809b');
+  oc.addColorStop(0.70, '#0d5f7c');
+  oc.addColorStop(1.00, '#07354a');
+  c.fillStyle = oc; c.fillRect(0, 0, W, H);
+
+  // ── 2. МАТЕРИКИ. Порядок важен: сначала отмель, поверх неё суша.
+  // ⚠️ В первой редакции отмели шли ПОСЛЕДНИМИ и залили всё бирюзой —
+  // получился мятный суп вместо материков.
+  const land = [];
+  for (let k = 0; k < 6; k++) {
+    land.push({ x: rnd() * W, y: H * (0.20 + rnd() * 0.60), r: 55 + rnd() * 85 });
+  }
+  land.forEach(m => { c.globalAlpha = 0.55; blob(m.x, m.y, m.r * 1.18, '#3fb8b0', 12); c.globalAlpha = 1; });
+  land.forEach(m => {
+    blob(m.x, m.y, m.r, '#1f5f2f', 22);                                   // лес
+    blob(m.x + (rnd() - 0.5) * m.r * 0.7, m.y + (rnd() - 0.5) * m.r * 0.5, m.r * 0.55, '#357f3c', 14); // луга
+    blob(m.x + (rnd() - 0.5) * m.r * 0.8, m.y + (rnd() - 0.5) * m.r * 0.5, m.r * 0.28, '#8f9a4e', 8);  // степь
+    blob(m.x + (rnd() - 0.5) * m.r * 0.6, m.y + (rnd() - 0.5) * m.r * 0.4, m.r * 0.14, '#c9b678', 5);  // пески
+  });
+  // острова — чтобы карта не читалась «шесть клякс»
+  for (let i = 0; i < 26; i++) {
+    const x = rnd() * W, y = H * (0.16 + rnd() * 0.68), r = 5 + rnd() * 13;
+    c.globalAlpha = 0.5; blob(x, y, r * 1.6, '#3fb8b0', 3); c.globalAlpha = 1;
+    blob(x, y, r, '#2a6f36', 4);
+  }
+
+  // ── 3. ПОЛЯРНЫЕ ШАПКИ ──
+  const cap = (y0, y1) => {
+    const g = c.createLinearGradient(0, y0, 0, y1);
+    g.addColorStop(0, 'rgba(244,252,255,0.95)');
+    g.addColorStop(0.6, 'rgba(226,246,255,0.55)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, Math.min(y0, y1), W, Math.abs(y1 - y0));
+  };
+  cap(0, H * 0.13); cap(H, H * 0.87);
+
+  // ── 4. ОБЛАКА: мягкие клубы, а не нитки ──
+  for (let i = 0; i < 120; i++) {
+    const x = rnd() * W, y = H * (0.08 + rnd() * 0.84);
+    const r = 14 + rnd() * 48;
+    const g = c.createRadialGradient(x, y, 0, x, y, r);
+    const a = 0.10 + rnd() * 0.30;
+    g.addColorStop(0, 'rgba(255,255,255,' + a.toFixed(2) + ')');
+    g.addColorStop(0.55, 'rgba(255,255,255,' + (a * 0.45).toFixed(2) + ')');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g;
+    c.beginPath(); c.ellipse(x, y, r, r * (0.42 + rnd() * 0.28), rnd() * 0.6 - 0.3, 0, 6.2832); c.fill();
+  }
+  // пара циклонов — живая атмосфера читается именно по ним
+  for (let k = 0; k < 3; k++) {
+    const x = rnd() * W, y = H * (0.25 + rnd() * 0.5), R0 = 26 + rnd() * 34;
+    c.lineCap = 'round';
+    for (let i = 0; i < 7; i++) {
+      const f = i / 7;
+      c.globalAlpha = 0.30 - 0.03 * i;
+      c.strokeStyle = '#ffffff';
+      c.lineWidth = 7 - 0.7 * i;
+      c.beginPath();
+      c.ellipse(x, y, R0 * (0.25 + f), R0 * (0.25 + f) * 0.45, f * 2.4, f * 2.0, f * 2.0 + 2.6);
+      c.stroke();
+    }
+    c.globalAlpha = 1;
+  }
+  _gmIdealTex = cv;
+  return cv;
+}
+// dataURL той же развёртки — для сцен, которые берут текстуру по адресу.
+function gmIdealTexURL() {
+  if (_gmIdealURL) return _gmIdealURL;
+  try { _gmIdealURL = gmIdealTexCanvas().toDataURL('image/png'); } catch (e) { _gmIdealURL = ''; }
+  return _gmIdealURL;
+}
+// Готовое Image — карта проверяет complete/naturalWidth, канва этих полей не имеет.
+function gmIdealImg() {
+  if (_gmIdealImg) return _gmIdealImg;
+  const im = new Image();
+  im.onload = () => { if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRasterSoon(); };
+  im.src = gmIdealTexURL();
+  _gmIdealImg = im;
+  return im;
+}
+// Идеальный мир опознаём по флагу карты, а не по названию: имя у него осталось
+// прежним, от съеденного мира («Главный пояс астероидов» и прочее).
+function gmIsIdeal(p) {
+  return !!(p && (p.ideal === true || String(p.type || '').trim() === 'Идеальный мир'));
+}
+
 function gmmSubTexImg(subId) {
   const key = 'sub_' + subId;
   let im = GMM.imgs[key];
@@ -5869,6 +5996,11 @@ function gmmPaintBody(ctx, px, py, sz, p, zc, a, t, starX, starY) {
   let tex = null;
   if (p.img && String(p.img).trim()) {
     tex = gmmTexImg(GM_BASE + p.img);
+  } else if (gmIsIdeal(p)) {
+    // ⟨ПРИРОДА МИРА⟩ у идеального мира своя развёртка (считается, не файл),
+    // но нарисованный cls_ideal.png, если его зальют из админки, её перебьёт.
+    const drawn = GMM_USE_TEX ? gmmSubTexImg('ideal') : null;
+    tex = (drawn && drawn.complete && drawn.naturalWidth > 0 && !drawn.failed) ? drawn : gmIdealImg();
   } else if (GMM_USE_TEX) {
     const subId = gmPlanetSubId(p);
     const sub = subId ? gmmSubTexImg(subId) : null;
@@ -10569,6 +10701,18 @@ function gmmOverview(camS) { return gmmZoomT(camS) < 0.5; }
 
 const GMM_STAR_DOTC = { yellow: '#ffd76a', red: '#ff7a5c', blue: '#8fb8ff', white: '#eaf2ff', green: '#86e6a6' };
 // обзорная «текстовая звезда»: аккуратная светящаяся точка цвета звезды
+// ЯКОРЬ КРИЗИСА: в этой системе светила БОЛЬШЕ НЕТ — на его месте чёрная звезда.
+// ⚠️ Спрайт звезды и её обзорная точка не закрашиваются, а НЕ РИСУЮТСЯ: горизонт
+// уже размером со светило, и лучи PNG торчали из-за него во все стороны.
+function gmmIsAnchor(id) {
+  const lst = GM.anchors;
+  if (!lst || !lst.length) return false;
+  if (GMM._ancKey !== lst) {           // список меняется редко — набор пересобираем по ссылке
+    GMM._ancKey = lst;
+    GMM._ancSet = new Set(lst.map(a => a && a.system_id).filter(Boolean));
+  }
+  return GMM._ancSet.has(id);
+}
 function gmmPaintStarDot(ctx, s, camS) {
   if (s.faction === 'rift') {
     const rr = (s.id === 'rift_core' ? 5.5 : 3.8) / camS;
@@ -10612,6 +10756,16 @@ function gmmPaintStars(ctx, camS) {
     // но сам спрайт/подпись НЕ сплющиваем (только сдвиг позиции, размер сохраняем)
     const _scY = s.y * camS + GMM.ty, _dyW = (gmmTY(_scY) - _scY) / camS;
     ctx.save(); ctx.translate(0, _dyW);
+    // ‹ЧЁРНАЯ ЗВЕЗДА› тело светила рисует gmmPaintAnchors — здесь пропускаем всё:
+    // и обзорную точку, и ореол, и спрайт, и компаньонов. Подписи и значки
+    // системы остаются: система никуда не делась, погасла только звезда.
+    if (gmmIsAnchor(s.id)) {
+      ctx.restore();
+      // ⚠️ ПОДПИСЬ ОСТАВЛЯЕМ: имя системы собирается в этом же проходе, и без
+      // этой строки якорные системы теряли название на карте.
+      if (showAll) cands.push({ s, iw: gmmIconPx(s, camS) / camS, important: true });
+      return;
+    }
     const important = s.is_giant || !!caps[s.id] || s.faction === 'rift';
     // обзорная «текстовая» точка — главное на обзоре, гаснет при приближении
     if (dotsA > 0.01) { ctx.globalAlpha = dotsA; gmmPaintStarDot(ctx, s, camS); ctx.globalAlpha = 1; }
@@ -10929,8 +11083,8 @@ function gmmPaintAnchors(ctx, camS) {
     // «портит индикацию карты». Чёрная звезда — это СВЕТИЛО, и занимать она
     // должна ровно место светила: рисуем поверх спрайта звезды, тем же калибром.
     const iw = gmmIconPx(s, camS) / camS;      // мировые юниты, как у звезды
-    const core = iw * 0.26;                    // горизонт ≈ диск звезды
-    const R = iw * 0.86;                       // корона, гасящая свечение светила
+    const core = iw * 0.32;                    // горизонт ≈ диск звезды
+    const R = iw * 0.98;                       // корона, гасящая свечение светила
     const Rpx = R * camS;
     const sq = 0.94;                           // сплюснутость по y, как у всего на карте
     const seed = Math.abs(s.x * 0.013 + s.y * 0.007) % 6.283;
