@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Стенд «доска боя на телефоне»: реальная разметка боя (.bb-ov > .bbd > canvas.bb-cv),
+     реальный снимок battle_state из живого боя и ПОДДЕЛАННЫЙ devicePixelRatio.
+     Проверяет ровно то, что ломалось: размер 3D-канваса против слоя карты,
+     попадание своих бортов в кадр и панораму одним пальцем. /_bbmob_harness.html?dpr=2.75 -->
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>BB mobile harness</title>
+<link rel="stylesheet" href="css/index.css">
+<style>
+  html,body{margin:0;height:100%;background:#000}
+  #probe{position:fixed;left:0;bottom:0;z-index:99999;background:rgba(0,0,0,.86);color:#8cf0ff;
+         font:11px/1.35 monospace;padding:6px 8px;white-space:pre;max-width:100%;pointer-events:none}
+</style>
+</head><body>
+<div class="bb-ov show" id="bb-ov"></div>
+<div id="probe">…</div>
+<script>
+  // ── подделка dpr до всего остального: bgResize читает window.devicePixelRatio ──
+  const DPR = +(new URLSearchParams(location.search).get('dpr') || 2.75);
+  Object.defineProperty(window, 'devicePixelRatio', { get: () => DPR });
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function jsq(s){return String(s==null?'':s);}
+  function toast(m){console.log('[toast]',m);}
+  var EC = { designs: [] };
+  var user = null;
+  async function ecRpc(fn, body){ if(fn==='battle_state') return JSON.parse(JSON.stringify(window.MOCK_ST)); return {}; }
+</script>
+<script src="_bbmob_state.js"></script>
+<script src="constructors.js"></script>
+<script src="battle_board.js"></script>
+<script type="module">
+  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+  window.THREE = THREE; window.dispatchEvent(new Event('three-ready'));
+</script>
+<script src="battle_gl.js"></script>
+<script>
+function boot(){
+  // Разметка ровно как в bbRender: слой карты .bbd, внутри плоский канвас.
+  const ov = document.getElementById('bb-ov');
+  ov.innerHTML = '<div class="bbd bbf"><canvas id="bb-cv" class="bb-cv"></canvas></div>';
+  BB.id = MOCK_ST.id; BB.st = JSON.parse(JSON.stringify(MOCK_ST));
+  BB.terr = new Map();
+  const _tr = BB.st.terrain;
+  if (Array.isArray(_tr)) _tr.forEach(e => BB.terr.set(e.x+':'+e.y, e.t));
+  else if (_tr && typeof _tr === 'object') for (const k in _tr) BB.terr.set(k, _tr[k]);
+  BB.cv = document.getElementById('bb-cv');
+  BB.ctx = BB.cv.getContext('2d');
+  bbFit();
+  // ── путь bbTry3D: новый канвас рядом с плоским, bgAttach, плоский прячем ──
+  const cv = document.createElement('canvas');
+  cv.className = 'bb-cv';
+  BB.cv.parentElement.insertBefore(cv, BB.cv.nextSibling);
+  if (!bgAttach(cv)) { document.getElementById('probe').textContent = 'НЕТ WebGL'; return; }
+  BB.glCv = cv; BB.glOn = true;
+  BB.cv.style.display = 'none';
+  bgRefresh();
+  window.CV = cv;
+  report();
+}
+// Куда сел кадр: габарит канваса против слоя карты + экранные координаты своих бортов.
+function report(extra){
+  const cv = window.CV, host = cv.parentElement;
+  const hb = host.getBoundingClientRect(), cb = cv.getBoundingClientRect();
+  const mine = (BB.st.units||[]).filter(u=>u.mine);
+  const proj = mine.map(u => {
+    const c = bbHexCenter(u.x,u.y);
+    const v = new THREE.Vector3(c.px, 0, c.py).project(BG.cam);
+    return { sx: Math.round((v.x*0.5+0.5)*cb.width), sy: Math.round((-v.y*0.5+0.5)*cb.height) };
+  });
+  const inView = proj.filter(p => p.sx>=0 && p.sx<=hb.width && p.sy>=0 && p.sy<=hb.height).length;
+  document.getElementById('probe').textContent =
+    'dpr=' + DPR +
+    '\nслой карты : ' + Math.round(hb.width) + '×' + Math.round(hb.height) +
+    '\nканвас CSS : ' + Math.round(cb.width) + '×' + Math.round(cb.height) +
+    '\nканвас буф : ' + cv.width + '×' + cv.height +
+    '\nприцел     : ' + Math.round(BG.tgt.x) + ', ' + Math.round(BG.tgt.z) + ' dist ' + Math.round(BG.dist) +
+    '\nсвои борта : ' + proj.map(p=>p.sx+','+p.sy).join(' | ') +
+    '\nв кадре    : ' + inView + ' из ' + mine.length +
+    (extra ? '\n' + extra : '');
+}
+// Панорама одним пальцем — теми же событиями, что шлёт телефон.
+function drag(x0,y0,x1,y1){
+  const cv = window.CV;
+  const t0 = { x: BG.tgt.x, z: BG.tgt.z };
+  const mk = (t,x,y) => cv.dispatchEvent(new PointerEvent(t, { pointerId:1, pointerType:'touch',
+      clientX:x, clientY:y, bubbles:true, isPrimary:true }));
+  cv.setPointerCapture = () => {}; cv.releasePointerCapture = () => {};
+  mk('pointerdown',x0,y0);
+  for (let i=1;i<=6;i++) mk('pointermove', x0+(x1-x0)*i/6, y0+(y1-y0)*i/6);
+  mk('pointerup',x1,y1);
+  const d = Math.round(Math.hypot(BG.tgt.x-t0.x, BG.tgt.z-t0.z));
+  report('панорама ' + x0+','+y0+' → '+x1+','+y1+' : прицел уехал на ' + d);
+  return d;
+}
+window.report = report; window.drag = drag;
+if (window.THREE) boot(); else window.addEventListener('three-ready', boot);
+</script>
+</body></html>

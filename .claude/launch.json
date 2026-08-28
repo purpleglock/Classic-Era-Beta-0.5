@@ -270,6 +270,26 @@
         "8263"
       ],
       "port": 8263
+    },
+    {
+      "name": "gd-3d",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8271"
+      ],
+      "port": 8271
+    },
+    {
+      "name": "bb-mobile",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8301"
+      ],
+      "port": 8301
     }
   ]
 }

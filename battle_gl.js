@@ -259,6 +259,50 @@ function bgFitDist(w, h, k) {
   return Math.min(BG_DIST_MAX, Math.max(BG_DIST_MIN, Math.max((w * m) / tx, (h * m) / ty)));
 }
 
+// ── САМОПРОВЕРКА СЦЕНЫ ──────────────────────────────────────
+// Отвечает на один вопрос: «этой доской МОЖНО играть прямо сейчас?». Три вещи,
+// каждая из которых уже ломала бой на телефоне и НИКАК не была видна из кода:
+//   1. канвас разъехался со слоем карты (setSize не трогает CSS-размер, и при
+//      dpr>1 канвас раскладывается в dpr раз крупнее — доска уезжает за кромку,
+//      а тап считается по растянутому прямоугольнику);
+//   2. кадр стоит не на своих бортах (магнит к врагу, запоздавшая раскладка);
+//   3. луч из середины экрана вообще не попадает в плоскость поля — тогда
+//      палец не «ведёт» доску.
+// Возвращает {ok, why} — вызывающий решает, чинить или падать на 2D.
+function bgSelfCheck() {
+  if (!BG.ready || !BG.cv) return { ok: false, why: 'сцена не поднята' };
+  const host = BG.cv.parentElement;
+  if (!host) return { ok: false, why: 'канвас вне разметки' };
+  const hb = host.getBoundingClientRect(), cb = BG.cv.getBoundingClientRect();
+  if (!(hb.width > 2 && hb.height > 2)) return { ok: false, why: 'слой карты ещё не разложен' };
+  if (Math.abs(cb.width - hb.width) > 2 || Math.abs(cb.height - hb.height) > 2) {
+    return { ok: false, why: 'канвас ' + Math.round(cb.width) + '×' + Math.round(cb.height)
+                          + ' против слоя ' + Math.round(hb.width) + '×' + Math.round(hb.height) };
+  }
+  if (!bgPickWorld(cb.width / 2, cb.height / 2)) return { ok: false, why: 'середина экрана мимо поля' };
+  // Что обязано быть в кадре: на расстановке — свой сектор подхода (бортов
+  // ещё нет, а требовать в кадре чужие — значит забраковать правильный кадр),
+  // в бою — свои борта, а зрителю дуэли — любые.
+  const s = BB.st || {};
+  let pts, what;
+  if (s.status === 'forming') {
+    const a = (typeof bbMySpawn === 'function') ? bbMySpawn() : null;
+    pts = a ? [bbHexCenter(a.x, a.y)] : [];
+    what = 'сектор подхода';
+  } else {
+    const all = (s.units || []).filter(u => u && u.x != null && u.y != null);
+    const mine = all.filter(u => u.mine);
+    pts = (mine.length ? mine : all).map(u => bbHexCenter(u.x, u.y));
+    what = mine.length ? 'своих бортов' : 'бортов';
+  }
+  if (!pts.length) return { ok: true };
+  const seen = pts.some(c => {
+    const v = new THREE.Vector3(c.px, 0, c.py).project(BG.cam);
+    return v.x >= -1 && v.x <= 1 && v.y >= -1 && v.y <= 1 && v.z <= 1;
+  });
+  return seen ? { ok: true } : { ok: false, why: 'в кадре нет ' + what };
+}
+
 function bgCamHome() {
   const s = BB.st; if (!s) return;
   // Кадр берёт ФЛОТ, а не пустую арену целиком (см. bbFocusBox в battle_board.js):
@@ -293,9 +337,29 @@ function bgResize() {
   // стороны схлопывались в минимум 240×240 — аспект получался 1. Кадр
   // считался по нему и уезжал в полтора раза дальше нужного: поле в треть
   // экрана, корабли по три пикселя. Пока размера нет, камеру не трогаем.
-  if (!(box.width > 2 && box.height > 2)) return;
+  if (!(box.width > 2 && box.height > 2)) {
+    // ⚠️ НЕ ПРОСТО ВЫХОД. Раньше здесь молча возвращались, и если слой карты
+    // в этот момент был ещё не разложен (оверлей боя выезжает переходом),
+    // канвас так и оставался с размером «по умолчанию» до первого поворота
+    // экрана: доска в углу, тапы мимо. Ждём кадр и меряем снова.
+    if (!BG._reWait) {
+      BG._reWait = requestAnimationFrame(() => { BG._reWait = 0; bgResize(); });
+    }
+    return;
+  }
   const w = Math.max(240, Math.round(box.width)), h = Math.max(240, Math.round(box.height));
   BG.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  // ⚠️ CSS-РАЗМЕР КАНВАСА ЗАДАЁМ САМИ. setSize(w,h,false) меняет ТОЛЬКО буфер
+  // кадра (w×dpr), а стиль не трогает — и без него канвас раскладывается по
+  // атрибутам width/height, то есть в dpr раз БОЛЬШЕ слоя карты. На десктопе
+  // (dpr=1) это ничего не значило, поэтому и не всплывало; на телефоне (dpr 2
+  // и выше) доска уезжала за кромку `.bbd{overflow:hidden}`: игрок видел
+  // левый верхний угол кадра — «корабли вне карты», — а тап считался по
+  // РАСТЯНУТОМУ прямоугольнику (bgPickWorld берёт getBoundingClientRect), и
+  // луч уходил выше горизонта: BG.drag не заводился вовсе — поле «не ведётся»
+  // пальцем, гексы выбираются мимо.
+  BG.cv.style.width = w + 'px';
+  BG.cv.style.height = h + 'px';
   BG.renderer.setSize(w, h, false);
   BG.cam.aspect = w / h;
   BG.cam.updateProjectionMatrix();
@@ -363,7 +427,13 @@ function bgBindInput() {
       BG.drag = null;
     } else {
       const w = bgPickWorld(p.sx, p.sy);
-      BG.drag = w ? { gx: w.px, gy: w.py, moved: false, sx: p.sx, sy: p.sy } : null;
+      // ⚠️ ЛУЧ МИМО ПЛОСКОСТИ — НЕ ПОВОД ОТКАЗАТЬ В ПАНОРАМЕ. Выше горизонта
+      // (верх экрана — звёзды, а на телефоне это половина кадра) рейкаст не
+      // даёт точки, и раньше drag просто не заводился: игрок тянул палец, а
+      // поле стояло. Заводим «слепой» захват — он возит поле по экранной
+      // разнице, а как только палец войдёт в доску, перехватываем точный.
+      BG.drag = w ? { gx: w.px, gy: w.py, moved: false, sx: p.sx, sy: p.sy }
+                  : { sky: true, moved: false, sx: p.sx, sy: p.sy };
       BG.orbit = null;
     }
     BG.camAnim = null;            // взялись за камеру — автодоворот не мешает
@@ -419,6 +489,30 @@ function bgBindInput() {
     }
     if (BG.drag) {
       if (Math.abs(p.sx - BG.drag.sx) + Math.abs(p.sy - BG.drag.sy) > 5) BG.drag.moved = true;
+      // Захват «по небу»: точки на доске под пальцем нет, поэтому возим прицел
+      // экранной разницей, пересчитанной в мировые единицы на дистанции
+      // прицела. Оси берём из самой камеры: «вперёд» — от камеры к прицелу,
+      // «вправо» — поперёк неё; косой взгляд растягивает вертикаль, отсюда
+      // деление на синус наклона.
+      if (BG.drag.sky) {
+        const w2 = bgPickWorld(p.sx, p.sy);
+        if (w2) {                              // палец дошёл до доски — дальше точно
+          BG.drag = { gx: w2.px, gy: w2.py, moved: BG.drag.moved, sx: p.sx, sy: p.sy };
+          return;
+        }
+        const r = BG.cv.getBoundingClientRect();
+        const k = 2 * BG.dist * Math.tan(BG.cam.fov * Math.PI / 360) / Math.max(1, r.height);
+        const dsx = p.sx - BG.drag.sx, dsy = p.sy - BG.drag.sy;
+        const fx = -Math.cos(BG.yaw), fz = -Math.sin(BG.yaw);   // от камеры к прицелу
+        const rx = -fz, rz = fx;                                 // экранное «вправо»
+        const sp = Math.max(0.35, Math.sin(BG.pitch));
+        BG.tgt.x += (-dsx * rx + (dsy / sp) * fx) * k;
+        BG.tgt.z += (-dsx * rz + (dsy / sp) * fz) * k;
+        BG.drag.sx = p.sx; BG.drag.sy = p.sy;
+        bgClampTarget();
+        bgApplyCam(); BG.dirty = true; bgKick();
+        return;
+      }
       // ТЯНЕМ САМО ПОЛЕ: точка, за которую взялись, обязана остаться под курсором.
       // Поправка ИНКРЕМЕНТНАЯ — прицел двигаем на разницу между схваченной точкой
       // и той, что сейчас под курсором. Считать её от прицела на момент захвата

@@ -339,10 +339,17 @@
     max-height: 200px !important;
   }
 
-  /* Отключаем war-territories анимацию (SVG поверх коллажа) */
-  .war-overlay,
-  .war-territory,
-  [class*="war-"] {
+  /* Отключаем war-territories анимацию (SVG поверх коллажа).
+     ⚠️ ЗДЕСЬ БЫЛ `[class*="war-"]` — И ОН ГАСИЛ ВСЮ ВОЙНУ НА ТЕЛЕФОНЕ.
+     Подстрока «war-» есть у КАЖДОГО класса вкладки «Война» (ec-war-note,
+     ec-war-card, ec-war-hot, ec-war-acts…), поэтому под 768px пропадали ноты
+     на столе — требования капитуляции, зовы союзника, предложения мира — и
+     карточки самих войн: ответить было нечем, спасал только «режим ПК».
+     Правило писалось под оверлей коллажа, его и оставляем — по месту, у
+     `.hp-collage`, и без подстрочных масок. */
+  .hp-collage .war-overlay,
+  .hp-collage .war-territory,
+  .hp-collage .war-territories {
     display: none !important;
   }
 }

@@ -550,10 +550,10 @@
      ведомства. ⚠️ И КНОПКУ НАВИГАЦИИ снимали тоже, вынося ленты уровней на
      экран. Ни того, ни другого не повторять — разбор в шапке mobile_nav.js. -->
 <script src="mobile_nav.js?v=20260828mnavh"></script>
-<script src="battle_board.js?v=20260824clock"></script>
+<script src="battle_board.js?v=20260828mobcam"></script>
 <!-- Трёхмерная доска боя. Сам three.js тут НЕ подключается: battle_gl.js тянет
      его динамическим import только когда игрок открыл бой (см. bgLoadThree). -->
-<script src="battle_gl.js?v=20260822sprite"></script>
+<script src="battle_gl.js?v=20260828mobcam"></script>
 <!-- Витрина верфи: та же модель, что и на доске боя (bgBuildShip), плюс то,
      что игрок разложил на палубе. Грузится после battle_gl.js — берёт его
      геометрию корпуса; three.js так же лениво (bgLoadThree). -->
@@ -567,7 +567,13 @@
 <!-- «Пойдём к течению»: звёздная отмель на карте галактики (изометрия),
      играешь за корабль. Пришла на смену берегу из fishing.js — тот файл
      удалён, RPC рыбалки (fishing_cast/land) остались под тралом. -->
-<script src="garden.js?v=20260828gdlook"></script>
+<!-- Трёхмерная сцена сада: та же графика, что на арене «Дредноут» (свет,
+     звёзды, ближняя пыль, воксельные камни) и тот же корпус, что на доске боя.
+     Грузится ПЕРЕД garden.js и ПОСЛЕ battle_gl.js: берёт у первого bgLoadThree
+     и bgBuildShip, второй спрашивает у него сцену на входе в сад. three.js и
+     dn_voxel.js тянутся лениво, уже внутри GDGL.load(). -->
+<script src="garden_gl.js?v=20260828gd3d2"></script>
+<script src="garden.js?v=20260828gd3d2"></script>
 <script src="guide.js?v=20260828worlds2"></script>
 <script src="tickets.js?v=20260607a"></script>
 <script src="chat_sticker.js?v=20260828st4"></script>

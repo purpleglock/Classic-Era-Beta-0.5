@@ -64,7 +64,14 @@ const GD_LIFT = 12;                  // толщина площадки (px)
 //   свалка +200–300 км → 6.66 R          сюда уводят отработавшее
 // Грядки живут на НОО (там же, где станции), камни ловятся там же — потому что
 // именно на НОО и копится мусор. ГСО — внешняя кромка сцены.
-const GD_RP = 46;                       // радиус планеты в единицах мира
+// ⚠️ ПЛАНЕТА — ЭТО МИР, А НЕ ШАРИК НА ПОЛКЕ. При 46 единицах она была ровно
+// вдесятеро длиннее корабля: с борта читалась предметом, который можно облететь
+// за десяток секунд, а сад на её орбите — брелоком. Всё, что стоит на орбите,
+// меряется ОТ ЭТОГО ЧИСЛА (кольцо GD_RING, пояс GD_BELT, кромка GD_SHELL.geo,
+// раскладка ячеек), поэтому мир растёт целиком и пропорции не едут. Вместе с
+// ним подняты ход и вылет манипулятора — иначе облёт кольца превращается в
+// ожидание (см. speed/reach в конце GardenWorld).
+const GD_RP = 110;                      // радиус планеты в единицах мира
 const GD_SHELL = {
   vleo: 1.016, vleoTop: 1.071,
   leo: 1.071, leoTop: 1.314,
@@ -632,9 +639,9 @@ function GardenWorld(systems, sectors, hyperlanes) {
 
   // Мерки корабля и хода — часть мира, а не константы рендера: они верны только
   // вместе с той геометрией, под которую посчитаны.
-  const speed = solo ? 13 : GD_SPEED;       // единиц в секунду обычным ходом
-  const reach = solo ? 8 : GD_REACH;        // докуда дотягивается манипулятор
-  const shipU = solo ? 5.5 : 3.2;           // длина корпуса в единицах
+  const speed = solo ? 26 : GD_SPEED;       // единиц в секунду обычным ходом
+  const reach = solo ? 12 : GD_REACH;       // докуда дотягивается манипулятор
+  const shipU = solo ? 7 : 3.2;             // длина корпуса в единицах
   const shipHull = solo ? 26 : 26;          // с какого экранного размера рисуем корпус
   // Грядки нарисованы в АБСОЛЮТНЫХ мировых пикселях (ellipse 20×10), и на
   // садовом масштабе это значок в десяток пикселей рядом со стометровой лодкой.
@@ -670,6 +677,17 @@ function _gdLand(sys) {
 // ============================================================
 function gardenStart(cv, world, spawn) {
   let ctx = cv.getContext('2d');
+  // ⚠️ ТРЁХМЕРНАЯ СЦЕНА — ОСНОВНОЙ РЕЖИМ, ИЗОМЕТРИЯ — ЗАПАСНОЙ. Сад собран по
+  // графике арены «Дредноут» (garden_gl.js): планета шаром, кольцо постройкой,
+  // камни вокселями, корпус тот же, что на доске боя. Не поднялось (нет WebGL,
+  // не пришёл three.js, не Храм) — весь прежний рисовальщик на месте и работает
+  // как работал; ни одна строчка игровой логики от режима не зависит.
+  let GL = false;
+  try {
+    const glcv = document.getElementById('gd-gl');
+    GL = !!(window.GDGL && glcv && GDGL.mount(glcv, world));
+  } catch (e) { GL = false; }
+  if (GL) gardenGLPlots();
   let vw = 960, vh = 540, px = 1;
   // ang — куда смотрит нос В ЭКРАННЫХ координатах: изометрия ломает «влево»,
   // а глаз сверяет нос со следом, который тоже рисуется на экране.
@@ -725,8 +743,11 @@ function gardenStart(cv, world, spawn) {
   let lastX = P.tx, lastY = P.ty;
   const onDown = e => {
     const r = cv.getBoundingClientRect();
-    const w = scr2world((e.clientX - r.left) / r.width * vw, (e.clientY - r.top) / r.height * vh);
-    gardenClick(w.tx, w.ty);
+    const sx = (e.clientX - r.left) / r.width * vw, sy = (e.clientY - r.top) / r.height * vh;
+    // В трёхмерной сцене точку под курсором даёт ЛУЧ в плоскость обода: обратная
+    // формула изометрии (gUniso) верна только для той камеры, которой больше нет.
+    const w = GL ? GDGL.pick(sx, sy) : scr2world(sx, sy);
+    if (w) gardenClick(w.tx, w.ty);
   };
   cv.addEventListener('pointerdown', onDown);
 
@@ -963,7 +984,19 @@ function gardenStart(cv, world, spawn) {
     // пустота = расстояние, которое проходят другим режимом. Здесь пустота —
     // это ВОДА, по которой носит камни: в неё выходят той же лодкой и на том же
     // зуме, иначе ловить нечем — в гипере лодка вырождается в метку.
-    const ok = (x, y) => world.solo ? true : (world.isVoid(x, y) === P.hyper);
+    // ⚠️ В ПЛАНЕТУ НЕ ВЛЕТАЮТ. Раньше твердью считалась только площадка системы,
+    // а само тело было РИСУНКОМ: корабль спокойно проходил сквозь планету
+    // насквозь, и она переставала быть местом — становилась картинкой на
+    // заднике. Теперь у неё есть поверхность: ближе, чем на 6% радиуса, борт не
+    // пускают. Кольцо сада стоит на 1.19 радиуса, то есть весь сад снаружи и
+    // ничего не теряет.
+    const nn0 = world.nodes[0];
+    const FLOOR = nn0 && world.solo ? GD_RP * 1.06 : 0;
+    const ok = (x, y) => {
+      if (!world.solo) return world.isVoid(x, y) === P.hyper;
+      if (!FLOOR) return true;
+      return Math.hypot(x - nn0.tx, y - nn0.ty) >= FLOOR;
+    };
     // Разгон на Shift. ⚠️ НАБИРАЕТСЯ ПЛАВНО: мгновенный скачок скорости в
     // несколько раз читается не разгоном, а телепортом с рывком камеры —
     // держать курс на такой перекладке невозможно. Разгон копится ~1.5 с и так
@@ -2721,6 +2754,82 @@ function gardenStart(cv, world, spawn) {
   }
 
   // ══════════════════════════════════════════════════════════
+  // ПОДПИСИ ПОВЕРХ ТРЁХМЕРНОЙ СЦЕНЫ
+  // ══════════════════════════════════════════════════════════
+  // ⚠️ РАЗМЕРЫ ЗДЕСЬ ЭКРАННЫЕ, А НЕ ДЕЛЁННЫЕ НА ЗУМ. В изометрии текст рисовался
+  // внутри мирового трансформа, и каждая цифра тащила поправку `/cam.z` — оттого
+  // подписи то распухали, то схлопывались. Точку даёт GDGL.project, дальше всё
+  // меряется в пикселях экрана и ведёт себя одинаково на любом отходе камеры.
+  function lbl(x, y, txt, col, size) {
+    ctx.font = `${size || 11}px ui-monospace,SFMono-Regular,Menlo,monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = col;
+    ctx.fillText(txt, x, y);
+    ctx.textAlign = 'left';
+  }
+
+  function drawLabels3D(t, near) {
+    // Цель для сети: кружок и подпись у камня, как и было, — ловят мышью, и
+    // игрок обязан видеть, докуда сеть добрасывается.
+    const tgt = astNear(P.tx, P.ty, world.reach * 6);
+    if (tgt) {
+      const p = GDGL.project(tgt.tx, tgt.ty, 0);
+      if (p && p.on) {
+        const T = tgt.tier | 0;
+        const col = T === 2 ? '168,146,214' : T === 1 ? '201,162,74' : '143,211,255';
+        const R = 16 + tgt.r * 6;
+        ctx.strokeStyle = `rgba(${col},.75)`; ctx.lineWidth = T ? 1.6 : 1.2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, R, R * .78, 0, 0, 7); ctx.stroke();
+        ctx.setLineDash([]);
+        if (T) lbl(p.x, p.y - R - 20, GD_AST_NM[T], `rgba(${col},.95)`, 10);
+        lbl(p.x, p.y - R - 8, 'ЛКМ — СЕТЬ', 'rgba(205,230,250,.9)', 10);
+      }
+    }
+    // Что под манипулятором.
+    if (near) {
+      const p = GDGL.project(near.tx, near.ty, 4);
+      if (p && p.on) {
+        ctx.strokeStyle = 'rgba(143,211,255,.85)'; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, 22, 11, 0, 0, 7); ctx.stroke();
+        lbl(p.x, p.y - 22, near.hint.toUpperCase() + '  ·  E', 'rgba(205,230,250,.95)', 11);
+      }
+    }
+    // Соседи по ободу: имя державы над бортом. Кто рядом — важнее того, как он
+    // называется, поэтому подпись мелкая и без плашки.
+    for (let i = 0; i < peers.length; i++) {
+      const q = peers[i];
+      const p = GDGL.project(q.tx, q.ty, GDGL.ALT + 3.2);
+      if (!p || !p.on) continue;
+      lbl(p.x, p.y, (q.nm || '').slice(0, 18), (q.col || '#6f8bb5') + 'cc', 10);
+      if (q.say && t - q.sayT < 4.5) lbl(p.x, p.y - 13, q.say, 'rgba(223,231,242,.92)', 11);
+    }
+    // Реплика садовода — плашкой над своим бортом.
+    if (_gdSay) {
+      const u = (t - _gdSay.t0) / _gdSay.dur;
+      if (u >= 1) _gdSay = null;
+      else {
+        const p = GDGL.project(P.tx, P.ty, GDGL.ALT + 5);
+        if (p && p.on) {
+          const al = Math.min(1, u * 6) * Math.min(1, (1 - u) * 5);
+          ctx.font = '12px system-ui,sans-serif';
+          const w = ctx.measureText(_gdSay.t).width, pd = 8;
+          const bx = p.x - w / 2 - pd, by = p.y - 26 - u * 8, bw = w + pd * 2, bh = 12 + pd * 1.5;
+          ctx.globalAlpha = al * .92;
+          ctx.fillStyle = 'rgba(5,8,13,.92)'; ctx.fillRect(bx, by, bw, bh);
+          ctx.fillStyle = GD_EDGE; ctx.fillRect(bx, by, 2, bh);
+          ctx.globalAlpha = al;
+          ctx.fillStyle = '#dfe7f2';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(_gdSay.t, p.x, by + bh / 2);
+          ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
   // КАДР
   // ══════════════════════════════════════════════════════════
   function frame(now) {
@@ -2728,6 +2837,21 @@ function gardenStart(cv, world, spawn) {
     const dt = Math.min(.05, (now - last) / 1000); last = now;
     const t = now / 1000;
     step(dt, t);
+
+    if (GL) {
+      GDGL.frame({ P, t, dt, rocks: AST, peers, look: GD_LOOK, netFly });
+      // Приборы и подписи — прежним 2D-контекстом поверх сцены. Холст с этого
+      // кадра ПРОЗРАЧНЫЙ: задник, тела и корабли рисует сцена, и любая заливка
+      // здесь просто закрасила бы её.
+      ctx.setTransform(px, 0, 0, px, 0, 0);
+      ctx.clearRect(0, 0, vw, vh);
+      const near3 = gardenNear(world, P);
+      _gd && (_gd.near = near3);
+      drawLabels3D(t, near3);
+      drawSysMap(t);
+      requestAnimationFrame(frame);
+      return;
+    }
 
     // Задник и приборы живут в экранных координатах, мир — в мировых с отъездом.
     ctx.setTransform(px, 0, 0, px, 0, 0);
@@ -2921,8 +3045,10 @@ function gardenStart(cv, world, spawn) {
     boostSet: v => { keys['ShiftLeft'] = v ? 1 : 0; },
     keysClear: () => { pad.x = pad.y = 0; for (const k in keys) keys[k] = 0; },
     onResize: (w, h, s) => { vw = w; vh = h; px = s; },
+    glOn: () => GL,
     stop: () => {
       stop = true;
+      if (GL) { try { GDGL.dispose(); } catch (e) {} }
       clearInterval(pingTimer);
       wsClose();
       // Уходя — снимаем себя с обода сразу, а не ждём, пока протухнет строка:
@@ -3030,6 +3156,32 @@ async function gardenReload() {
   try { _gdState = await ecRpc('garden_get', {}); } catch (e) {}
   gardenPaintHud();
   gardenPanelRefresh();
+  gardenGLPlots();
+}
+
+// ⚠️ ТЕПЛИЦЫ ПЕРЕСОБИРАЮТСЯ НА ОБНОВЛЕНИЕ СОСТОЯНИЯ, А НЕ В КАДРЕ. Отсеков
+// десятки, состояние меняется от силы раз в минуту (посев, полив, урожай) —
+// строить их каждый кадр значило бы платить за это шестьдесят раз в секунду
+// ради картинки, которая всё это время одна и та же.
+function gardenGLPlots() {
+  if (!window.GDGL || !GDGL.ready || !_gdWorld) return;
+  const plots = _gdPlots();
+  const out = [];
+  ((_gdState && _gdState.lands) || []).forEach(l => {
+    _gdWorld.cells(l.sys, l.cells).forEach((cc, i) => {
+      const p = plots[_gdPlotKey(l.sys, i)];
+      out.push({ tx: cc.tx, ty: cc.ty, a: cc.a || 0,
+                 mine: !!(p && p.mine), plant: (p && p.plant) || null,
+                 // Флаг над развёрнутой ячейкой: чья она, видно с орбиты, а не
+                 // после тычка. Поля те же, что читал drawFlag в изометрии.
+                 fid: p && p.fid, fnm: p && p.fnm,
+                 // У СВОЕЙ ячейки герба в ответе может не быть — держава и так
+                 // известна: берём её из того же паспорта, что грузит fishFlagLoad.
+                 fcol: (p && p.fcol) || (p && p.mine ? _fishFlag.col : null),
+                 fher: (p && p.fher) || (p && p.mine && _fishFlag.img ? _fishFlag.img.src : null) });
+    });
+  });
+  GDGL.setPlots(out);
 }
 
 // ============================================================
@@ -3711,6 +3863,10 @@ function gardenStyleOnce() {
 .gd-exit:hover{border-color:#8fd3ff;color:#cfe0f2}
 .gd-stage{position:relative;flex:1;overflow:hidden}
 .gd-cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+/* Сцена лежит ПОД холстом приборов: мир рисует WebGL (garden_gl.js), надписи,
+   схему системы и реплики — прежний 2D-контекст поверх него. Поэтому у нижнего
+   канваса нет своих обработчиков: весь ввод по-прежнему ловит .gd-cv. */
+.gd-gl{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
 .gd-keys{padding:6px 12px;background:#080c13;border-top:1px solid #16202c;color:#61758a;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;text-align:center}
 .gd-keys b{color:#8fa4b8;font-weight:400}
 /* ⚠️ ПАНЕЛЬ БОЛЬШЕ НЕ ФОРТОЧКА В УГЛУ. Работа с ячейкой — главное, что тут
@@ -4033,7 +4189,10 @@ async function gardenDescend() {
       <div class="gd-hud" id="gd-hud"></div>
       <button class="gd-exit" type="button" onclick="event.stopPropagation();gardenPaintOverview()">↩ уйти</button>
     </div>
-    <div class="gd-stage" id="gd-stage"><canvas class="gd-cv" id="gd-cv"></canvas></div>`;
+    <div class="gd-stage" id="gd-stage">
+      <canvas class="gd-gl" id="gd-gl"></canvas>
+      <canvas class="gd-cv" id="gd-cv"></canvas>
+    </div>`;
   document.body.appendChild(fs);
 
   const stage = document.getElementById('gd-stage');
@@ -4061,6 +4220,11 @@ async function gardenDescend() {
       gardenPaintOverview(); return;
     }
   }
+  // ⚠️ ТРЁХМЕРНАЯ СЦЕНА ГРУЗИТСЯ ДО СНЯТИЯ ЗАСТАВКИ, А НЕ ПОСЛЕ. three.js
+  // приходит ленивым импортом (bgLoadThree), воксели — отдельным файлом:
+  // включи мы петлю раньше, первые секунды сад шёл бы плоским, а потом рывком
+  // менял вид. Не загрузилось — молча остаёмся на изометрии, она никуда не делась.
+  if (window.GDGL) { try { await GDGL.load(); } catch (e) {} }
   const ld = document.getElementById('gd-load'); if (ld) ld.remove();
   if (!document.getElementById('gd-fs')) return;      // успели уйти
 
@@ -4086,6 +4250,9 @@ async function gardenDescend() {
     const dpr = Math.min(2, devicePixelRatio || 1);
     const w = Math.max(320, Math.round(r.width)), h = Math.max(220, Math.round(r.height));
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    const gl = document.getElementById('gd-gl');
+    if (gl) { gl.width = Math.round(w * dpr); gl.height = Math.round(h * dpr); }
+    if (window.GDGL && GDGL.ready) GDGL.resize(w, h, dpr);
     if (_gd) _gd.onResize(w, h, dpr);
   };
   _gd = gardenStart(cv, _gdWorld, spawn);

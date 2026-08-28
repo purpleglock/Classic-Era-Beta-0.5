@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>проба: выбор облика</title>
+<style>body{background:#0a0e14;color:#cfe0f2;font:14px system-ui}</style>
+<div id="box"></div>
+<script src="garden.js"></script>
+<script>
+document.getElementById('box').innerHTML = gardenKeysHtml() + gardenLookHtml();
+gardenLookPaint();
+window.probe = () => {
+  const rows = document.querySelectorAll('#gd-lookbox .gd-look-r');
+  return JSON.stringify({
+    rows: rows.length,
+    hatOn: [...(rows[0]||{querySelectorAll:()=>[]}).querySelectorAll('.gd-look-i')].map(b=>b.classList.contains('on')),
+    hullOn: [...(rows[1]||{querySelectorAll:()=>[]}).querySelectorAll('.gd-look-i')].map(b=>b.classList.contains('on')),
+    look: JSON.stringify(GD_LOOK), ls: localStorage.getItem('gd_look_v1'),
+  });
+};
+</script>

@@ -1,0 +1,103 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Стенд: сад в три измерения</title>
+<!--
+  Стенд трёхмерной сцены сада (garden_gl.js) БЕЗ игры: ни входа, ни базы, ни
+  garden.js. Мир подделан ровно теми полями, которые сцене нужны от GardenWorld
+  (nodes[0].host, seed, solo, shipU), корабль водится теми же клавишами.
+  Нужен, чтобы смотреть свет, планету, кольцо и камни, не проходя авторизацию.
+-->
+<style>
+  html,body{margin:0;height:100%;background:#04070c;overflow:hidden}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #hud{position:absolute;left:12px;top:10px;z-index:5;color:#8fa4b8;
+       font:11.5px ui-monospace,Menlo,monospace;letter-spacing:.08em;white-space:pre}
+</style>
+<canvas id="gd-gl"></canvas>
+<canvas id="over"></canvas>
+<div id="hud"></div>
+<script>
+// ── Подделки, которых ждёт garden_gl.js от кабинета ──
+window.bgLoadThree = () => import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js')
+  .then(T => { window.THREE = T; return true; });
+const GD_RP = 110;
+const world = {
+  solo: true, shipU: 7, reach: 12, speed: 26,
+  nodes: [{ id: 'temple', name: 'Храм Мироздания', seed: 137, tx: 1000, ty: 800,
+            host: { r: GD_RP, grp: 'ocean', name: 'Храм' } }],
+};
+</script>
+<script src="garden_gl.js"></script>
+<script>
+const P = { tx: 1000 + GD_RP * 1.19 + 9, ty: 800, ang: -Math.PI/2, bob: 0, boost: 0 };
+const keys = {};
+addEventListener('keydown', e => keys[e.code] = 1);
+addEventListener('keyup',   e => keys[e.code] = 0);
+
+// Камни — тот же набор полей, что кладёт seedAsteroids в garden.js.
+const AST = [];
+for (let i = 0; i < 30; i++) {
+  const a = Math.random() * 6.28, rr = GD_RP * (1.85 + Math.random() * 1.55);
+  const tier = Math.random() < .18 ? 2 : Math.random() < .35 ? 1 : 0;
+  AST.push({ tx: 0, ty: 0, ang: a, orb: rr, tier, sd: i * 37 % 911,
+             r: (.35 + Math.random() * .85) * (1 + tier * .16),
+             sp: (.006 + Math.random() * .01) * (i % 2 ? 1 : -1),
+             spin: (Math.random() - .5) * .6, rot: Math.random() * 6.28, gone: 0 });
+}
+
+const over = document.getElementById('over'), octx = over.getContext('2d');
+function fit() {
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  const w = innerWidth, h = innerHeight;
+  ['gd-gl','over'].forEach(id => { const c = document.getElementById(id);
+    c.width = Math.round(w*dpr); c.height = Math.round(h*dpr); });
+  if (GDGL.ready) GDGL.resize(w, h, dpr);
+  octx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener('resize', fit);
+
+GDGL.load().then(ok => {
+  if (!ok) { document.getElementById('hud').textContent = 'three.js не пришёл'; return; }
+  if (!GDGL.mount(document.getElementById('gd-gl'), world)) {
+    document.getElementById('hud').textContent = 'сцена не поднялась'; return;
+  }
+  const n0 = world.nodes[0];
+  const cells = [];
+  for (let j = 0; j < 8; j++) {
+    const a = (j / 48) * 6.28 + n0.seed * .01, R = GD_RP * 1.19;
+    cells.push({ tx: n0.tx + Math.cos(a)*R, ty: n0.ty + Math.sin(a)*R, a, mine: j < 6,
+                 fnm: 'Проба', fcol: j < 6 ? '#7fb2e0' : '#c98a4a', fher: null,
+                 plant: j % 3 ? { ripe: j % 4 === 0, care: .3 + (j % 3) * .35 } : null });
+  }
+  GDGL.setPlots(cells);
+  fit();
+  let last = performance.now();
+  (function loop(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    const t = now / 1000;
+    let dx = 0, dy = 0;
+    if (keys.KeyA) { dx -= 1; dy += 1; } if (keys.KeyD) { dx += 1; dy -= 1; }
+    if (keys.KeyW) { dx -= 1; dy -= 1; } if (keys.KeyS) { dx += 1; dy += 1; }
+    const m = Math.hypot(dx, dy);
+    P.boost += (((keys.ShiftLeft ? 1 : 0)) - P.boost) * Math.min(1, dt * 2);
+    if (m) {
+      const sp = 26 * (1 + P.boost * 5) * dt;
+      P.tx += dx/m*sp; P.ty += dy/m*sp;
+      P.ang = Math.atan2((dx/m + dy/m) * 16, (dx/m - dy/m) * 32);
+    }
+    P.bob = Math.sin(t * 2.2) * 1.1;
+    AST.forEach(A => { A.ang += A.sp * dt; A.rot += A.spin * dt;
+      A.tx = world.nodes[0].tx + Math.cos(A.ang) * A.orb;
+      A.ty = world.nodes[0].ty + Math.sin(A.ang) * A.orb; });
+    GDGL.frame({ P, t, dt, rocks: AST, peers: [], look: { hat: 'straw', hull: 'steel' }, netFly: null });
+    octx.clearRect(0, 0, innerWidth, innerHeight);
+    const tgt = AST[0];
+    const p = GDGL.project(tgt.tx, tgt.ty, 0);
+    if (p && p.on) { octx.strokeStyle = 'rgba(143,211,255,.75)'; octx.setLineDash([4,4]);
+      octx.beginPath(); octx.ellipse(p.x, p.y, 20, 16, 0, 0, 7); octx.stroke(); octx.setLineDash([]); }
+    document.getElementById('hud').textContent =
+      'WASD · Shift разгон\nx ' + P.tx.toFixed(1) + '  y ' + P.ty.toFixed(1);
+    requestAnimationFrame(loop);
+  })(performance.now());
+});
+</script>

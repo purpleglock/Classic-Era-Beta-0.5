@@ -315,23 +315,36 @@ function bbTurnHandover() {
     cls = att ? 'bb-tf-me' : 'bb-tf-foe';
   } else if (key === 'me') {
     txt = 'Ваш ход'; cls = 'bb-tf-me';
-    // вернуть обзор к своим кораблям — но НЕ перебивая только что наведённый
-    // магнит к действиям врага (тогда сначала показываем чужой залп).
-    const mine = (s.units || []).filter(u => u.mine);
-    if (mine.length && !BB.drag && !BB.foeActed) {
-      let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-      mine.forEach(u => { const c = bbHexCenter(u.x, u.y);
-        minx = Math.min(minx, c.px); maxx = Math.max(maxx, c.px);
-        miny = Math.min(miny, c.py); maxy = Math.max(maxy, c.py); });
-      const pad = BB.R * 8;
-      let z = Math.min(BB.vw / ((maxx - minx) + pad), BB.vh / ((maxy - miny) + pad));
-      z = Math.max(0.6, Math.min(z, 1.3));
-      bbCamFocus((minx + maxx) / 2, (miny + maxy) / 2, z, 650);
-    }
+    // ⚠️ ОБЗОР ОБЯЗАН ВЕРНУТЬСЯ К СВОИМ. Раньше при `foeActed` возврат просто
+    // ОТМЕНЯЛСЯ — «сначала показываем чужой залп», — и на этом всё: магнит уже
+    // увёз камеру к врагу (а он стоит в своём секторе, за полдоски), ключ хода
+    // больше не менялся, и ход начинался с видом на чужой флот. Игрок свои
+    // корабли не находил вовсе. Теперь чужой залп показываем и возвращаемся
+    // сами — просто с задержкой на его длительность.
+    if (BB.foeActed) setTimeout(() => { if (BB.id && bbTurnKey(BB.st) === 'me') bbCamMine(); }, 1500);
+    else bbCamMine();
   } else {
     txt = 'Ход противника'; cls = 'bb-tf-foe';
   }
   bbShowTurnFlash(txt, cls);
+}
+// Обзор к своим бортам мягким доездом (не «домой» рывком): коробка своих,
+// зум под неё. Молчит, если игрок держит камеру рукой — хоть на плоской
+// доске (BB.drag), хоть в 3D (BG.drag/BG.pinch): перебивать руку нельзя.
+function bbCamMine() {
+  const s = BB.st; if (!s) return;
+  if (BB.drag) return;
+  if (BB.glOn && typeof BG !== 'undefined' && (BG.drag || BG.pinch || BG.orbit)) return;
+  const mine = (s.units || []).filter(u => u.mine && u.x != null && u.y != null);
+  if (!mine.length) return;
+  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+  mine.forEach(u => { const c = bbHexCenter(u.x, u.y);
+    minx = Math.min(minx, c.px); maxx = Math.max(maxx, c.px);
+    miny = Math.min(miny, c.py); maxy = Math.max(maxy, c.py); });
+  const pad = BB.R * 8;
+  let z = Math.min(BB.vw / ((maxx - minx) + pad), BB.vh / ((maxy - miny) + pad));
+  z = Math.max(0.6, Math.min(z, 1.3));
+  bbCamFocus((minx + maxx) / 2, (miny + maxy) / 2, z, 650);
 }
 function bbShowTurnFlash(txt, cls) {
   const host = document.querySelector('.bb-cvw'); if (!host) return;
@@ -755,10 +768,39 @@ function bbTry3D() {
     }
     cv.style.visibility = '';
     BB.cv.style.display = 'none';
-    BB.glWait = false;
-    bbVeil(false);
-    bbRender();          // кнопки камеры (вращение) есть только у 3D-доски
+    // ⚠️ ЗАВЕСУ СНИМАЕТ САМОПРОВЕРКА, А НЕ ФАКТ СБОРКИ. «Сцена собралась» и
+    // «доской можно играть» — разные вещи: канвас умеет разъехаться со слоем
+    // карты (dpr>1), кадр — встать не на свои борта. Игроку такое показывать
+    // нельзя: он видит пустой космос, тапает мимо гексов и уверен, что бой
+    // сломан. Проверяем, чиним, и только рабочую доску открываем.
+    bbCheck3D(0);
   });
+}
+
+// Самопроверка доски перед показом. Ломается ровно то, что чинится: размер
+// канваса — пересчётом раскладки, кадр — возвратом к своим (на расстановке —
+// к своему сектору). Даём несколько кадров: слой карты выезжает переходом,
+// и первые замеры бывают по недоразложенной коробке. Не выправилось — честно
+// уходим на плоскую доску, она хотя бы управляется.
+function bbCheck3D(tries) {
+  if (!BB.id || !BB.glOn || typeof bgSelfCheck !== 'function') {
+    BB.glWait = false; bbVeil(false); bbRender(); return;
+  }
+  let r;
+  try { r = bgSelfCheck(); } catch (e) { r = { ok: false, why: 'проверка упала: ' + e }; }
+  if (r.ok) {
+    BB.glWait = false; bbVeil(false);
+    bbRender();          // кнопки камеры (вращение) есть только у 3D-доски
+    return;
+  }
+  if (tries >= 8) {
+    console.warn('[bb] доска не прошла самопроверку (' + r.why + ') — возврат на 2D');
+    bbFallback2D();
+    return;
+  }
+  bbFit();                                     // → bgResize: канвас по слою карты
+  if (BB.deployUI) bgCamDeploy(); else bgCamHome();
+  requestAnimationFrame(() => bbCheck3D(tries + 1));
 }
 
 // Возврат на 2D: контекст потерян или сцена сломалась. Разметку не трогаем —
