@@ -82,6 +82,20 @@ function mtCacheSave() {
   } catch (e) {}
 }
 
+// Готов ли перевод ПРЯМО СЕЙЧАС. Знать это синхронно принципиально: то,
+// что уже лежит в кэше, надо подставить без всякого ожидания и анимации.
+// Иначе при каждой перерисовке ленты блоки пропадали и появлялись заново —
+// это и читалось как «дёрганая анимация, которая играет много раз».
+function mtCacheGet(text) {
+  const to = (typeof lang !== 'undefined' ? lang : 'ru');
+  return MT.cache.get(to + '|' + String(text).trim()) || null;
+}
+
+function mtCached(text) {
+  const to = (typeof lang !== 'undefined' ? lang : 'ru');
+  return MT.cache.has(to + '|' + String(text).trim());
+}
+
 // ── Очередь. Всё, что попросили за 90 мс, уезжает одним запросом. ──
 function mtTranslate(text) {
   const to = (typeof lang !== 'undefined' ? lang : 'ru');
@@ -141,6 +155,49 @@ function mtTextNodes(el) {
   return out;
 }
 
+// ── Единицы перевода: абзацы, а не блок целиком. ─────────────────────
+//  Статья на скриншоте превратилась в сплошную простыню именно потому, что
+//  весь блок склеивался в одну фразу: абзацы, цитата, выделенные строки и
+//  таблица инфобокса теряли границы. Поэтому режем на минимальные блочные
+//  куски — каждый переводится отдельно и остаётся на своём месте.
+// Куски, которые перевод обязан обойти: имя упомянутой державы (чип в
+// новостях), текст ссылки, всё с data-mt-keep.
+const MT_KEEP = 'a,.md-fac,.cmt-fac-chip,[data-mt-keep]';
+// Метка места неприкасаемого куска. Скобки редкие — переводчик их не трогает.
+const MT_MARK = k => '⟦' + k + '⟧';
+
+const MT_BLOCK = 'p,div,li,td,th,tr,h1,h2,h3,h4,h5,h6,blockquote,section,'
+               + 'article,figcaption,dd,dt,summary';
+
+function mtUnits(el) {
+  const units = [];
+  const push = nodes => { if (nodes.length) units.push(nodes); };
+
+  // Листовые блоки — те, внутри которых своих блоков уже нет.
+  const blocks = [...el.querySelectorAll(MT_BLOCK)].filter(b => !b.querySelector(MT_BLOCK));
+
+  for (const b of blocks) {
+    // <br> внутри абзаца — тоже граница строки: склеив через него, мы
+    // склеили бы разные реплики в одну.
+    const group = mtTextNodes(b);
+    if (!b.querySelector('br')) { push(group); continue; }
+    let cur = [];
+    for (const n of group) {
+      cur.push(n);
+      const next = n.nextSibling;
+      if (next && next.nodeName === 'BR') { push(cur); cur = []; }
+    }
+    push(cur);
+  }
+
+  // Текст, лежащий прямо в блоке мимо всех абзацев (короткая реплика чата,
+  // подпись, ячейка) — тоже единица.
+  const loose = mtTextNodes(el).filter(n => !blocks.some(b => b.contains(n)));
+  push(loose);
+
+  return units;
+}
+
 function mtRestore(el) {
   const orig = el._mtOrig;
   if (!orig) return;
@@ -185,78 +242,188 @@ async function mtScan(root) {
   const scope = root || document.body;
   const list = [];
   if (scope.nodeType === 1 && scope.hasAttribute?.('data-mt') && !scope.hasAttribute('data-mt-done')) list.push(scope);
-  scope.querySelectorAll?.('[data-mt]:not([data-mt-done])').forEach(el => list.push(el));
+  scope.querySelectorAll?.('[data-mt]:not([data-mt-done])').forEach(el => {
+    // Вложенный блок внутри уже помеченного не берём: иначе на один и тот же
+    // текст выходит ДВЕ подписи «переведено · оригинал» — одна от внешнего
+    // блока, вторая от внутреннего.
+    if (el.parentElement?.closest('[data-mt]')) { el.setAttribute('data-mt-done', '1'); return; }
+    list.push(el);
+  });
   if (!list.length) return;
 
   const jobs = [];
   for (const el of list) {
     el.setAttribute('data-mt-done', '1');
-    const nodes = mtTextNodes(el);
-    if (!nodes.length) continue;
+    const units = mtUnits(el);
+    if (!units.length) continue;
 
-    // ── Фразу переводим ЦЕЛИКОМ. Разбить реплику по узлам разметки значит
-    //    отдать переводчику обрубки («Hold the» / «anchor» / «, the black
-    //    star is») — выходит каша. Жирное и курсив в переведённом виде
-    //    теряются, зато смысл цел; оригинал со всей разметкой — по подписи.
-    //    Исключение — ссылки: у них текст осмысленный сам по себе и его
-    //    нельзя вычищать из <a>, поэтому там идём по узлам.
-    const hasLinks = !!el.querySelector('a,[data-mt-keep]');
+    const pieces = [];
+    for (const nodes of units) {
+      // ── Внутри ОДНОГО абзаца фразу переводим целиком: рвать её по узлам
+      //    разметки значит отдать переводчику обрубки («Hold the» / «anchor»
+      //    / «, the black star is») — выходит каша.
+      //    Исключение — ссылки: их текст осмыслен сам по себе и вычищать его
+      //    из <a> нельзя, поэтому там идём по узлам.
+      // Неприкасаемые куски абзаца: чип упомянутой державы, ссылка,
+      // всё помеченное data-mt-keep. Их текст — имя собственное, его нельзя
+      // ни переводить, ни гасить при склейке (именно так из новостей
+      // пропадали вставленные державы: оставались пустые квадратики).
+      const anchor = n => !!n.parentElement?.closest(MT_KEEP);
+      const keep = nodes.filter(anchor);
+      const free = nodes.filter(n => !anchor(n));
+      if (!free.length) continue;
 
-    if (!hasLinks) {
-      const whole = nodes.map(n => n.nodeValue).join('').replace(/\s+/g, ' ').trim();
-      if (!mtWorth(whole, to)) continue;
-      jobs.push({ el, nodes, whole: true, p: [mtTranslate(whole)] });
-    } else {
-      const part = nodes.filter(n => mtWorth(n.nodeValue, to));
-      if (!part.length) continue;
-      jobs.push({ el, nodes: part, whole: false, p: part.map(n => mtTranslate(n.nodeValue.trim())) });
+      if (!keep.length) {
+        const whole = nodes.map(n => n.nodeValue).join('').replace(/s+/g, ' ').trim();
+        if (!mtWorth(whole, to)) continue;
+        pieces.push({ nodes, whole: true, cached: mtCached(whole), p: [mtTranslate(whole)] });
+      } else {
+        // Собираем фразу с метками на месте неприкасаемых кусков: переводчик
+        // видит связный текст, а метки возвращаются на свои места.
+        let text = '', k = 0;
+        const slots = [];              // сегмент → узлы обычного текста
+        let cur = [];
+        for (const n of nodes) {
+          if (anchor(n)) { slots.push(cur); cur = []; text += ' ' + MT_MARK(k++) + ' '; }
+          else { cur.push(n); text += n.nodeValue; }
+        }
+        slots.push(cur);
+        const whole = text.replace(/s+/g, ' ').trim();
+        if (!mtWorth(whole, to)) continue;
+        pieces.push({ nodes: free, slots, marks: k, whole: 'marked',
+                      cached: mtCached(whole), p: [mtTranslate(whole)] });
+      }
     }
+    if (pieces.length) {
+      // Всё нужное уже в кэше — подставим в этой же микрозадаче, кадр между
+      // «спрятали» и «показали» не успеет отрисоваться. Такому блоку ни
+      // ожидание, ни анимация не нужны: он просто сразу правильный.
+      const warm = pieces.every(p => p.cached);
+      jobs.push({ el, pieces, warm });
+    }
+    // Блоку перевод не нужен (он уже на языке читателя) — показываем сразу,
+    // иначе правило ожидания оставило бы его невидимым.
+    else mtWaitOff(el);
   }
   if (!jobs.length) return;
 
-  // Пока идёт рейс — говорим об этом: и в самой строке, и счётчиком в шапке.
-  jobs.forEach(j => mtWaitOn(j.el));
-  mtBusy(jobs.length);
+  // ── Прогретые блоки подставляем ПРЯМО СЕЙЧАС, синхронно. Раньше даже они
+  //    шли через await: браузер успевал отрисовать кадр с оригиналом, и текст
+  //    прыгал «оригинал → перевод» при каждой перерисовке ленты и меню.
+  const cold = [];
+  for (const j of jobs) {
+    if (!j.warm) { cold.push(j); continue; }
+    const orig = [], tr = [];
+    let ok = true;
+    for (const p of j.pieces) {
+      // Абзац с метками (в нём есть чипы держав) собирается сложнее — его
+      // проводим обычным путём, синхронную дорожку не усложняем.
+      if (p.whole === 'marked') { ok = false; break; }
+      const vals = p.whole
+        ? [mtCacheGet(p.nodes.map(n => n.nodeValue).join('').replace(/s+/g, ' ').trim())]
+        : p.nodes.map(n => mtCacheGet(n.nodeValue));
+      if (!vals.some(Boolean)) { ok = false; break; }
+      p.nodes.forEach((n, i) => {
+        orig.push([n, n.nodeValue]);
+        tr.push([n, p.whole ? (i === 0 ? vals[0] : '') : (vals[i] != null ? vals[i] : n.nodeValue)]);
+      });
+    }
+    if (!ok) { cold.push(j); continue; }
+    j.el._mtOrig = orig;
+    j.el._mtTr = tr;
+    mtShow(j.el);
+    j.el.setAttribute('data-mt-ready', '1');
+    if (!j.el.hasAttribute('data-mt-quiet') && mtBig(j.el)) mtNote(j.el);
+  }
+  if (!cold.length) return;
+
+  // Ожидание показываем ТОЛЬКО тем, кто правда ждёт рейса.
+  // Показываем ожидание ТОЛЬКО крупным блокам — статье, реплике, посту.
+  // Пункт меню, заголовок и короткая подпись переводятся молча: они
+  // перерисовываются постоянно, и любая анимация на них превращается в
+  // мельтешение по всему сайту.
+  cold.forEach(j => { if (mtBig(j.el)) mtWaitOn(j.el); });
+  mtBusy(cold.length);
 
   try {
-    await Promise.all(jobs.map(async (j) => {
-      const trs = await Promise.all(j.p);
+    await Promise.all(cold.map(async (j) => {
+      const done = await Promise.all(j.pieces.map(p => Promise.all(p.p)));
       mtWaitOff(j.el);
-      if (!trs.some(Boolean)) return;
-      j.el._mtOrig = j.nodes.map(n => [n, n.nodeValue]);
-      j.el._mtTr = j.whole
-        ? j.nodes.map((n, i) => [n, i === 0 ? trs[0] : ''])
-        : j.nodes.map((n, i) => [n, trs[i] != null ? trs[i] : n.nodeValue]);
+      if (!done.some(trs => trs.some(Boolean))) return;
+
+      const orig = [], tr = [];
+      j.pieces.forEach((p, k) => {
+        const trs = done[k];
+        p.nodes.forEach(n => orig.push([n, n.nodeValue]));
+        if (!trs.some(Boolean)) {           // абзац не перевёлся — оставляем как есть
+          p.nodes.forEach(n => tr.push([n, n.nodeValue]));
+          return;
+        }
+        // Перевод абзаца кладём в его первый узел, остальные узлы этого же
+        // абзаца гасим. Границы абзаца при этом целы — раньше в первый узел
+        // сваливалась ВСЯ статья, и она превращалась в простыню без абзацев,
+        // цитат и выделений.
+        if (p.whole === 'marked') {
+          // Режем перевод по меткам и раскладываем куски между неприкасаемыми:
+          // державы остаются на своих местах, текст вокруг них — переведённый.
+          const parts = String(trs[0] || '').split(/s*⟦d+⟧s*/);
+          p.slots.forEach((slot, si) => {
+            const val = parts[si] != null ? parts[si] : '';
+            slot.forEach((n, i) => tr.push([n, i === 0 ? (si ? ' ' + val + ' ' : val + ' ') : '']));
+          });
+          return;
+        }
+        p.nodes.forEach((n, i) => tr.push([n,
+          p.whole ? (i === 0 ? trs[0] : '')
+                  : (trs[i] != null ? trs[i] : n.nodeValue)]));
+      });
+      j.el._mtOrig = orig;
+      j.el._mtTr = tr;
       mtShow(j.el);
       // Заголовок переводим молча: подпись под каждым — визуальный мусор,
       // на карточке новостей их выходило по две подряд. Возврат к оригиналу
       // живёт на теле текста.
-      if (!j.el.hasAttribute('data-mt-quiet')) mtNote(j.el);
+      if (!j.el.hasAttribute('data-mt-quiet') && mtBig(j.el)) mtNote(j.el);
     }));
   } finally {
-    jobs.forEach(j => mtWaitOff(j.el));
-    mtBusy(-jobs.length);
+    cold.forEach(j => mtWaitOff(j.el));
+    mtBusy(-cold.length);
   }
 }
 
-// ── Статус перевода ──────────────────────────────────────────────────
-// Ожидание должно быть видно. Молчащий экран, который через несколько секунд
-// вдруг подменяет текст, читается как «сайт тормозит», а не «идёт перевод».
-function mtWaitOn(el) {
-  if (el.hasAttribute('data-mt-quiet')) return;
-  if (el.querySelector(':scope > .mt-note')) return;
-  const ru = (typeof lang !== 'undefined' ? lang : 'ru') === 'ru';
-  const n = document.createElement('span');
-  n.className = 'mt-note mt-wait';
-  n.textContent = ru ? 'перевод…' : 'translating…';
-  el.appendChild(n);
-}
-function mtWaitOff(el) {
-  el.querySelector(':scope > .mt-note.mt-wait')?.remove();
+// Крупный ли блок: ожидание уместно там, где игрок правда ждёт чтения —
+// статья, реплика новеллы, пост. На коротком заголовке скелетон читается
+// как поломка, а не как загрузка.
+const MT_BIG_CHARS = 140;
+function mtBig(el) {
+  return (el.textContent || '').trim().length >= MT_BIG_CHARS;
 }
 
-// Счётчик в шапке: сколько кусков сейчас в работе. Пока идёт хоть один —
-// глобус светится и крутится, и понятно, чего ждать.
+// ── Ожидание перевода ────────────────────────────────────────────────
+//  Правила простые: игрок не видит, как текст переводится у него на глазах,
+//  и не видит мельтешения. Поэтому:
+//   • блок, для которого перевод уже в кэше, вообще не проходит через это
+//     состояние — он сразу правильный (см. warm в mtScan);
+//   • блок, который правда ждёт рейса, накрывается спокойным скелетоном:
+//     текст под ним не читается, высота сохраняется, страница не прыгает;
+//   • готовый текст выходит мягким проявлением, один раз.
+function mtWaitOn(el) {
+  el.classList.remove('mt-appear');
+  el.classList.add('mt-pending');
+}
+function mtWaitOff(el) {
+  const waited = el.classList.contains('mt-pending');
+  el.classList.remove('mt-pending');
+  el.setAttribute('data-mt-ready', '1');
+  if (!waited) return;                 // ничего не ждали — не за что и проявляться
+  el.classList.add('mt-appear');
+  // Класс снимаем по окончании, иначе повторный рендер проиграет проявление
+  // заново — именно так и получалось «дёрганье по многу раз».
+  setTimeout(() => el.classList.remove('mt-appear'), 420);
+}
+
+// Счётчик кусков в работе: пока он не ноль, в шапке горит ровная (без
+// мерцания) отметка «перевод».
 function mtBusy(delta) {
   MT.busy = Math.max(0, MT.busy + delta);
   const btn = document.getElementById('lb-mt');

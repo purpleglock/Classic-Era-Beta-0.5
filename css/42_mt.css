@@ -36,14 +36,78 @@
 
 /* Цвет глобуса ставит mtBtnSync() прямо на элемент — см. комментарий там. */
 
-/* Пока рейс не вернулся — строка честно говорит, что её переводят. */
-.mt-note.mt-wait{ cursor:default; opacity:.55; }
-.mt-note.mt-wait::after{
-  content:''; display:inline-block; width:5px; height:5px; margin-left:6px;
-  border-radius:50%; background:currentColor; vertical-align:middle;
-  animation:mt-pulse 1s ease-in-out infinite;
-}
-@keyframes mt-pulse{ 0%,100%{opacity:.25} 50%{opacity:1} }
 
-/* Глобус в шапке пульсирует, пока в работе есть хоть один кусок. */
-.top-lang .lb-mt.mt-run{ animation:mt-pulse 1.1s ease-in-out infinite; }
+
+/* ── Загрузка перевода ────────────────────────────────────────────────
+   Пустое место вместо текста — моветон: игрок не понимает, сломалось или
+   грузится. Поэтому ожидание выглядит как ЯВНАЯ загрузка: строки-плашки на
+   месте будущего текста и подпись сверху. Текст под ними не читается —
+   переводимую строку игрок видит уже готовой, а не в процессе подмены. */
+.mt-pending{
+  position:relative;
+  color:transparent !important;
+  user-select:none;
+  min-height:2.2em;
+}
+.mt-pending > *{ visibility:hidden; }
+
+/* Плашки строк: повторяющийся градиент рисует «текст», которого ещё нет. */
+.mt-pending::before{
+  content:'';
+  position:absolute; inset:1.6em 0 0 0;
+  background:repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, currentColor 15%, transparent) 0 .62em,
+    transparent .62em 1.5em);
+  border-radius:3px;
+  opacity:.5;
+  pointer-events:none;
+  -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 70%,transparent 100%);
+          mask-image:linear-gradient(to bottom,#000 0,#000 70%,transparent 100%);
+}
+
+/* Подпись и бегущий блик — чтобы было видно, что работа идёт. */
+.mt-pending::after{
+  content:'TRANSLATING…';
+  position:absolute; left:0; top:0;
+  font-size:10px; letter-spacing:.14em; font-weight:600;
+  color:var(--te,#3ec0d0);
+  opacity:.85;
+  background:linear-gradient(90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--te,#3ec0d0) 22%, transparent) 50%,
+    transparent 100%);
+  background-size:200% 100%;
+  animation:mt-wave 1.8s linear infinite;
+  padding:1px 6px 1px 0;
+  pointer-events:none;
+}
+html[lang='ru'] .mt-pending::after{ content:'ПЕРЕВОД…'; }
+
+@keyframes mt-wave{
+  0%   { background-position: 100% 0; }
+  100% { background-position:-100% 0; }
+}
+
+/* Готовый текст выходит один раз и мягко — без рывка и без «прыжка» вёрстки. */
+.mt-appear{ animation:mt-appear .34s cubic-bezier(.2,.7,.3,1) both; }
+@keyframes mt-appear{
+  from{ opacity:0; transform:translateY(2px); }
+  to  { opacity:1; transform:none; }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .mt-pending::after{ animation:none; }
+  .mt-appear{ animation:none; }
+}
+
+/* Отметка в шапке, пока идёт перевод: ровная, без мерцания. */
+.top-lang .lb-mt.mt-run{ opacity:.55; }
+
+/* Загрузка реплики новеллы: она открывается уже на языке игрока, а пока
+   перевод в пути — на сцене honest-строка, а не пустота. */
+.hp-vn-load{
+  display:inline-block;
+  font-size:11px; letter-spacing:.16em; font-weight:600;
+  color:var(--te,#3ec0d0); opacity:.8;
+}

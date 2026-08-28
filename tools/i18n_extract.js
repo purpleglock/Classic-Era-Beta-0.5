@@ -57,6 +57,26 @@ function literals(src) {
         const d = src[i];
         if (d === '\\') { buf += (src[i + 1] === 'n' ? '\n' : src[i + 1]); i += 2; continue; }
         if (d === q) { i++; break; }
+
+        // ── Внутрь ${…} НАДО заходить: там лежат подписи, переданные
+        //    аргументами — `${row('neb', …, 'Туманности', …)}`. Пока мы
+        //    выбрасывали подстановку целиком, вся панель слоёв карты в
+        //    словарь не попадала и оставалась русской. Поэтому вырезаем
+        //    выражение, разбираем его как код и продолжаем строку.
+        if (q === '`' && d === '$' && src[i + 1] === '{') {
+          let depth = 1, j = i + 2;
+          while (j < n && depth) {
+            if (src[j] === '{') depth++;
+            else if (src[j] === '}') depth--;
+            else if (src[j] === '\n') line++;
+            j++;
+          }
+          for (const inner of literals(src.slice(i + 2, j - 1))) out.push([inner[0], start]);
+          buf += HOLE;                 // на месте выражения — место под значение
+          i = j;
+          continue;
+        }
+
         if (d === '\n') { line++; if (q !== '`') break; }   // незакрытая кавычка — бросаем
         buf += d;
         i++;
@@ -89,9 +109,22 @@ function holes(s) {
   return out.trim();
 }
 
+// Надписи прячутся и в АТРИБУТАХ: подсказки (title), подписи полей
+// (placeholder) и — главное — собственные атрибуты разметки вроде
+// data-chap="Совет", из которых потом строится меню. Разрезав литерал по
+// тегам, мы их теряли: пункты «Совет» и «Канцелярия» так и остались
+// русскими в переведённом кабинете.
+const ATTR_RX = /(?:title|placeholder|aria-label|alt|label|data-[a-z-]+)\s*=\s*"([^"]*)"/gi;
+
 function phrases(lit) {
   const marked = lit.replace(/\$\{[^}]*\}/g, HOLE);
   const out = [];
+
+  for (const m of marked.matchAll(ATTR_RX)) {
+    const c = clean(m[1]);
+    if (c) out.push(holes(c));
+  }
+
   const pieces = marked.includes('<') ? marked.split(/<[^>]*>/) : [marked];
   for (const piece of pieces) {
     const c = clean(piece);

@@ -6056,7 +6056,36 @@ function heroVNInit() {
     if (_heroVNResume && _heroVNResume.sig === sig && _heroVNResume.idx > 0 && _heroVNResume.idx < idleLines.length) {
       resumeAt = _heroVNResume.idx;
     }
-    play(resumeAt, true);
+    // Новелла — лицо проекта, и открываться она обязана СРАЗУ на языке
+    // игрока. Печатать по буквам русскую реплику, чтобы потом подменить её
+    // переводом, нельзя: это худшее из возможных мельтешений. Поэтому
+    // сначала переводим реплики целиком, и только потом печатаем.
+    vnTranslateLines(() => play(resumeAt, true));
+  }
+
+  // Переводит реплики сценария на язык игрока и зовёт продолжение. Переводить
+  // нечего (язык совпал, перевод выключен) — идём дальше в тот же тик, без
+  // единого лишнего кадра.
+  function vnTranslateLines(next) {
+    const need = (typeof lang !== 'undefined' && lang === 'en')
+              && (typeof mtTranslate === 'function')
+              && (typeof mtOn !== 'function' || mtOn());
+    const ru = t => /[А-ЯЁа-яё]{2}/.test(t);
+    if (!need || !lines.some((l, i) => ru(T(i)))) { next(); return; }
+
+    // Пока перевод в пути — честная строка загрузки: пустая сцена читается
+    // как поломка.
+    if (out) out.innerHTML = '<span class="hp-vn-load">TRANSLATING…</span>';
+
+    Promise.all(lines.map((l, i) => {
+      const t = T(i);
+      return ru(t) ? mtTranslate(t.trim()) : Promise.resolve(null);
+    })).then(trs => {
+      lines = lines.map((l, i) => {
+        if (!trs[i]) return l;
+        return (l && typeof l === 'object') ? { ...l, t: trs[i] } : trs[i];
+      });
+    }).catch(() => {}).then(() => next());
   }
   // Контроллер — контекстное меню/рассказ рулят активным сценарием.
   _heroVNCtl = {

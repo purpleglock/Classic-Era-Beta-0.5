@@ -441,7 +441,7 @@ function fnFeedRow(n) {
   return `<div class="fn-feed-row fn-fr-${kind}" data-fn-id="${esc(n.id)}" onclick="fnOpenArticle('${esc(n.id)}')">
     <span class="fn-fr-ic">${ic}</span>
     ${fnFeedFlagHtml(n)}
-    <span class="fn-fr-title">${esc(n.title || '')}</span>
+    <span class="fn-fr-title" data-mt data-mt-quiet>${esc(n.title || '')}</span>
     <span class="fn-fr-time">${esc(fnStardate(n.published_at || n.created_at))}</span>
     ${fnIsStaff() ? `<button class="fn-fr-del" title="Удалить (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">✕</button>` : ''}
   </div>`;
@@ -460,7 +460,7 @@ function fnFeedAchGroup(grp) {
     return `<div class="fn-feed-row fn-fr-bulletin fn-feed-subrow${img ? ' has-art' : ''}"${bg} data-fn-id="${esc(n.id)}" onclick="event.stopPropagation();fnOpenArticle('${esc(n.id)}')">
       <span class="fn-fr-ic">🏆</span>
       ${fnFeedFlagHtml(n)}
-      <span class="fn-fr-title"><b>${esc(who)}</b> — ${esc(nm)}</span>
+      <span class="fn-fr-title" data-mt data-mt-quiet><b>${esc(who)}</b> — ${esc(nm)}</span>
       <span class="fn-fr-time">${esc(fnStardate(n.published_at || n.created_at))}</span>
     </div>`;
   }).join('');
@@ -468,7 +468,7 @@ function fnFeedAchGroup(grp) {
     <div class="fn-feed-row fn-fr-bulletin fn-feed-summary" onclick="fnToggleFeedAchGroup(this)" role="button" tabindex="0">
       <span class="fn-fr-chev">▸</span>
       <span class="fn-fr-ic">🏆</span>
-      <span class="fn-fr-title">${esc(cnt + ' ' + word + ' сектора')}</span>
+      <span class="fn-fr-title" data-mt data-mt-quiet>${esc(cnt + ' ' + word + ' сектора')}</span>
       <span class="fn-feed-hint">развернуть</span>
       <span class="fn-fr-time">${esc(fnStardate(grp[0].published_at || grp[0].created_at))}</span>
     </div>
@@ -490,7 +490,7 @@ function fnFeedColonyGroup(grp) {
     return `<div class="fn-feed-row fn-fr-bulletin fn-feed-subrow" data-fn-id="${esc(n.id)}" onclick="event.stopPropagation();fnOpenArticle('${esc(n.id)}')">
       <span class="fn-fr-ic">🪐</span>
       ${fnFeedFlagHtml(n)}
-      <span class="fn-fr-title">${esc(tail)}</span>
+      <span class="fn-fr-title" data-mt data-mt-quiet>${esc(tail)}</span>
       <span class="fn-fr-time">${esc(fnStardate(n.published_at || n.created_at))}</span>
     </div>`;
   }).join('');
@@ -498,7 +498,7 @@ function fnFeedColonyGroup(grp) {
     <div class="fn-feed-row fn-fr-bulletin fn-feed-summary" onclick="fnToggleFeedAchGroup(this)" role="button" tabindex="0">
       <span class="fn-fr-chev">▸</span>
       <span class="fn-fr-ic">🪐</span>
-      <span class="fn-fr-title">${esc(cnt + ' ' + word + ' сектора')}</span>
+      <span class="fn-fr-title" data-mt data-mt-quiet>${esc(cnt + ' ' + word + ' сектора')}</span>
       <span class="fn-feed-hint">развернуть</span>
       <span class="fn-fr-time">${esc(fnStardate(grp[0].published_at || grp[0].created_at))}</span>
     </div>
@@ -840,7 +840,10 @@ async function fnLoadMoreEvents() {
     FN.events = (FN.events || []).concat(more);
     more.forEach(n => FN.byId.set(n.id, n));
     const list = document.getElementById('fn-feed-list');
-    if (list) list.insertAdjacentHTML('beforeend', fnFeedRows(more));
+    if (list) {
+      list.insertAdjacentHTML('beforeend', fnFeedRows(more));
+      if (typeof mtScan === 'function') mtScan(list);
+    }
   }
   if (more.length < 30) { const b = document.getElementById('fn-feed-more'); if (b) b.style.display = 'none'; }
 }

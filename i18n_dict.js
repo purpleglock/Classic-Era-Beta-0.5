@@ -169,6 +169,10 @@ function i18dApply(roots) {
   return hits;
 }
 
+// Наблюдатель зовёт нас ПЕРЕД отрисовкой кадра. Значит подменять надо прямо
+// здесь и сейчас: любая задержка (даже setTimeout 0) отдаёт браузеру кадр с
+// русским текстом, а следом идёт кадр с английским — это и читается как
+// «мигает по сто раз». Очередь оставлена только для отложенных случаев.
 function i18dQueue(root) {
   if (lang !== 'en') return;
   if (root) I18D.roots.push(root);
@@ -178,7 +182,7 @@ function i18dQueue(root) {
     const roots = I18D.roots.length ? I18D.roots : [document.body];
     I18D.roots = [];
     i18dApply(roots);
-  }, I18D_WAIT);
+  }, 0);
 }
 
 // Панели рисуются по мере кликов. Ждать вызова от каждого рендерера — значит
@@ -187,12 +191,16 @@ function i18dWatch() {
   if (!('MutationObserver' in window)) return;
   new MutationObserver(muts => {
     if (I18D.applying || lang !== 'en') return;
+    const roots = [];
     for (const m of muts) {
       for (const n of m.addedNodes) {
-        if (n.nodeType === 1) i18dQueue(n);
-        else if (n.nodeType === 3 && m.target?.nodeType === 1) i18dQueue(m.target);
+        if (n.nodeType === 1) roots.push(n);
+        else if (n.nodeType === 3 && m.target?.nodeType === 1) roots.push(m.target);
       }
     }
+    if (!roots.length) return;
+    // СИНХРОННО, до кадра: так русский текст на экране не появляется вовсе.
+    i18dApply(roots);
   }).observe(document.body, { childList: true, subtree: true });
 }
 
