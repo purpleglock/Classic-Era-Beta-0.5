@@ -264,22 +264,30 @@ async function mtScan(root) {
       //    / «, the black star is») — выходит каша.
       //    Исключение — ссылки: их текст осмыслен сам по себе и вычищать его
       //    из <a> нельзя, поэтому там идём по узлам.
-      // Неприкасаемые куски абзаца: чип упомянутой державы, ссылка,
-      // всё помеченное data-mt-keep. Их текст — имя собственное, его нельзя
-      // ни переводить, ни гасить при склейке (именно так из новостей
-      // пропадали вставленные державы: оставались пустые квадратики).
+      // Особые куски абзаца: чип упомянутой державы, текст ссылки, всё с
+      // data-mt-keep. При склейке их гасить нельзя — именно так из новостей
+      // пропадали вставленные державы, оставались пустые квадратики. Но и
+      // оставлять их кириллицей посреди английской фразы нельзя: имя
+      // переводится ОТДЕЛЬНЫМ куском и остаётся на своём месте.
       const anchor = n => !!n.parentElement?.closest(MT_KEEP);
       const keep = nodes.filter(anchor);
       const free = nodes.filter(n => !anchor(n));
+
+      // Имена в чипах и ссылках — сами по себе, каждое своим запросом.
+      for (const n of keep) {
+        const v = n.nodeValue.trim();
+        if (!mtWorth(v, to)) continue;
+        pieces.push({ nodes: [n], whole: false, cached: mtCached(v), p: [mtTranslate(v)] });
+      }
       if (!free.length) continue;
 
       if (!keep.length) {
-        const whole = nodes.map(n => n.nodeValue).join('').replace(/s+/g, ' ').trim();
+        const whole = nodes.map(n => n.nodeValue).join('').replace(/\s+/g, ' ').trim();
         if (!mtWorth(whole, to)) continue;
         pieces.push({ nodes, whole: true, cached: mtCached(whole), p: [mtTranslate(whole)] });
       } else {
-        // Собираем фразу с метками на месте неприкасаемых кусков: переводчик
-        // видит связный текст, а метки возвращаются на свои места.
+        // Собираем фразу с метками на месте особых кусков: переводчик видит
+        // связный текст, а метки возвращаются на свои места.
         let text = '', k = 0;
         const slots = [];              // сегмент → узлы обычного текста
         let cur = [];
@@ -288,7 +296,7 @@ async function mtScan(root) {
           else { cur.push(n); text += n.nodeValue; }
         }
         slots.push(cur);
-        const whole = text.replace(/s+/g, ' ').trim();
+        const whole = text.replace(/\s+/g, ' ').trim();
         if (!mtWorth(whole, to)) continue;
         pieces.push({ nodes: free, slots, marks: k, whole: 'marked',
                       cached: mtCached(whole), p: [mtTranslate(whole)] });
@@ -320,7 +328,7 @@ async function mtScan(root) {
       // проводим обычным путём, синхронную дорожку не усложняем.
       if (p.whole === 'marked') { ok = false; break; }
       const vals = p.whole
-        ? [mtCacheGet(p.nodes.map(n => n.nodeValue).join('').replace(/s+/g, ' ').trim())]
+        ? [mtCacheGet(p.nodes.map(n => n.nodeValue).join('').replace(/\s+/g, ' ').trim())]
         : p.nodes.map(n => mtCacheGet(n.nodeValue));
       if (!vals.some(Boolean)) { ok = false; break; }
       p.nodes.forEach((n, i) => {
@@ -366,7 +374,9 @@ async function mtScan(root) {
         if (p.whole === 'marked') {
           // Режем перевод по меткам и раскладываем куски между неприкасаемыми:
           // державы остаются на своих местах, текст вокруг них — переведённый.
-          const parts = String(trs[0] || '').split(/s*⟦d+⟧s*/);
+          // Метку переводчик может слегка исказить (пробел внутри, другие
+          // скобки), поэтому разрез терпимый к мусору вокруг номера.
+          const parts = String(trs[0] || '').split(/\s*[⟦[【]{1,2}\s*\d+\s*[⟧\]】]{1,2}\s*/);
           p.slots.forEach((slot, si) => {
             const val = parts[si] != null ? parts[si] : '';
             slot.forEach((n, i) => tr.push([n, i === 0 ? (si ? ' ' + val + ' ' : val + ' ') : '']));

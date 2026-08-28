@@ -734,7 +734,7 @@ function gardenStart(cv, world, spawn) {
   // Без полёта клик по камню в двух экранах от тебя читался телепортом улова.
   let netFly = null;
   function netThrow(rock, t) {
-    if (netFly || _gdHook) return;
+    if (netFly || _gdHook || _gdCast) return;
     netFly = { rock, t0: t, dur: .38, back: false };
     if (_gd) _gd.actAt = t;                        // корабль отыгрывает взмах
   }
@@ -3480,9 +3480,17 @@ async function gardenClear() {
 // garden_haul(id, ok, score) выдаёт награду. Содержимое камня до конца стяжки
 // не показываем — иначе по «жирности» решают, тянуть или бросить.
 let _gdHook = null;
+// ⚠️ ЗАМОК НА ВРЕМЯ ЗАПРОСА. `_gdHook` встаёт только ПОСЛЕ ответа сервера, а
+// полёт сети живёт 0.76 с: стоит `garden_cast` подвиснуть дольше (телефон,
+// мобильная сеть) — и на следующий тычок бросалась ВТОРАЯ сеть. Приезжали два
+// ответа, второй `gardenGripStart` затирал `_gdHook` первого, и слушатель
+// первого оставался висеть на window В ФАЗЕ ПЕРЕХВАТА: панель мертва, а
+// pointerdown по всей странице глохнет до перезагрузки вкладки.
+let _gdCast = false;
 
 async function gardenRockOpen(rock) {
-  if (_gdHook) return;
+  if (_gdHook || _gdCast) return;
+  _gdCast = true;
   let b;
   try {
     b = await ecRpc('garden_cast', {
@@ -3492,15 +3500,20 @@ async function gardenRockOpen(rock) {
       p_tier: rock ? (rock.tier | 0) : 0,
     });
   } catch (e) {
+    _gdCast = false;
     gardenToast((e && e.message) || 'сеть сорвалась', 'err');
     return;
   }
+  _gdCast = false;
   if (!b || !b.id) { gardenToast('Камень рассыпался в пыль.'); return; }
   gardenGripStart(b.id, Number(b.hard) || 1, rock);
 }
 
 // Состояние стяжки живёт в _gdHook: id добычи, камень, хваты, промахи.
 function gardenGripStart(id, hard, rock) {
+  // Страховка от второй стяжки: если по любой причине предыдущая осталась
+  // живой, снимаем её слушатели и коробку ДО того, как заведём новую.
+  gardenGripTeardown();
   const need = 3;
   const el = document.createElement('div');
   el.id = 'gd-grip'; el.className = 'gd-grip';
@@ -3556,6 +3569,21 @@ function gardenGripStart(id, hard, rock) {
   addEventListener('pointerdown', _gdHook.tap, true);
 }
 
+// Снятие стяжки одним местом: слушатели, кадр, коробка. Порознь их уже забывали
+// (см. историю с `h.tap`), и каждый забытый перехватчик глушит весь ввод.
+function gardenGripTeardown() {
+  const h = _gdHook;
+  _gdHook = null;
+  if (h) {
+    h.done = true;
+    if (h.raf) cancelAnimationFrame(h.raf);
+    if (h.key) removeEventListener('keydown', h.key, true);
+    if (h.tap) removeEventListener('pointerdown', h.tap, true);
+  }
+  // Коробок может остаться и без живого хука — сносим все, а не первую.
+  document.querySelectorAll('#gd-grip, .gd-grip').forEach(el => el.remove());
+}
+
 function gardenGripPips() {
   const h = _gdHook; if (!h) return;
   const el = document.getElementById('gd-grip-pips');
@@ -3605,10 +3633,7 @@ async function gardenGripEnd(ok) {
   // (и реплики о ней) управление умирало насмерть: до стика и до холста тычок
   // просто не доходил. На мыши это читалось «клик перестал работать», на
   // телефоне — «управление заглохло».
-  removeEventListener('keydown', h.key, true);
-  removeEventListener('pointerdown', h.tap, true);
-  _gdHook = null;
-  const el = document.getElementById('gd-grip'); if (el) el.remove();
+  gardenGripTeardown();
   gardenPadOff(false);
   // Пойманный камень уходит из поля и возвращается новым (см. astStep): иначе
   // один и тот же обломок черпается бесконечно, стоя на месте.
@@ -3665,7 +3690,9 @@ function gardenStopGame() {
   gardenPanelClose();
   const fs = document.getElementById('gd-fs');
   if (fs) fs.remove();
+  _gdCast = false;
   if (_gdHook) gardenGripEnd(false);           // стяжку не бросаем висеть
+  else gardenGripTeardown();                   // и хвосты, если хук уже потерян
 }
 
 function gardenStyleOnce() {

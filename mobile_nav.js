@@ -70,6 +70,8 @@ const MNAV = {
   pick: [],          // исходные кнопки экрана под строками ступени
   _lbl: {},          // последние подписи кнопок — чтобы не трогать DOM вхолостую
   _marked: [],       // полосы, отражённые в лист (метка data-mnav)
+  _h: null,          // последняя измеренная высота панели (px) — см. mnavMeasure
+  _ro: null,         // наблюдатель за высотой панели
 };
 
 // ⚠️ ПОРОГ ТОТ ЖЕ, ЧТО У `_cabWide()` В cabinet.js, И ЭТО ОБЯЗАТЕЛЬНО. Мобильная
@@ -357,6 +359,41 @@ function mnavBody() {
   return html;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ВЫСОТА ПАНЕЛИ — ОДНО ЧИСЛО НА ВЕСЬ КАБИНЕТ
+// ═══════════════════════════════════════════════════════════════
+// ⚠️ ЗАЗОР ПОД СОДЕРЖИМОЕ БЫЛ ВПИСАН РУКАМИ (58px в 31_mobile_nav.css) И НЕ
+// СХОДИЛСЯ С ЖИЗНЬЮ. Панель растёт от шрифта, от двух строк крошек, от
+// safe-area телефона, а в ландшафте сжимается своими правилами — то есть
+// настоящая её высота известна только браузеру. Разница в три десятка
+// пикселей — это последняя карточка ведомства, навсегда закрытая панелью:
+// ровно то, на что жаловались («войн не видно, мир не заключить»). И это не
+// один экран, а ВЕСЬ кабинет.
+//
+// Меряем панель и кладём высоту переменной `--mnav-h` на <html>; всё, что
+// обязано её обходить (полотно, тосты, плавающие кнопки), считает от неё.
+// Панели нет — переменная 0px, и калькуляции сами схлопываются.
+function mnavMeasure() {
+  const html = document.documentElement;
+  const bar = document.getElementById('mnav');
+  let h = 0;
+  if (bar && html.classList.contains('mnav-on')) h = Math.round(bar.getBoundingClientRect().height);
+  if (MNAV._h === h) return;
+  MNAV._h = h;
+  html.style.setProperty('--mnav-h', h + 'px');
+}
+
+// Панель меняет высоту молча: повернули телефон, сменился шрифт, крошки стали
+// в одну строку. Наблюдатель ловит это без опроса; где его нет — довольно
+// вызова из mnavSync (он и так тикает).
+function mnavWatchSize() {
+  if (MNAV._ro || typeof ResizeObserver !== 'function') return;
+  const bar = document.getElementById('mnav');
+  if (!bar) return;
+  MNAV._ro = new ResizeObserver(() => { try { mnavMeasure(); } catch (e) {} });
+  MNAV._ro.observe(bar);
+}
+
 function mnavPaint() {
   const body = document.getElementById('mn-body');
   if (!body) return;
@@ -506,12 +543,15 @@ function mnavSync() {
       html.classList.remove('mnav-on');
       mnavClose();
       mnavUnmarkAll();
+      mnavMeasure();
     }
     return;
   }
 
   mnavBuild();
   html.classList.add('mnav-on');
+  mnavWatchSize();
+  mnavMeasure();
 
   const screen = mnavScreen();
   mnavMark(screen);
@@ -581,7 +621,12 @@ function mnavLbl(slot, text, active) {
   else start();
 
   window.addEventListener('hashchange', () => { mnavClose(); setTimeout(() => { try { mnavSync(); } catch (e) {} }, 60); });
-  window.addEventListener('resize', () => { try { mnavSync(); } catch (e) {} });
+  window.addEventListener('resize', () => { try { mnavSync(); mnavMeasure(); } catch (e) {} });
+  // Поворот телефона: размеры приходят позже самого события — меряем и следом.
+  window.addEventListener('orientationchange', () => {
+    try { mnavSync(); mnavMeasure(); } catch (e) {}
+    setTimeout(() => { try { mnavSync(); mnavMeasure(); } catch (e) {} }, 260);
+  });
   window.addEventListener('keydown', e => { if (e.key === 'Escape' && MNAV.sheet) mnavClose(); });
   // Страховка на случай, если наблюдатель не увидел подмену (пересозданный #cw).
   setInterval(() => { try { mnavSync(); } catch (e) {} }, 1500);

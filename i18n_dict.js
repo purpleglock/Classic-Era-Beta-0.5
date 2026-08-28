@@ -28,6 +28,10 @@ const I18D = {
   roots: [],
 };
 
+// Версия словаря. Бампать при каждом прогоне i18n_fill: без неё браузер
+// держит старый en.json в кэше и новые фразы до игрока не доезжают.
+const I18D_VER = '20260828f';
+
 const I18D_MISS_KEY = 'wk_i18n_miss';
 const I18D_MAX  = 400;    // узлов за один проход
 const I18D_WAIT = 60;     // мс на склейку правок DOM
@@ -43,8 +47,8 @@ async function i18dLoad() {
   I18D.map = new Map();
   try {
     const [en, gloss] = await Promise.all([
-      fetch('i18n/en.json').then(r => r.ok ? r.json() : {}).catch(() => ({})),
-      fetch('i18n/glossary.json').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+      fetch('i18n/en.json?v=' + I18D_VER).then(r => r.ok ? r.json() : {}).catch(() => ({})),
+      fetch('i18n/glossary.json?v=' + I18D_VER).then(r => r.ok ? r.json() : {}).catch(() => ({})),
     ]);
     for (const k in en) I18D.map.set(k, en[k]);
     for (const k in gloss) I18D.map.set(k, gloss[k]);   // ручное сильнее машинного
@@ -78,15 +82,33 @@ function i18d(text) {
   const hit = I18D.map.get(s);
   if (hit) return hit;
 
+  // Одна и та же надпись живёт в коде и КАПСОМ, и обычным письмом («НОВАЯ
+  // СТРАНИЦА» против «Новая страница»). Держать в словаре оба варианта —
+  // мусор, поэтому капс ищем по обычной записи и возвращаем тоже капсом.
+  if (s === s.toUpperCase() && /[А-ЯЁ]{2}/.test(s)) {
+    const low = s.toLowerCase();
+    const cap = low.charAt(0).toUpperCase() + low.slice(1);
+    const alt = I18D.map.get(cap) || I18D.map.get(low);
+    if (alt) return alt.toUpperCase();
+  }
+
   // Строку могли собрать в рантайме из кусков: «Пустотный рейдер · 3 уровень»
   // — это звание из базы плюс подпись из кода, и целиком её в словаре нет и
   // быть не может. Составную строку разбираем по разделителям ДО образцов:
   // иначе образец схватит её целиком и перемешает куски местами.
-  if (/ [·•|—] /.test(s)) {
+  // …но ТОЛЬКО для коротких составных подписей. В длинном предложении тире —
+  // это знак препинания, а не разделитель полей: «Системы — захватываются на
+  // карте…» рвалось на куски, первый переводился, остальное оставалось
+  // русским, и выходил уродливый гибрид.
+  if (s.length <= 60 && / [·•|—] /.test(s)) {
     const parts = s.split(/ [·•|—] /);
     const seps = s.match(/ [·•|—] /g);
     const trs = parts.map(p => I18D.map.get(p.trim()) || i18dTpl(p.trim()));
-    if (trs.some(Boolean)) {
+    // ВСЕ части или ничего. Перевод половины строки даёт «Three levers of
+    // well-being — что на что влияет»: полурусский гибрид читается как
+    // поломка, тогда как целиком русская строка — просто непереведённая,
+    // и она честно уйдёт в промахи на дозаполнение словаря.
+    if (trs.every(Boolean)) {
       let out = trs[0] ?? parts[0];
       for (let k = 1; k < parts.length; k++) out += seps[k - 1] + (trs[k] ?? parts[k]);
       return out;

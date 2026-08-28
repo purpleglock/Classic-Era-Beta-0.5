@@ -5894,7 +5894,7 @@ function heroVNInit() {
   let idleLines;
   try { idleLines = JSON.parse(sig); } catch (e) { idleLines = []; }
   if (!idleLines.length) return;
-  const idleSpeaker = box.getAttribute('data-speaker') || '';
+  let idleSpeaker = box.getAttribute('data-speaker') || '';   // let: имя тоже переводится
 
   // Активный сценарий (idle-новелла ИЛИ нарратив-ответ на выбор).
   let lines = idleLines, loop = true, onCompleteOnce = null;
@@ -6077,6 +6077,12 @@ function heroVNInit() {
     // как поломка.
     if (out) out.innerHTML = '<span class="hp-vn-load">TRANSLATING…</span>';
 
+    // Страховка: молчащая сеть не имеет права оставить главную без новеллы.
+    // Не дождались за 6 секунд — играем как есть, на языке оригинала.
+    let started = false;
+    const go = () => { if (started) return; started = true; next(); };
+    setTimeout(go, 6000);
+
     Promise.all(lines.map((l, i) => {
       const t = T(i);
       return ru(t) ? mtTranslate(t.trim()) : Promise.resolve(null);
@@ -6085,7 +6091,17 @@ function heroVNInit() {
         if (!trs[i]) return l;
         return (l && typeof l === 'object') ? { ...l, t: trs[i] } : trs[i];
       });
-    }).catch(() => {}).then(() => next());
+      // Имя говорящего — часть реплики: «СТОИЦИСТКА» над английским текстом
+      // выглядит недоделкой.
+      const names = [...new Set(lines.map((l, i) => N(i)).concat(idleSpeaker).filter(n => n && ru(n)))];
+      if (!names.length) return null;
+      return Promise.all(names.map(n => mtTranslate(n.trim()))).then(nt => {
+        const map = new Map(names.map((n, k) => [n, nt[k] || n]));
+        lines = lines.map(l => (l && typeof l === 'object' && l.n && map.has(l.n))
+          ? { ...l, n: map.get(l.n) } : l);
+        if (map.has(idleSpeaker)) idleSpeaker = map.get(idleSpeaker);
+      });
+    }).catch(() => {}).then(go);
   }
   // Контроллер — контекстное меню/рассказ рулят активным сценарием.
   _heroVNCtl = {
@@ -6112,7 +6128,10 @@ function heroVNInit() {
   };
 
   renderChoices();
-  play(startAt, true);   // первая реплика — мгновенно (без эффекта перезапуска)
+  // Новелла — лицо проекта: она обязана открыться СРАЗУ на языке игрока.
+  // Печатать по буквам русскую реплику, чтобы потом подменить её переводом,
+  // нельзя. Поэтому сперва переводим реплики, потом печатаем.
+  vnTranslateLines(() => play(startAt, true));   // первая реплика — мгновенно
 }
 
 // ══════════════════════════════════════════════════════════════

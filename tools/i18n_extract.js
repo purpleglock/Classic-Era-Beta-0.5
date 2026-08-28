@@ -133,6 +133,32 @@ function phrases(lit) {
   return out;
 }
 
+// ── Подбор за посимвольным разбором ──────────────────────────────────
+//  Разбор кода посимвольно спотыкается о регулярные литералы: `/[^']/` он
+//  принимает за начало строки и дальше «едет» со сдвигом, теряя куски файла
+//  (так пропала «ВЕСТНИК ФРАКЦИЙ» — заголовок ленты новостей на главной).
+//  Поэтому вторым проходом идём построчно и грубо: берём текст между тегами
+//  и содержимое коротких кавычек. Лишнее отсеет clean(), а пропусков не
+//  остаётся.
+function roughPhrases(src) {
+  const out = [];
+  for (const line of src.split('\n')) {
+    const t = line.trim();
+    if (!/[А-ЯЁа-яё]{2}/.test(t)) continue;
+    if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) continue;
+
+    for (const m of line.matchAll(/>([^<>{}`]{2,200}?)</g)) {
+      const c = clean(m[1]);
+      if (c) out.push(c);
+    }
+    for (const m of line.matchAll(/'([^'\\\n]{2,200})'|"([^"\\\n]{2,200})"/g)) {
+      const c = clean(m[1] ?? m[2] ?? '');
+      if (c) out.push(c);
+    }
+  }
+  return out;
+}
+
 function main() {
   const files = fs.readdirSync(ROOT).filter(isCode);
   const dict = new Map();   // фраза → места в коде
@@ -145,6 +171,10 @@ function main() {
         if (!dict.has(p)) dict.set(p, new Set());
         dict.get(p).add(f + ':' + line);
       }
+    }
+    for (const p of roughPhrases(src)) {
+      if (!dict.has(p)) dict.set(p, new Set());
+      dict.get(p).add(f);
     }
   }
 
