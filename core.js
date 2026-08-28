@@ -248,7 +248,19 @@ let user     = null;
 let sections = [];
 let pages    = [];
 let curSlug  = null;
-let lang     = localStorage.getItem('wk_lang') || 'ru';
+// Язык: выбор игрока сильнее всего, но пока выбора не было — спрашиваем
+// браузер. Гость из Европы получал русскую раскладку просто потому, что
+// умолчание было прибито гвоздём.
+function _guessLang() {
+  const ls = [navigator.language, ...(navigator.languages || [])].filter(Boolean);
+  for (const l of ls) {
+    const c = String(l).toLowerCase().slice(0, 2);
+    if (['ru', 'uk', 'be', 'kk', 'ky', 'uz', 'tg', 'hy', 'az', 'mo'].includes(c)) return 'ru';
+    if (c) return 'en';
+  }
+  return 'ru';
+}
+let lang     = localStorage.getItem('wk_lang') || _guessLang();
 let editMode = false, editData = null, editBlocks = [];
 let apOpen   = false, apTab = 'pages';
 let secSlugLk = false, npSlugLk2 = false;
@@ -434,6 +446,12 @@ let _langBusy = false;
 function setLang(l) {
   if (_langBusy) return; _langBusy = true;
   lang = l; localStorage.setItem('wk_lang', l);
+  // Машинный перевод считается от текущего языка: старые подмены снимаем,
+  // иначе на экране останется перевод на язык, который только что сменили.
+  if (typeof mtDropAll === 'function') mtDropAll();
+  // Словарь интерфейса: отметки «этот узел уже прошёл» сбрасываем, иначе
+  // перерисованный текст будет считаться пройденным и останется русским.
+  if (typeof i18dReset === 'function') i18dReset();
   document.getElementById('lb-ru')?.classList.toggle('on', l==='ru');
   document.getElementById('lb-en')?.classList.toggle('on', l==='en');
   const sc = document.getElementById('sb-cnt');

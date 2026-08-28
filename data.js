@@ -285,6 +285,21 @@ function setPg(html) {
   el.className='pgi';
   el.innerHTML=html;
   setTimeout(()=>{
+    // Машинный перевод статьи. У блоков есть пары полей (content/content_en),
+    // но авторы заполняют вторую редко — там, где перевода нет, читатель на
+    // другом языке упирался в стену. Метим текстовые узлы статьи и отдаём их
+    // переводчику; блоки с уже написанным переводом он пропустит сам, потому
+    // что язык там совпадёт с языком читателя.
+    if (typeof mtScan === 'function') {
+      el.querySelectorAll('.prose,.blk-quote-text,.blk-timeline-text,.bim-caption')
+        .forEach(n => n.setAttribute('data-mt', ''));
+      // Заголовки, подписи и ярлыки — тихо: подпись «переведено» под каждым
+      // из них превратила бы статью в частокол служебных строк.
+      el.querySelectorAll('.art-h1,.blk-heading,.blk-alert-title,.blk-callout-title,'
+        + '.blk-frame-label,.ib-head-title,.ib-head-sub,.blk-stat-lbl,.blk-quote-author')
+        .forEach(n => { n.setAttribute('data-mt', ''); n.setAttribute('data-mt-quiet', ''); });
+      mtScan(el);
+    }
     // Battle maps
     el.querySelectorAll('[data-bm]').forEach(svgEl=>{
       const bid=svgEl.id?.replace('bm-svg-','');

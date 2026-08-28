@@ -966,7 +966,7 @@ function chRenderLog() {
       <div class="ch-msg-main">
         ${cont ? '' : `<div class="ch-msg-hd"><span class="ch-msg-a">${m.staff ? `<span class="ch-shield" title="администрация">${chIco('shield', 12)}</span>` : ''}${esc(m.name)}</span>${facChip}<span class="ch-msg-w">${chWhen(m.at)}</span></div>`}
         ${chQuote(m)}
-        <div class="ch-msg-b">${m.del ? '<i class="ch-gone">слово забрано назад</i>' : (m.st ? chStBody(m) : (q ? chMark(m.body, q) : chFmt(m.body)))}${m.ed && !m.del ? '<span class="ch-ed" title="правлено">· правлено</span>' : ''}</div>
+        <div class="ch-msg-b"${(!m.del && !m.st && !q) ? ' data-mt' : ''}>${m.del ? '<i class="ch-gone">слово забрано назад</i>' : (m.st ? chStBody(m) : (q ? chMark(m.body, q) : chFmt(m.body)))}${m.ed && !m.del ? '<span class="ch-ed" data-mt-skip title="правлено">· правлено</span>' : ''}</div>
         ${chRxRow(m.id)}
       </div>
     </div>`;
@@ -978,6 +978,13 @@ function chRenderLog() {
   else if (CH.stick) { box.scrollTop = box.scrollHeight; CH.fresh = 0; }
   else { box.scrollTop = top + (box.scrollHeight - before); }
   chRenderDown(); chRenderActs();
+  // Чужой язык в эфире переводим на месте: реплика читается сразу, оригинал —
+  // по подписи под ней.
+  // Перевод приходит асинхронно и меняет высоту строк — если человек читает
+  // низ ленты, после подмены возвращаем его туда же.
+  if (typeof mtScan === 'function') {
+    mtScan(box).then(() => { if (CH.stick && !CH.qm.trim()) box.scrollTop = box.scrollHeight; });
+  }
 }
 // Пилюля «N новых»: показываем ТОЛЬКО когда человек читает выше — внизу она
 // была бы враньём (всё и так видно).

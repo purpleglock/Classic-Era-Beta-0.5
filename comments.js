@@ -379,7 +379,7 @@ function renderCommentItem(cmt, depth = 0) {
       ${canEdit ? `<button class="cmt-edit-btn" onclick="editComment('${esc(cmt.id)}')" title="${lang === 'ru' ? 'Редактировать' : 'Edit'}">✎</button>` : ''}
       ${canDel ? `<button class="cmt-del-btn" onclick="deleteComment('${esc(cmt.id)}')" title="${lang === 'ru' ? 'Удалить' : 'Delete'}">✕</button>` : ''}
     </div>
-    <div class="cmt-body">${bodyHtml}</div>
+    <div class="cmt-body" data-mt>${bodyHtml}</div>
   </div>
 </div>`;
 }
@@ -433,6 +433,8 @@ function renderCommentsList() {
 
   const tree = buildCommentTree(_cmtItems);
   list.innerHTML = tree.map(node => renderCommentTree(node)).join('');
+  // Отыгрыш в локациях и комментарии — чужой язык переводим на месте.
+  if (typeof mtScan === 'function') mtScan(list);
 
   // Бейджи уровней: витрину могли не тянуть (зашли сразу на статью) —
   // дозагружаем в фоне и перерисовываем один раз, уже с бейджами.

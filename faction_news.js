@@ -224,8 +224,8 @@ function fnCardHtml(n, lead) {
         ${cardCover}
         <div class="fn-card-body">
           <div class="fn-card-kicker">${kicker}</div>
-          <h3 class="fn-card-title">${esc(n.title || 'Без заголовка')}</h3>
-          <p class="fn-card-excerpt">${esc(fnExcerpt(n))}</p>
+          <h3 class="fn-card-title" data-mt data-mt-quiet>${esc(n.title || 'Без заголовка')}</h3>
+          <p class="fn-card-excerpt" data-mt>${esc(fnExcerpt(n))}</p>
           <div class="fn-card-foot"><span class="fn-card-date">${esc(fnStardate(n.published_at || n.created_at))}</span><span class="fn-readmore">${readmore}</span></div>
         </div>
       </div>
@@ -283,7 +283,10 @@ async function fnArchiveMore(first) {
   if (first) list.innerHTML = '';
   FN.archive = (FN.archive || []).concat(rows);
   rows.forEach(n => FN.byId.set(n.id, n));           // чтобы fnOpenArticle нашёл запись
-  if (rows.length) list.insertAdjacentHTML('beforeend', rows.map(n => fnCardHtml(n, false)).join(''));
+  if (rows.length) {
+    list.insertAdjacentHTML('beforeend', rows.map(n => fnCardHtml(n, false)).join(''));
+    if (typeof mtScan === 'function') mtScan(list);
+  }
   else if (first) list.innerHTML = `<div style="color:var(--t3);font-size:13px;padding:14px">Архив пуст — опубликованных новостей пока нет.</div>`;
   const more = document.getElementById('fn-arch-more');
   if (more) more.style.display = rows.length < FN_ARCH_PAGE ? 'none' : '';
@@ -748,7 +751,10 @@ function fnWarmExchange() {
 async function fnLoadCorpTicker() {
   // Цели: лента сектора (#fn-corp-ticker) и боковая лента индексов в новелле (#hp-vn-ticker).
   const mounts = () => [document.getElementById('fn-corp-ticker'), document.getElementById('hp-vn-ticker')].filter(Boolean);
-  const fill = html => mounts().forEach(m => { m.innerHTML = html; });
+  const fill = html => mounts().forEach(m => {
+    m.innerHTML = html;
+    if (typeof mtScan === 'function') mtScan(m);
+  });
   if (!mounts().length) return;
   if (typeof user === 'undefined' || !user || typeof ecRpc !== 'function') return;
   // Кэш на сессию: не дёргаем тяжёлый RPC при каждом возврате на главную.
@@ -1522,8 +1528,8 @@ function fnOpenArticle(id) {
         <span class="fn-art-fac">${artFlag ? fnAuthorFlagHtml(artFlag, 'fn-art-flag') : '<span class="fn-dot"></span>'}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>
         <span class="fn-art-date">${esc(fnStardate(n.published_at || n.created_at))}</span>
       </div>
-      <h1 class="fn-art-title">${esc(n.title || 'Без заголовка')}</h1>
-      <div class="fn-art-body">${fnRenderBody(n.body)}</div>
+      <h1 class="fn-art-title" data-mt data-mt-quiet>${esc(n.title || 'Без заголовка')}</h1>
+      <div class="fn-art-body" data-mt>${fnRenderBody(n.body)}</div>
       ${fnAchCardHtml(n)}
       ${fnRenderVerdictBlock(n)}
       ${fnRenderAiVerdictBlock(n)}
@@ -1540,6 +1546,8 @@ function fnOpenArticle(id) {
   </div>`;
   modal.classList.add('show');
   document.body.style.overflow = 'hidden';
+  // Сводка чужой державы читается на языке читателя, оригинал — по подписи.
+  if (typeof mtScan === 'function') mtScan(modal);
   // Блок реакции государства — асинхронно (нужна одобренная фракция читателя)
   fnGetMyFaction().then(myFac => {
     const slot = document.getElementById('fn-react-slot');

@@ -12,7 +12,7 @@ const { minify } = require('terser');
 const ROOT = path.join(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 
-const COPY_DIRS  = ['css', 'assets', 'legal'];
+const COPY_DIRS  = ['css', 'assets', 'legal', 'i18n'];   // i18n — словарь интерфейса, без него EN-сборка останется русской
 // ⚠️ arena.html — ВТОРАЯ ЖИВАЯ СТРАНИЦА САЙТА. Кабинет открывает её кадром
 // (ведомство `arena`), поэтому в деплой она обязана попасть наравне с index.html:
 // без строки ниже раздел «Арена» на боевом сайте показывает пустой кадр.

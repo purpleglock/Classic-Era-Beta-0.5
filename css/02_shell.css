@@ -840,6 +840,13 @@ a.n-home, a.n-sub, a.np, a.ng-t { text-decoration:none; }
   inset: 0;
 }
 
+.partner-logo {
+  width: 18px;
+  height: 18px;
+  position: relative;
+  z-index: 1;
+}
+
 .partner-av-fallback {
   font-family: var(--font-mono);
   font-size: 8px;

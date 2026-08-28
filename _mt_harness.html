@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>MT — стенд</title>
+<link rel="stylesheet" href="css/42_mt.css">
+<style>
+  body{background:#0d1116;color:#c8d2dc;font:14px/1.5 system-ui;padding:24px;max-width:720px}
+  .ch-msg-b{background:#161c24;padding:10px 12px;margin:10px 0;border-radius:4px}
+  .top-lang{display:flex;gap:6px;margin-bottom:16px}
+  .top-lang button{background:#161c24;color:#8fa;border:1px solid #2a3542;padding:4px 8px;cursor:pointer}
+  .top-lang button.on{background:#1d2b36}
+  #out{margin-top:20px;white-space:pre-wrap;color:#7fd}
+</style></head><body>
+<h2>Стенд машинного перевода</h2>
+<div class="top-lang">
+  <button id="lb-ru">RU</button><button id="lb-en">EN</button>
+  <button id="lb-mt" class="lb-mt" onclick="mtToggle()">GLOBE</button>
+</div>
+
+<div id="log">
+  <div class="ch-msg-b" data-mt>Greetings, neighbour. My fleet departs for the Temple of Creation.</div>
+  <div class="ch-msg-b" data-mt>Привет, это на русском — переводить не надо.</div>
+  <div class="ch-msg-b" data-mt>Hold the <b>anchor</b>, the black star is <i>waking</i>.</div>
+  <div class="ch-msg-b" data-mt>:)</div>
+</div>
+<div id="out"></div>
+
+<script>
+// Заглушки того, что mt.js ждёт от core.js.
+const SB_URL = 'https://stub.local';
+const SB_ANON = 'stub';
+let lang = 'ru';
+function toast(t){ document.getElementById('out').textContent += 'toast: ' + t + '\n'; }
+
+// Подменяем сеть: возвращаем «[EN→RU] …», чтобы видеть, что именно ушло
+// в перевод и куда легло, не трогая живую функцию.
+const sent = [];
+window.fetch = async (url, opt) => {
+  const body = JSON.parse(opt.body);
+  sent.push(body);
+  return { ok: true, json: async () => ({ t: body.q.map(s => '«ПЕРЕВОД» ' + s) }) };
+};
+</script>
+<script src="mt.js"></script>
+<script>
+(async () => {
+  await mtScan(document.getElementById('log'));
+  await new Promise(r => setTimeout(r, 300));
+  const o = document.getElementById('out');
+  o.textContent += 'запросов в сеть: ' + sent.length + '\n';
+  o.textContent += 'строк отправлено: ' + JSON.stringify(sent.map(s => s.q), null, 1) + '\n';
+  o.textContent += 'подписей на экране: ' + document.querySelectorAll('.mt-note').length + '\n';
+})();
+</script>
+</body></html>
