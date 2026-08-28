@@ -3982,7 +3982,12 @@ function gardenLookHtml() {
       <i style="background:linear-gradient(180deg,${h.a},${h.b} 45%,${h.c});box-shadow:inset 0 0 0 1px ${h.t}66"></i>
       <em>${h.nm}</em></button>`;
   }).join('');
-  return `<div class="gd-look">
+  // ⚠️ У КОРОБКИ СВОЙ id. Блок «управление» рядом носит ТОТ ЖЕ класс
+  // `gd-look` (см. gardenKeysHtml) и лежит в разметке ВЫШЕ, поэтому
+  // querySelector('.gd-look') доставал именно его: рядов с плитками там нет,
+  // gardenLookPick выходил на `if (!row) return` и выделение не переезжало —
+  // облик сохранялся, но выглядел так, будто выбрать ничего нельзя.
+  return `<div class="gd-look" id="gd-lookbox">
       <div class="gd-look-t">шляпа</div><div class="gd-look-r">${hats}</div>
       <div class="gd-look-t">расцветка факельщика</div><div class="gd-look-r">${hulls}</div>
     </div>`;
@@ -4005,7 +4010,7 @@ function gardenLookPaint() {
 
 function gardenLookPick(k, v) {
   gdLookSet(k, v);
-  const box = document.querySelector('.gd-look');
+  const box = document.getElementById('gd-lookbox');
   if (!box) return;
   // Перерисовываем только выделение: полная перекладка обложки сбрасывает
   // прокрутку к шапке ровно в тот момент, когда игрок листает плитки.
