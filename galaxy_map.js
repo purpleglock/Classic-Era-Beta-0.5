@@ -1890,7 +1890,7 @@ function gmPlanetLook(p) {
   if (/океан|вод|ocean|water/.test(t)) return 'ocean';
   if (/лёд|лед|ice|мёрз|замёрз|frozen/.test(t)) return 'ice';
   if (/пуст|desert|выжж|лав|вулк|volcan/.test(t)) return 'lava';
-  if (/земн|terran|сад|gaia|столич|жизн/.test(t)) return 'terran';
+  if (/земн|terran|сад|gaia|столич|жизн|идеальн/.test(t)) return 'terran';
   if (/камен|rock|скал|астер|barren|мёртв/.test(t)) return 'rock';
   // без явного типа — по тепловой зоне: горячая→лава, холодная→лёд, иначе камень
   if (p.zone === 'hot') return 'lava';
@@ -10923,39 +10923,42 @@ function gmmPaintAnchors(ctx, camS) {
     ctx.save(); ctx.translate(0, _dyW);
 
     const w = Math.max(1, +a.worlds || 1);
-    let R = 150 * (1 + 0.14 * Math.min(4, w - 1));
-    R = Math.max(R, 15 * u); R = Math.min(R, 120 * u);
-    const Rpx = R * camS;                 // экранный радиус — по нему решаем детальность
-    const core = R * 0.30;                // горизонт
-    const sq = 0.94;                      // сплюснутость по y, как у всего на карте
-    // Сид от координат: у каждой чёрной звезды свой наклон дисков и свой ритм,
-    // иначе несколько якорей рядом выглядят штампом.
+    // ⚠️ РАЗМЕР — ПО ЗВЕЗДЕ, А НЕ ПО ТЕРРИТОРИИ (правка 28.08). Прежняя редакция
+    // рисовала поле в 150 МИРОВЫХ единиц: на обзоре несколько якорей сливались в
+    // одно чёрное пятно, съедали границы, гиперпути и подписи соседних систем —
+    // «портит индикацию карты». Чёрная звезда — это СВЕТИЛО, и занимать она
+    // должна ровно место светила: рисуем поверх спрайта звезды, тем же калибром.
+    const iw = gmmIconPx(s, camS) / camS;      // мировые юниты, как у звезды
+    const core = iw * 0.26;                    // горизонт ≈ диск звезды
+    const R = iw * 0.86;                       // корона, гасящая свечение светила
+    const Rpx = R * camS;
+    const sq = 0.94;                           // сплюснутость по y, как у всего на карте
     const seed = Math.abs(s.x * 0.013 + s.y * 0.007) % 6.283;
 
     // ── 1. ВЫТЕСНЕНИЕ СВЕТА ────────────────────────────────
-    // Две остановки у самого края дают уплотнение вместо мягкого схода в ноль:
-    // граница ЧУВСТВУЕТСЯ, но нигде не превращается в линию.
-    const g1 = ctx.createRadialGradient(s.x, s.y, core * 0.9, s.x, s.y, R * 1.25);
-    g1.addColorStop(0.00, 'rgba(0,0,0,0.95)');
-    g1.addColorStop(0.34, 'rgba(6,3,6,0.72)');
-    g1.addColorStop(0.72, 'rgba(14,6,10,0.34)');
+    // Гасим ореол живой звезды (glowR = iw*0.72) и не трогаем ничего дальше.
+    const g1 = ctx.createRadialGradient(s.x, s.y, core * 0.9, s.x, s.y, R);
+    g1.addColorStop(0.00, 'rgba(0,0,0,0.96)');
+    g1.addColorStop(0.42, 'rgba(6,3,6,0.66)');
+    g1.addColorStop(0.78, 'rgba(14,6,10,0.26)');
     g1.addColorStop(1.00, 'rgba(14,6,10,0.00)');
     ctx.fillStyle = g1;
-    ctx.beginPath(); ctx.ellipse(s.x, s.y, R * 1.25, R * 1.25 * sq, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, R, R * sq, 0, 0, Math.PI * 2); ctx.fill();
 
     // ── 2. АККРЕЦИЯ ────────────────────────────────────────
     // Дуги, а не замкнутые эллипсы: замкнутый — орбита, дуга — падение.
-    if (Rpx > 9) {
-      const arcs = Rpx > 22 ? 5 : 3;
+    // Держатся внутри короны: за её край не выходит НИЧЕГО, иначе снова клякса.
+    if (Rpx > 14) {
+      const arcs = Rpx > 30 ? 4 : 2;
       for (let i = 0; i < arcs; i++) {
         const f = i / arcs;
-        const rad = core * 1.25 + (R * 0.62 - core * 1.25) * f;
-        const tilt = seed + i * 1.17;                          // свой наклон
-        const spin = t * (0.30 - 0.045 * i) + seed + i * 2.1;  // своя скорость
-        const span = 1.5 + 1.6 * ((i * 7) % 5) / 5;            // своя длина
-        ctx.globalAlpha = 0.34 - 0.045 * i;
+        const rad = core * 1.35 + (R * 0.78 - core * 1.35) * f;
+        const tilt = seed + i * 1.17;
+        const spin = t * (0.30 - 0.045 * i) + seed + i * 2.1;
+        const span = 1.5 + 1.6 * ((i * 7) % 5) / 5;
+        ctx.globalAlpha = 0.30 - 0.05 * i;
         ctx.strokeStyle = i % 2 ? 'rgba(214,74,48,1)' : 'rgba(242,158,96,1)';
-        ctx.lineWidth = (2.6 - 0.35 * i) * u;
+        ctx.lineWidth = (1.6 - 0.25 * i) * u;
         ctx.beginPath();
         ctx.ellipse(s.x, s.y, rad, rad * (0.34 + 0.16 * f), tilt, spin, spin + span);
         ctx.stroke();
@@ -10969,21 +10972,20 @@ function gmmPaintAnchors(ctx, camS) {
 
     // ── 4. КОЛЬЦО ──────────────────────────────────────────
     // Обход сегментами: яркость гуляет по окружности и медленно перетекает.
-    // Ровное кольцо одной обводкой — это опять чертёж.
-    const SEG = 30;
+    // Ровное кольцо одной обводкой — это чертёж.
+    const SEG = Rpx > 24 ? 30 : 14;
     for (let i = 0; i < SEG; i++) {
       const a0 = i / SEG * Math.PI * 2, a1 = (i + 1.06) / SEG * Math.PI * 2;
       const heat = 0.34 + 0.66 * Math.pow(
         0.5 + 0.5 * Math.sin(a0 * 2 + t * 0.55 + seed) * Math.sin(a0 * 3 - t * 0.33), 2);
-      // три наложения: широкое тусклое → узкое раскалённое. Это и есть свечение.
       ctx.globalAlpha = 0.20 * heat;
-      ctx.strokeStyle = 'rgba(214,74,48,1)'; ctx.lineWidth = 5.0 * u;
+      ctx.strokeStyle = 'rgba(214,74,48,1)'; ctx.lineWidth = 3.0 * u;
       ctx.beginPath(); ctx.ellipse(s.x, s.y, core, core * sq, 0, a0, a1); ctx.stroke();
       ctx.globalAlpha = 0.55 * heat;
-      ctx.strokeStyle = 'rgba(242,158,96,1)'; ctx.lineWidth = 2.2 * u;
+      ctx.strokeStyle = 'rgba(242,158,96,1)'; ctx.lineWidth = 1.4 * u;
       ctx.beginPath(); ctx.ellipse(s.x, s.y, core, core * sq, 0, a0, a1); ctx.stroke();
       ctx.globalAlpha = 0.85 * heat * heat;
-      ctx.strokeStyle = 'rgba(255,236,206,1)'; ctx.lineWidth = 0.9 * u;
+      ctx.strokeStyle = 'rgba(255,236,206,1)'; ctx.lineWidth = 0.7 * u;
       ctx.beginPath(); ctx.ellipse(s.x, s.y, core, core * sq, 0, a0, a1); ctx.stroke();
     }
     ctx.globalAlpha = 1;
@@ -10991,14 +10993,14 @@ function gmmPaintAnchors(ctx, camS) {
     // ── 5. ПОДПИСЬ ─────────────────────────────────────────
     // Число миров — прямым текстом: «звезда почернее» игрок не считает,
     // «7 МИРОВ» считает сразу. Без рамки и без плашки: рамка — снова чертёж.
-    if (Rpx > 11) {
-      ctx.font = '700 ' + (10.5 * u).toFixed(2) + 'px ui-monospace, "Consolas", monospace';
+    if (Rpx > 26) {
+      ctx.font = '700 ' + (9 * u).toFixed(2) + 'px ui-monospace, "Consolas", monospace';
       ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
       const lbl = w + (w === 1 ? ' МИР' : (w < 5 ? ' МИРА' : ' МИРОВ'));
       ctx.lineWidth = 3.4 * u; ctx.strokeStyle = 'rgba(4,9,16,0.95)';
-      ctx.strokeText(lbl, s.x, s.y - R * 0.92);
+      ctx.strokeText(lbl, s.x, s.y - R * 1.05);
       ctx.fillStyle = 'rgba(250,206,160,0.95)';
-      ctx.fillText(lbl, s.x, s.y - R * 0.92);
+      ctx.fillText(lbl, s.x, s.y - R * 1.05);
     }
 
     ctx.restore();

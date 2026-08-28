@@ -5016,3 +5016,12 @@ canvas.ec-res-thumb-cv { border-radius: 0; background: transparent; box-shadow: 
 .ec-fb-tab.frz { opacity: .6; }
 .ec-fb-tab.frz .ec-fb-tab-n { color: var(--err); display: inline-flex; align-items: center; }
 .ec-fb-tab-lock { width: 14px; height: 14px; }
+
+/* ── ПРИРОДА МИРА: класс планеты и что он делает с колонией ───────────── */
+.ec-pl-world { margin-top: 3px; }
+.ec-wc { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 10px; color: var(--t3); }
+.ec-wc > b { font-weight: 700; color: var(--t2); letter-spacing: .02em; }
+.ec-wc-chip { display: inline-block; padding: 1px 5px; border-radius: 3px; line-height: 1.5;
+  border: 1px solid transparent; white-space: nowrap; }
+.ec-wc-chip.up { color: #7ee0a8; border-color: rgba(126, 224, 168, .35); background: rgba(126, 224, 168, .08); }
+.ec-wc-chip.dn { color: #e79a8c; border-color: rgba(231, 154, 140, .35); background: rgba(231, 154, 140, .08); }

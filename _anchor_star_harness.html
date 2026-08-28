@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Чёрная звезда: стенд калибра</title>
+<!-- Стенд под одну правку: якорь кризиса должен занимать место СВЕТИЛА, а не
+     висеть кляксой поверх карты. Функция берётся из живого galaxy_map.js
+     (fetch + вырезка по имени), окружение подменяется заглушками — грузить
+     всю карту ради одной отрисовки незачем. -->
+<style>
+  body { margin:0; background:#050912; color:#cfd8e6; font:12px ui-monospace,Consolas,monospace; }
+  canvas { display:block; margin:0 auto; }
+  .row { padding:6px 10px; color:#8ea0b8; }
+</style>
+<div class="row" id="msg">…</div>
+<canvas id="cv" width="900" height="360"></canvas>
+<script>
+const CAMS = [0.22, 0.55, 1.0];      // обзор → средний → близко
+(async () => {
+  const raw = await (await fetch('galaxy_map.js?h=1')).text();
+  const src = raw.split(String.fromCharCode(13)).join('');   // файл в CRLF
+  const i = src.indexOf('function gmmPaintAnchors');
+  const j = src.indexOf('\n}\n', i);
+  const body = src.slice(i, j + 3);
+
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  const stars = [];
+  CAMS.forEach((camS, k) => {
+    stars.push({ id: 's' + k, x: (150 + k * 300) / camS, y: 170 / camS, is_giant: false, star_type: 'yellow' });
+  });
+
+  const GM = { systems: [], anchors: [] };
+  const GMM = { s: 1, tx: 0, ty: 0, vw: cv.width, vh: cv.height, imgs: {} };
+  const gmmTY = y => y;
+  const gmmIconPx = (s, camS) => Math.max(7, 46 * Math.pow(Math.min(1, camS), 0.7));
+  const fn = new Function('GM', 'GMM', 'gmmTY', 'gmmIconPx', body + '; return gmmPaintAnchors;')
+              (GM, GMM, gmmTY, gmmIconPx);
+
+  function frame() {
+    ctx.fillStyle = '#050912'; ctx.fillRect(0, 0, cv.width, cv.height);
+    CAMS.forEach((camS, k) => {
+      const s = stars[k];
+      GM.systems = [s]; GM.anchors = [{ system_id: s.id, worlds: k + 1 }];
+      GMM.s = camS; GMM.tx = 0; GMM.ty = 0;
+      ctx.save(); ctx.scale(camS, camS);
+      // ЖИВАЯ ЗВЕЗДА рядом — для сравнения калибра: ореол и диск ровно те,
+      // что рисует gmmPaintStars.
+      const iw = gmmIconPx(s, camS) / camS;
+      ctx.fillStyle = 'rgba(120,180,255,0.18)';
+      ctx.beginPath(); ctx.arc(s.x - iw * 2.4, s.y, iw * 0.72, 0, 6.2832); ctx.fill();
+      ctx.fillStyle = '#ffd76a';
+      ctx.beginPath(); ctx.arc(s.x - iw * 2.4, s.y, iw * 0.3, 0, 6.2832); ctx.fill();
+      fn(ctx, camS);
+      ctx.restore();
+      ctx.fillStyle = '#8ea0b8'; ctx.font = '11px ui-monospace,monospace';
+      ctx.fillText('camS ' + camS, 40 + k * 300, 330);
+      ctx.fillText('звезда / якорь', 40 + k * 300, 346);
+    });
+    requestAnimationFrame(frame);
+  }
+  frame();
+  document.getElementById('msg').textContent = 'Функция взята из galaxy_map.js, ' + body.length + ' знаков.';
+})();
+</script>

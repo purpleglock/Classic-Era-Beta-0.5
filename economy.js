@@ -990,7 +990,7 @@ const EC_HAB = {
 };
 const EC_GRP_LABEL = { lava: 'Лавовые', volcanic: 'Вулканические', terrestrial: 'Землеподобные', oceanic: 'Океанические', desert: 'Пустынные', cryo: 'Криомиры', gasgiant: 'Газовый гигант', icegiant: 'Ледяной гигант', hotgiant: 'Горячий гигант', exotic: 'Экзотическая', micro: 'Малое тело', anomaly: 'Аномалия', belt: 'Пояс', unknown: 'Неизвестно' };
 // type = имя группы (генератор)
-const EC_GRP_NAME = { 'Лавовые миры': 'lava', 'Вулканические': 'volcanic', 'Землеподобные': 'terrestrial', 'Океанические': 'oceanic', 'Пустынные': 'desert', 'Криомиры': 'cryo', 'Газовые гиганты': 'gasgiant', 'Ледяные гиганты': 'icegiant', 'Горячие гиганты': 'hotgiant', 'Экзотические': 'exotic', 'Малые тела': 'micro', 'Аномалии': 'anomaly' };
+const EC_GRP_NAME = { 'Лавовые миры': 'lava', 'Вулканические': 'volcanic', 'Землеподобные': 'terrestrial', 'Океанические': 'oceanic', 'Пустынные': 'desert', 'Криомиры': 'cryo', 'Газовые гиганты': 'gasgiant', 'Ледяные гиганты': 'icegiant', 'Горячие гиганты': 'hotgiant', 'Экзотические': 'exotic', 'Малые тела': 'micro', 'Аномалии': 'anomaly', 'Идеальный мир': 'terrestrial' };
 // фолбэк: имя планеты → группа (сид-данные/старый формат)
 const EC_PLANET_NAME = { 'Катархей': 'lava', 'Мёртвая планета': 'lava', 'Супервулканическая планета': 'volcanic', 'Хтонический мир': 'lava', 'Горячий Юпитер': 'hotgiant', 'Горячий Нептун': 'hotgiant', 'Железный мир': 'lava', 'Дастория': 'volcanic', 'Литара': 'desert', 'Океаническая суперземля': 'exotic', 'Рыхлый гигант': 'gasgiant', 'Железный карлик': 'terrestrial', 'Духлесс': 'volcanic', 'Терра': 'terrestrial', 'Суперземля': 'terrestrial', 'Гикеан': 'oceanic', 'Панталассическая планета': 'oceanic', 'Теракрон': 'terrestrial', 'Мини-Нептун': 'gasgiant', 'Водный Юпитер': 'gasgiant', 'Тундровая планета': 'terrestrial', 'Псамора': 'oceanic', 'Мир дюн': 'desert', 'Гельвард': 'cryo', 'Турмион': 'gasgiant', 'Ледяной гигант': 'icegiant', 'Аммиачный мир': 'cryo', 'Газовый карлик': 'gasgiant', 'Метановый мир': 'cryo', 'Суперюпитер': 'gasgiant', 'Коричневый карлик': 'gasgiant', 'Планета-сирота': 'exotic', 'Углеродная планета': 'cryo', 'Тёмный замёрзший мир': 'cryo', 'Карликовая планета': 'micro', 'Мегаастероид': 'micro', 'Черная дыра': 'anomaly', 'Кротовая нора': 'anomaly', 'Токсичный карлик': 'anomaly' };
 const EC_NOCOL = new Set(['gasgiant', 'icegiant', 'hotgiant', 'anomaly', 'belt']);
@@ -3622,8 +3622,66 @@ function ecMineYieldsCapped(b) {
 }
 // Стоимость экспансии (колонизация/терраформ/обустройство) с учётом доктрины (mods.colonize).
 function ecColonizeCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().colonize)); }
-// Стоимость построек и слотов с учётом доктрины (mods.build).
-function ecBuildCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().build)); }
+// ── ПРИРОДА МИРА (зеркало _world_mods/_world_kind на сервере) ──────────────
+// Класс планеты множит четыре числа: население, выработку рабочих, науку и
+// цену стройки. Правки баланса — на сервере, здесь только отражение.
+const EC_WORLD_MODS = {
+  ideal:       { pop: 1.50, work: 1.45, sci: 1.45, build: 0.75 },
+  terrestrial: { pop: 1.15, work: 1.00, sci: 1.05, build: 0.95 },
+  oceanic:     { pop: 1.10, work: 0.95, sci: 1.15, build: 1.00 },
+  desert:      { pop: 0.90, work: 1.10, sci: 1.00, build: 0.95 },
+  cryo:        { pop: 0.80, work: 1.05, sci: 1.15, build: 1.15 },
+  volcanic:    { pop: 0.75, work: 1.25, sci: 0.95, build: 1.15 },
+  lava:        { pop: 0.60, work: 1.30, sci: 0.90, build: 1.25 },
+  micro:       { pop: 0.70, work: 1.15, sci: 1.00, build: 0.90 },
+  exotic:      { pop: 0.85, work: 1.00, sci: 1.25, build: 1.20 },
+  gasgiant:    { pop: 0.70, work: 1.20, sci: 1.10, build: 1.15 },
+  icegiant:    { pop: 0.70, work: 1.10, sci: 1.15, build: 1.15 },
+  hotgiant:    { pop: 0.65, work: 1.25, sci: 1.05, build: 1.20 },
+  belt:        { pop: 0.60, work: 1.30, sci: 0.95, build: 0.90 },
+  anomaly:     { pop: 0.65, work: 0.90, sci: 1.30, build: 1.25 },
+  std:         { pop: 1.00, work: 1.00, sci: 1.00, build: 1.00 }
+};
+const EC_WORLD_NAME = {
+  ideal: 'Идеальный мир', terrestrial: 'Землеподобный', oceanic: 'Океанический',
+  desert: 'Пустынный', cryo: 'Криомир', volcanic: 'Вулканический', lava: 'Лавовый',
+  micro: 'Малое тело', exotic: 'Экзотический', gasgiant: 'Газовый гигант',
+  icegiant: 'Ледяной гигант', hotgiant: 'Горячий гигант', belt: 'Пояс',
+  anomaly: 'Аномалия', std: 'Обычный мир'
+};
+function ecWorldKind(col) {
+  if (!col) return 'std';
+  const t = String(col.planet_type || '').trim();
+  if (t === 'Идеальный мир') return 'ideal';
+  if (EC_GRP_NAME[t]) return EC_GRP_NAME[t];
+  if (typeof EC_PLANET_NAME !== 'undefined' && EC_PLANET_NAME[t]) return EC_PLANET_NAME[t];
+  if (t.indexOf('·') >= 0) return 'belt';
+  return 'std';
+}
+function ecWorldMods(col) { return EC_WORLD_MODS[ecWorldKind(col)] || EC_WORLD_MODS.std; }
+// Строка «что этот мир делает с колонией» — для карточки колонии.
+function ecWorldChips(col) {
+  const k = ecWorldKind(col), m = ecWorldMods(col);
+  // ⚠️ У СТРОЙКИ ЗНАК ОБРАТНЫЙ: 0.75 — это «дешевле на четверть», то есть
+  // хорошая новость. Показывать её плюсом и зелёным — врать читателю дважды.
+  const one = (lab, v, good) => {
+    if (v === 1) return '';
+    const pct = Math.round(Math.abs(v - 1) * 100), up = v > 1;
+    const nice = good === false ? !up : up;
+    return `<span class="ec-wc-chip ${nice ? 'up' : 'dn'}">${lab} ${up ? '+' : '−'}${pct}%</span>`;
+  };
+  return `<span class="ec-wc" title="Природа мира: ${esc(EC_WORLD_NAME[k] || '')}">`
+    + `<b>${esc(EC_WORLD_NAME[k] || '')}</b>`
+    + one('население', m.pop) + one('рабочие', m.work) + one('наука', m.sci)
+    + one('стройка', m.build, false) + '</span>';
+}
+// Стоимость построек и слотов с учётом доктрины (mods.build) И ПРИРОДЫ МИРА.
+// ⚠️ Колония не передана — берём открытую: панель стройки всегда внутри колонии.
+function ecBuildCost(base, col) {
+  const c = col || (EC.openColony && (EC.colonies || []).find(x => x.id === EC.openColony)) || null;
+  const wm = ecWorldMods(c).build;
+  return Math.max(1, Math.round((base || 0) * ecFactionMods().build * wm));
+}
 // Стоимость исследования с учётом доктрины (mods.research) — дешевле = больше техов доступно.
 function ecResearchCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().research)); }
 
@@ -5937,7 +5995,7 @@ function ecColonyRowHtml(colony, sys) {
   const minePreview = ecColonyMinePreview(blds, planet);
   const head = `<div class="ec-pl ec-pl-own${open ? ' open' : ''}" onclick="ecToggleColony('${colony.id}')">
     <div class="ec-pl-top">
-      <div class="ec-pl-l"><span class="ec-pl-ic">${colony.is_capital ? '★' : '🏙'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name || 'Колония')}${colStar ? ` <span class="ec-pl-star">${esc(colStar)}</span>` : ''}</div><div class="ec-pl-sb">${colony.is_capital ? 'Столица · ' : ''}${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
+      <div class="ec-pl-l"><span class="ec-pl-ic">${colony.is_capital ? '★' : '🏙'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name || 'Колония')}${colStar ? ` <span class="ec-pl-star">${esc(colStar)}</span>` : ''}</div><div class="ec-pl-sb">${colony.is_capital ? 'Столица · ' : ''}${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div><div class="ec-pl-world">${ecWorldChips(colony)}</div></div></div>
       <div class="ec-pl-r"><span class="ec-pl-cells">⬚ ${used}/${cap}</span>${incTxt ? `<span class="ec-pl-inc">${incTxt}/сут</span>` : ''}<span class="ec-pl-chev">${open ? '▾' : '▸'}</span></div>
     </div>
     <div class="ec-pl-res"><span class="ec-pl-lbl">Ресурсы:</span>${ecPlanetResChips(planet)}</div>
@@ -15472,7 +15530,7 @@ function ecBuildPicker(colonyId) {
   // ДОМИК: без технологии центр благополучия вообще не показываем (не грузим новичков)
   const cards = EC_ORDER.filter(t => (t !== 'temple' || hasFaith) && (t !== 'wellhub' || ecHubTech())
     && (t !== 'sci_giant' || isGiantWorld) && (t !== 'sci_anomaly' || isAnomalyWorld)).map(t => {
-    const d = EC_BUILD[t]; const cost = ecBuildCost(d.cost);
+    const d = EC_BUILD[t]; const cost = ecBuildCost(d.cost, colony);
     const block = t === 'wellhub' ? ecHubBlockReason(colonyId) : '';   // ДОМИК: лимит 1/система, 5/держава
     const afford = gc >= cost && !block;
     const catLabel = d.cat === 'civ' ? 'Гражд.' : d.cat === 'sci' ? 'Наука' : d.cat === 'faith' ? 'Вера' : 'Воен.';

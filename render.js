@@ -4402,7 +4402,7 @@ function _hpvcLook(p) {
   if (/океан|вод|ocean/.test(t)) return 'ocean';
   if (/лёд|лед|ice|мёрз|замёрз/.test(t)) return 'ice';
   if (/пуст|desert|выжж|лав|вулк/.test(t)) return 'lava';
-  if (/земн|terran|сад|gaia|столич|жизн/.test(t)) return 'terran';
+  if (/земн|terran|сад|gaia|столич|жизн|идеальн/.test(t)) return 'terran';
   return 'rock';
 }
 // Подсветить досье планеты при клике по диску на схеме.
@@ -9891,7 +9891,7 @@ function _hvpLook(c) {
   if (/океан|вод|ocean/.test(t)) return 'ocean';
   if (/лёд|лед|ice|мёрз|замёрз/.test(t)) return 'ice';
   if (/пуст|desert|выжж|лав|вулк/.test(t)) return 'lava';
-  if (/земн|terran|сад|gaia|столич|жизн/.test(t)) return 'terran';
+  if (/земн|terran|сад|gaia|столич|жизн|идеальн/.test(t)) return 'terran';
   return 'rock';
 }
 // Текстура-развёртка планеты (та же, что на карте и в регистрации) — наматывается
