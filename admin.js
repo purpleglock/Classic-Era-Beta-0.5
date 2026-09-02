@@ -5617,7 +5617,7 @@ async function adRmCreate() {
     deadline: g('rm-n-deadline').value || null,
     area, work_type: wtype, complexity: cplx, effort_auto: autoEst,
     tags, depends_on: deps, images: _rmNewImgs.slice(),
-    created_email: (typeof user !== 'undefined' && user && user.email) || null,
+    // ФЗ-152: автор задачи — по user_id, почта в dev_tasks не пишется.
   };
   try {
     const ins = await dbPost('dev_tasks', row);

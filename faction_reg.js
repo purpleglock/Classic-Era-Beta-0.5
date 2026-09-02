@@ -1233,7 +1233,7 @@ async function frRenderAppsTab(b) {
       return `<div class="fr-app" id="fr-app-${a.id}">
       <div class="fr-app-hd">${badge}<span class="fr-swatch" style="background:${a.color}"></span>
         <b>${esc(a.name || 'Без названия')}</b>
-        <span class="fr-app-by">${esc(a.owner_email || userLabel(a.owner_id) || '')}</span></div>
+        <span class="fr-app-by">${esc(userLabel(a.owner_id) || '')}</span></div>
       <div class="fr-app-meta">★ ${esc(a.system_name || '—')} · ${esc(a.gov || '')} · ${esc(a.race || '')}</div>
       <div class="fr-app-acts">
         <button class="btn btn-gh btn-sm" onclick="frViewFaction('${a.id}')">Детали</button>

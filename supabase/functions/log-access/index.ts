@@ -50,9 +50,11 @@ Deno.serve(async (req) => {
     const fp = String(body?.fp ?? "").slice(0, 128) || null;
 
     // ── 4. Запись (service_role обходит RLS) ──
+    // ФЗ-152 (минимизация): почту не дублируем — рядом уже лежит user_id,
+    // по нему стафф достаёт адрес через admin_get_user_email(). Записи
+    // старше 180 суток сносит крон access_log_prune() (_pd_minimize.sql).
     const { error: wErr } = await sb.from("access_log").insert({
       user_id: authUser.id,
-      email: authUser.email ?? null,
       ip,
       fingerprint: fp,
       user_agent: ua,

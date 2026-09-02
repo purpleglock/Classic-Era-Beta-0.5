@@ -215,8 +215,10 @@ async function tkSubmit() {
   TK.busy = true; tkRender();
   try {
     const row = {
-      user_id: user.id, user_email: user.email,
-      user_name: (typeof userProfile !== 'undefined' && userProfile.display_name) || (user.email || '').split('@')[0],
+      // ФЗ-152: почту в тикет не кладём — автор опознаётся по user_id.
+      // Триггер trg_pd_noemail (_pd_minimize.sql) обнулит её и на стороне БД.
+      user_id: user.id,
+      user_name: (typeof userProfile !== 'undefined' && userProfile.display_name) || 'Участник',
       category: cat, description: desc, vk_link: vk || null,
       screenshots: TK.shots,
     };
@@ -237,7 +239,7 @@ async function tkReply(id, staff) {
   try {
     await dbPost('ticket_messages', {
       ticket_id: id, author_id: user.id,
-      author_name: (typeof userProfile !== 'undefined' && userProfile.display_name) || (user.email || '').split('@')[0],
+      author_name: (typeof userProfile !== 'undefined' && userProfile.display_name) || 'Участник',
       is_staff: !!staff, body,
     });
     if (staff) tkRenderThread(id, true); else { await tkLoadMine(); tkRenderThread(id, false); }
@@ -288,7 +290,7 @@ async function tkRenderAdmin(box) {
     return `<div class="tk-card${isOpen ? ' open' : ''}">
       <div class="tk-card-hd" onclick="tkAdminToggle('${t.id}')">
         <span class="tk-card-cat">${esc(tkCatLabel(t.category))}</span>${st}
-        <span class="tk-card-who">${esc(t.user_name || t.user_email || '')}</span>
+        <span class="tk-card-who">${esc(t.user_name || (typeof userLabel === 'function' ? userLabel(t.user_id) : '') || '')}</span>
         <span class="tk-card-when">${tkWhen(t.created_at)}</span>
       </div>
       ${isOpen ? `<div class="tk-card-body" id="tk-thread-${t.id}"><div class="tk-loading">…</div></div>` : ''}
@@ -311,7 +313,7 @@ async function tkCloseTicket(id) {
   const t = (TK.admin || []).find(x => x.id === id) || {};
   try {
     await tkDeleteShots(t.screenshots || []);
-    await dbPatch('tickets', `id=eq.${id}`, { status: 'closed', screenshots: [], closed_at: new Date().toISOString(), closed_by: (user.email || '') });
+    await dbPatch('tickets', `id=eq.${id}`, { status: 'closed', screenshots: [], closed_at: new Date().toISOString(), closed_by: (user.id || '') });
     toast('Тикет закрыт, скриншоты удалены', 'ok');
     const box = document.getElementById('ap-body'); TK.openId = null; if (box) tkRenderAdmin(box);
   } catch (e) { toast('Ошибка: ' + (e.message || ''), 'err'); }

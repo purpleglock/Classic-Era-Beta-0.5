@@ -324,7 +324,8 @@ function _cacheGreetName() {
 }
 function getDisplayName() {
   if (!user) return '';
-  return userProfile.display_name || user.email.split('@')[0];
+  // ФЗ-152: почта — не публичная подпись. Нет позывного → нейтральное слово.
+  return userProfile.display_name || 'Участник';
 }
 async function loadProfiles() {
   try {
@@ -369,9 +370,9 @@ function getAvatarHtml(email, avatarUrl, displayName, size=28) {
   // браузер дёргал /Хуй -> 404. Невалидное значение игнорируем (рисуем инициалы).
   const _u = safeAvatar(avatarUrl);
   if (_u) return `<img src="${esc(_u)}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid rgba(100,180,220,.2)" loading="lazy" onerror="this.style.display='none'">`;
-  const name = displayName || (email||'').split('@')[0] || '?';
+  const name = displayName || '?';
   const initials = name.slice(0,2).toUpperCase();
-  const hue = [...(email||'')].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
+  const hue = [...String(email||'')].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;  // ключ = user_id
   return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:hsl(${hue},35%,20%);border:1px solid hsl(${hue},45%,35%);display:inline-flex;align-items:center;justify-content:center;font-family:Rajdhani,sans-serif;font-size:${Math.round(size/3.2)}px;font-weight:700;color:hsl(${hue},60%,70%);flex-shrink:0">${esc(initials)}</span>`;
 }
 function timeAgo(dateStr) {
@@ -592,10 +593,14 @@ function _sbSyncForRoute(slug) {
 // ── Правовые документы (Политика конфиденциальности / Соглашение) ──────────
 // Версия документов. При существенном изменении текстов поднимите дату —
 // тогда система попросит игроков принять новую редакцию.
-const LEGAL_VERSION = '2026-06-30';
+const LEGAL_VERSION = '2026-09-02';
 const LEGAL_DOCS = {
   privacy: { file: 'legal/PRIVACY.md', title: 'ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ' },
-  terms:   { file: 'legal/TERMS.md',   title: 'ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ' }
+  terms:   { file: 'legal/TERMS.md',   title: 'ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ' },
+  // ст.9 ФЗ-152 требует согласия ОТДЕЛЬНЫМ документом и отдельным действием,
+  // а ст.12 ч.4 п.1 — ещё и отдельного согласия на трансграничную передачу
+  // (база в Ирландии, статика в США). Поэтому документа три, а не два.
+  consent: { file: 'legal/CONSENT.md', title: 'СОГЛАСИЕ НА ОБРАБОТКУ ПЕРСОНАЛЬНЫХ ДАННЫХ' }
 };
 const _legalCache = {};
 
@@ -625,7 +630,8 @@ async function recordLegalConsent() {
   try {
     await sb.rpc('legal_accept', { p_docs: [
       { slug: 'privacy', version: LEGAL_VERSION },
-      { slug: 'terms',   version: LEGAL_VERSION }
+      { slug: 'terms',   version: LEGAL_VERSION },
+      { slug: 'consent', version: LEGAL_VERSION }
     ]});
   } catch (e) { console.warn('[wiki] legal consent record failed:', e); }
 }
@@ -907,8 +913,10 @@ async function _signupRequestEnsure(authUser, nick) {
       headers: { 'Content-Type': 'application/json', apikey: SB_ANON, Authorization: 'Bearer ' + token },
       body: JSON.stringify({
         category: '📥 Новая регистрация',
-        description: `Позывной: ${nick || '—'}\nПочта: ${authUser.email}\nПримите или удалите: Управление → ПОЛЬЗ. → Заявки.`,
-        user_name: nick || authUser.email,
+        // ФЗ-152: почта в стороннюю службу (VK) не уходит. Стафф видит её
+        // в админке через admin_get_user_email(), не покидая наш контур.
+        description: `Позывной: ${nick || '—'}\nID: ${authUser.id}\nПримите или удалите: Управление → ПОЛЬЗ. → Заявки.`,
+        user_name: nick || 'Участник',
         vk_link: '', screenshots: [],
         at: new Date().toISOString()
       })
@@ -1103,7 +1111,7 @@ async function enforceLegalConsent() {
       .from('legal_consents').select('doc_slug').eq('doc_version', LEGAL_VERSION);
     if (error) return; // таблицы нет / ошибка — не блокируем вход
     const s = new Set((data || []).map(r => r.doc_slug));
-    if (s.has('privacy') && s.has('terms')) { _legalOk = true; _removeLegalGate(); return; }
+    if (s.has('privacy') && s.has('terms') && s.has('consent')) { _legalOk = true; _removeLegalGate(); return; }
     _showLegalGate();
   } catch (e) { /* сеть — не блокируем */ }
   finally { _legalChecking = false; }
@@ -1118,12 +1126,15 @@ function _showLegalGate() {
     <div style="max-width:480px;border:1px solid #2a3340;border-radius:14px;padding:30px 28px;background:linear-gradient(135deg,#141a22,#0e131a);box-shadow:0 20px 60px rgba(0,0,0,.6)">
       <div style="font-family:Rajdhani,sans-serif;font-size:21px;font-weight:800;letter-spacing:.5px;color:#cdd8e2;margin-bottom:12px">Подтверждение документов</div>
       <div style="font-size:13px;line-height:1.6;color:#aebac6;margin-bottom:16px">Чтобы продолжить пользоваться проектом, ознакомьтесь и примите
-        <a onclick="openLegal('terms')" style="color:#7fb0ff;text-decoration:underline;cursor:pointer">Пользовательское соглашение</a> и
-        <a onclick="openLegal('privacy')" style="color:#7fb0ff;text-decoration:underline;cursor:pointer">Политику конфиденциальности</a>,
-        включая согласие на обработку персональных данных.</div>
+        <a onclick="openLegal('terms')" style="color:#7fb0ff;text-decoration:underline;cursor:pointer">Пользовательское соглашение</a>,
+        <a onclick="openLegal('privacy')" style="color:#7fb0ff;text-decoration:underline;cursor:pointer">Политику конфиденциальности</a> и
+        <a onclick="openLegal('consent')" style="color:#7fb0ff;text-decoration:underline;cursor:pointer">Согласие на обработку персональных данных</a>.</div>
+      <label style="display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.5;color:#aebac6;cursor:pointer;margin-bottom:10px">
+        <input type="checkbox" id="legal-gate-cb" style="margin-top:2px;flex-shrink:0" onchange="_legalGateSync()">
+        <span>Я ознакомлен(а) с документами и даю согласие на обработку моих персональных данных на указанных в них условиях.</span></label>
       <label style="display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.5;color:#aebac6;cursor:pointer;margin-bottom:18px">
-        <input type="checkbox" id="legal-gate-cb" style="margin-top:2px;flex-shrink:0" onchange="var b=document.getElementById('legal-gate-ok');if(b)b.disabled=!this.checked">
-        <span>Я ознакомлен(а) и принимаю указанные документы.</span></label>
+        <input type="checkbox" id="legal-gate-cb2" style="margin-top:2px;flex-shrink:0" onchange="_legalGateSync()">
+        <span>Я согласен(на) на трансграничную передачу моих данных в Ирландию, США и Италию и уведомлён(а), что США не обеспечивают адекватной защиты прав субъектов персональных данных (п.&nbsp;6 Согласия).</span></label>
       <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
         <button class="btn btn-gh" onclick="doLogout()">Выйти</button>
         <button class="btn btn-gd" id="legal-gate-ok" disabled onclick="acceptLegalGate()">Принять и продолжить</button>
@@ -1131,6 +1142,15 @@ function _showLegalGate() {
     </div>`;
   document.body.appendChild(g);
   document.body.style.overflow = 'hidden';
+}
+
+// Обе отметки обязательны: общая (ст.9) и трансграничная (ст.12 ч.4 п.1).
+// Одной галкой «согласен со всем» такое согласие не оформляется.
+function _legalGateSync() {
+  const a = document.getElementById('legal-gate-cb');
+  const b = document.getElementById('legal-gate-cb2');
+  const ok = document.getElementById('legal-gate-ok');
+  if (ok) ok.disabled = !(a && a.checked && b && b.checked);
 }
 
 async function acceptLegalGate() {
@@ -1156,8 +1176,8 @@ function updAuthUI() {
       if (userProfile.avatar_url) {
         av.innerHTML = `<img src="${esc(userProfile.avatar_url)}" loading="lazy">`;
       } else {
-        const _nm = userProfile.display_name || user.email.split('@')[0] || '?';
-        const _hue = [...user.email].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
+        const _nm = userProfile.display_name || 'Участник';
+        const _hue = [...String(user.id)].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
         av.innerHTML = `<span style="font-size:9px;font-weight:900;color:hsl(${_hue},60%,70%)">${esc(_nm.slice(0,2).toUpperCase())}</span>`;
       }
     }

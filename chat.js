@@ -121,7 +121,8 @@ function chIsStaff() { return !!(typeof user !== 'undefined' && user && ['supera
 function chUid() { return (typeof user !== 'undefined' && user && user.id) || ''; }
 function chMyName() {
   return (typeof userProfile !== 'undefined' && userProfile.display_name)
-    || (typeof user !== 'undefined' && user && (user.email || '').split('@')[0])
+    // ФЗ-152: имя в чате — только позывной. Раньше без позывного в публичный
+    // эфир уходил префикс почты, и он оседал в истории комнат.
     || 'Аноним';
 }
 function chLog(room) { return (CH.logs[room = room || CH.room] || (CH.logs[room] = [])); }

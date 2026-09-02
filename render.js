@@ -2528,7 +2528,7 @@ function heroGreeting(user) {
   let name = null;
   if (user && ['superadmin', 'editor', 'moderator', 'player'].includes(user.role)) {
     const disp = ((typeof userProfile !== 'undefined' && userProfile.display_name) || '').trim();
-    name = disp || (user.email ? user.email.split('@')[0] : '') || 'командир';
+    name = disp || 'командир';
     // В кэш кладём ТОЛЬКО настоящее имя — иначе им «затравится» новелла (xlopetsgod).
     if (disp) { try { localStorage.setItem('wk_greet_name', disp); } catch (e) {} }
   } else if (user) {

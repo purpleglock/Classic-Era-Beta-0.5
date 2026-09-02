@@ -833,7 +833,8 @@
       "Bash(curl -s --max-time 30 \"https://api.github.com/repos/game-icons/icons/git/trees/master?recursive=1\")",
       "Bash(sed -i \"s|34_army.css?v=20260814army1|34_army.css?v=20260815afkit|\" css/index.css)",
       "Bash(sed -i \"s|var BUILD = '20260814army1'|var BUILD = '20260815afkit'|\" index.html)",
-      "Bash(node \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/52eadd23-9ee5-4e6f-859a-e2caf80be239/scratchpad/af_gen.js\" \"C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5/_af.svg\")"
+      "Bash(node \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/52eadd23-9ee5-4e6f-859a-e2caf80be239/scratchpad/af_gen.js\" \"C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5/_af.svg\")",
+      "PowerShell(Copy-Item \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\core.js\" \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Quantifier\\\\client\\\\core.js\" -Force; \\(Get-Content \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Quantifier\\\\client\\\\core.js\" | Measure-Object -Line\\).Lines)"
     ]
   }
 }

@@ -472,7 +472,7 @@ function renderCommentsSection(slug) {
   let formHtml = '';
   if (canWrite) {
     const prof = userProfile;
-    const avHtml = getAvatarHtml(user.id, prof.avatar_url, prof.display_name || user.email.split('@')[0], 32);
+    const avHtml = getAvatarHtml(user.id, prof.avatar_url, prof.display_name || 'Участник', 32);
     const ph = isLoc
       ? (lang === 'ru' ? 'Опишите действие вашего персонажа…' : 'Describe your action…')
       : (lang === 'ru' ? 'Оставить комментарий…' : 'Leave a comment…');
