@@ -213,7 +213,9 @@ function frReadable(c) {
 async function frLoadMine() {
   if (!user) return null;
   try {
-    const rows = await dbGet('faction_applications', `owner_id=eq.${user.id}&order=updated_at.desc&limit=1`);
+    // Анкета сдавшейся или присоединённой державы закрыта навсегда: игрок
+    // регистрирует новую с чистого листа, а не правит старую (_war_capitulation.sql).
+    const rows = await dbGet('faction_applications', `owner_id=eq.${user.id}&status=not.in.(capitulated,annexed)&order=updated_at.desc&limit=1`);
     return rows && rows[0] ? rows[0] : null;
   } catch (e) { return null; }
 }

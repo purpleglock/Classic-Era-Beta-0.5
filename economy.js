@@ -17554,8 +17554,18 @@ const EC_WAR_KIND = {
   surrender:        { ic: '⚑', label: 'Капитуляция',            hint: 'Отправитель признаёт поражение.' },
   demand_surrender: { ic: '⚔', label: 'Требование капитуляции', hint: 'Адресат должен сложить оружие.' },
   conference:       { ic: '🏛', label: 'Мирная конференция',    hint: 'Переговоры — публичный жест, войну не заканчивает.' },
-  call_ally:        { ic: '📯', label: 'Зов союзника',           hint: 'Приглашение вступить в войну на своей стороне.' }
+  call_ally:        { ic: '📯', label: 'Зов союзника',           hint: 'Приглашение вступить в войну на своей стороне.' },
+  capitulation:     { ic: '⚑', label: 'Ультиматум о капитуляции', hint: 'Отправитель держит не меньше 80% ваших систем. Молчание трое суток — капитуляция.' }
 };
+// Срок ответа на ноту (_war_capitulation.sql): трое суток. Не ответили —
+// обычная нота отклонена, ультиматум о капитуляции — принят.
+function ecWarLeft(o) {
+  if (!o || !o.expires_at) return '';
+  const ms = +new Date(o.expires_at) - Date.now();
+  if (!(ms > 0)) return 'срок вышел';
+  const h = Math.floor(ms / 36e5), m = Math.floor(ms % 36e5 / 6e4);
+  return h >= 24 ? `${Math.floor(h / 24)} сут ${h % 24} ч` : `${h} ч ${m} мин`;
+}
 function ecWar() { return EC.war || { wars: [], open_wars: [], incoming: [], outgoing: [], history: [] }; }
 function ecWarArr(k) { const a = ecWar()[k]; return Array.isArray(a) ? a : []; }
 
@@ -17593,9 +17603,12 @@ function ecWarIncomingBlock() {
          <button class="btn btn-gh btn-xs" onclick="ecWarDecline('${jsq(o.id)}')">Отклонить</button>`
       : `<button class="btn btn-gd btn-xs" onclick="ecWarRespond('${jsq(o.id)}',true,'${jsq(o.kind)}')">Принять</button>
          <button class="btn btn-gh btn-xs" onclick="ecWarRespond('${jsq(o.id)}',false,'${jsq(o.kind)}')">Отвергнуть</button>`;
+    const left = ecWarLeft(o);
+    const fate = o.kind === 'capitulation' ? 'без ответа держава капитулирует' : 'без ответа нота будет отклонена';
     return `<div class="ec-war-note">
         <div class="ec-war-note-h">${k.ic} <b>${esc(k.label)}</b> — от ${esc(o.from_name || ecFacName(o.from))}</div>
         ${o.message ? `<div class="ec-war-note-msg">«${esc(o.message)}»</div>` : ''}
+        ${left ? `<div class="ec-war-note-msg" style="font-style:normal;color:var(--t2)">⏳ На ответ: ${esc(left)} — ${fate}</div>` : ''}
         <div class="ec-war-note-a">${act}</div>
       </div>`;
   }).join('');
@@ -17942,7 +17955,8 @@ function ecWarCard(w) {
   const out = ecWarArr('outgoing').filter(o => o.war_id === w.id);
   const outHtml = out.length ? `<div class="ec-war-out">Отправлено: ${out.map(o => {
     const k = EC_WAR_KIND[o.kind] || { ic: '✉', label: o.kind };
-    return `<span class="ec-war-chip">${k.ic} ${esc(k.label)} <button class="ec-war-x" title="Отозвать ноту" onclick="ecWarWithdraw('${jsq(o.id)}')">✕</button></span>`;
+    const left = ecWarLeft(o);
+    return `<span class="ec-war-chip" title="${left ? 'На ответ: ' + esc(left) : ''}">${k.ic} ${esc(k.label)}${left ? ` <i style="opacity:.7">· ${esc(left)}</i>` : ''} <button class="ec-war-x" title="Отозвать ноту" onclick="ecWarWithdraw('${jsq(o.id)}')">✕</button></span>`;
   }).join('')}</div>` : '';
 
   // Мирные ноты подписывает только зачинщик стороны (правило сервера).
@@ -17952,7 +17966,8 @@ function ecWarCard(w) {
         <button class="btn btn-gh btn-xs" onclick="ecWarOffer('${jsq(w.id)}','status_quo')">🕊 Предложить мир (статус-кво)</button>
         <button class="btn btn-gh btn-xs" onclick="ecWarOffer('${jsq(w.id)}','demand_surrender')">⚔ Требовать капитуляции</button>
         <button class="btn btn-gh btn-xs" onclick="ecWarOffer('${jsq(w.id)}','surrender')">⚑ Капитулировать</button>
-      </div>`
+      </div>
+      ${ecWarCapBlock(w)}`
     : `<div class="ec-war-hint">Мирные ноты по этой войне подписывает зачинщик вашей стороны — ${esc(leaderName)}. Вам доступна конференция.</div>`;
 
   const others = ecOtherFactions().filter(f => !sides.some(s => s.fid === f.faction_id));
@@ -17974,6 +17989,21 @@ function ecWarCard(w) {
       </div>
       ${callHtml}
     </div></div>`;
+}
+
+// «Предложить капитуляцию»: открывается, когда под нашей оккупацией
+// не меньше 80% систем вражеского зачинщика (сервер проверяет сам).
+function ecWarCapBlock(w) {
+  const need = Number(ecWar().cap_min) || 0.8;
+  const sh = Number(w.cap_share) || 0;
+  const pct = Math.round(sh * 100), needPct = Math.round(need * 100);
+  if (sh >= need) {
+    return `<div class="ec-war-acts">
+        <button class="btn btn-gd btn-xs" onclick="ecWarOffer('${jsq(w.id)}','capitulation')">⚑ Предложить капитуляцию</button>
+        <span class="ec-hint">— вы держите ${pct}% систем противника</span>
+      </div>`;
+  }
+  return `<div class="ec-war-hint">Предложить капитуляцию можно с ${needPct}% систем противника под вашей оккупацией — сейчас ${pct}%.</div>`;
 }
 
 // ── Объявление войны ──
@@ -18054,7 +18084,9 @@ function ecWarJoinCall(offerId, warId) {
 function ecWarOffer(warId, kind) {
   const k = EC_WAR_KIND[kind] || { label: kind };
   const q = kind === 'surrender'
-    ? 'Капитулировать? Война окончится вашим поражением, как только противник примет ноту. Отменить это будет нельзя.'
+    ? 'Капитулировать? Как только противник примет ноту, ваша держава целиком — системы, колонии, флоты, армии и казна — перейдёт ему. Отменить это будет нельзя.'
+    : kind === 'capitulation'
+    ? 'Предложить противнику капитуляцию? У него будет трое суток на ответ. Если промолчит — капитулирует, и его держава целиком перейдёт вам.'
     : kind === 'conference'
       ? 'Созвать мирную конференцию? Она будет опубликована в ленте событий сектора немедленно.'
       : `Отправить ноту «${k.label}» противнику?`;
@@ -18067,10 +18099,10 @@ function ecWarOffer(warId, kind) {
 }
 function ecWarRespond(offerId, accept, kind) {
   const k = EC_WAR_KIND[kind] || { label: kind };
-  if (accept && !confirm(kind === 'demand_surrender'
-    ? 'Принять требование капитуляции? Война окончится вашим поражением.'
+  if (accept && !confirm(kind === 'demand_surrender' || kind === 'capitulation'
+    ? 'Капитулировать? Ваша держава целиком — системы, колонии, флоты, армии и казна — перейдёт противнику. Вы сможете основать новую державу или пойти на службу в чужую.'
     : kind === 'surrender'
-      ? 'Принять капитуляцию противника? Война окончится вашей победой.'
+      ? 'Принять капитуляцию противника? Его держава целиком перейдёт вам.'
       : 'Принять белый мир? Война окончится, все останутся при своём.')) return;
   ecRpcAct('war_offer_respond', { p_offer: offerId, p_accept: !!accept },
     accept ? `Принято: ${k.label}` : 'Нота отвергнута');
