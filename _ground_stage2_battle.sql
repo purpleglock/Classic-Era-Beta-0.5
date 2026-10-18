@@ -14,7 +14,8 @@
 --     ПРО, «Немезида», Гиперпейсер — неподвижные точки огня) и узел обороны
 --     колонии — обязательная цель. Ими ходит только ИИ: держава
 --     'ground_militia' — союзник защитника, записанный в battle_ai_fids.
---   • ЛИМИТ ХОДОВ. По 10 ходов на сторону; не добил — ничья, десант отходит.
+--   • ЛИМИТ ХОДОВ. По 15 ходов на сторону; не добил — ничья, десант отходит.
+--   • ПОЛЕ 30×22 вместо космических 60×60: пехота ходит по 1–2 клетки.
 --   • ПОБЕДА. Сторона, у которой на доске не осталось живых отрядов,
 --     проиграла. Невыставленный резерв проигравшего гибнет вместе с ним.
 --   • ИТОГ. Потери списываются с армий; гарнизон снова свободен; при ничьей
@@ -35,7 +36,9 @@ language sql immutable as $$
   select case p_key
     when 'fly_mult'       then 1.5    -- этап 1: армия летит в полтора раза дольше флота
     when 'same_sys_h'     then 0.5    -- этап 1: высадка с орбиты своей системы
-    when 'turns'          then 10     -- ходов на сторону до ничьей
+    when 'turns'          then 15     -- ходов на сторону до ничьей
+    when 'board_w'        then 30     -- поле наземного боя: пехота медленная,
+    when 'board_h'        then 22     -- на космической доске 60×60 она не дойдёт
     when 'form_h'         then 12     -- часов на расстановку
     when 'militia_per_pop' then 0.5   -- ополченцев на единицу населения
     when 'militia_stacks' then 3      -- отрядов ополчения
@@ -59,6 +62,21 @@ begin
               when p_fid = ''ground_militia'' then ''Ополчение колонии''');
   end if;
 end $$;
+
+-- Размер поля наземного боя. Имя триггера начинается с trg_a_, чтобы он
+-- сработал раньше общего trg_bt_size_default (тот ставит 60×60).
+create or replace function public._ground_size_default() returns trigger
+language plpgsql as $$
+begin
+  if new.kind = 'ground' then
+    new.bw := coalesce(new.bw, public._ground_const('board_w')::int);
+    new.bh := coalesce(new.bh, public._ground_const('board_h')::int);
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_a_ground_size on public.battles;
+create trigger trg_a_ground_size before insert on public.battles
+  for each row execute function public._ground_size_default();
 
 -- ── Служебные проекты обороны ────────────────────────────────
 -- Принадлежат псевдо-державе 'ground_npc': заказать их нельзя (чужой проект),
