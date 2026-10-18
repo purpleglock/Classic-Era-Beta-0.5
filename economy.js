@@ -7391,8 +7391,10 @@ const EC_MB = [
 // Один выключатель на весь военпром: снимается вместе с гейтом конструктора
 // (constructors.js, cnFrozenCat) — открывать нужно ОБА, иначе игрок либо
 // строит по нечему, либо проектирует то, что не построить.
-const EC_ARMY_FROZEN = true;
-const EC_FROZEN_TX = 'До конца обновления «Убей или спаси» работы над наземкой не ведутся: движок наземного боя переписывается. Заказанное сейчас после обновления пришлось бы пересчитывать, поэтому производство пехоты, техники и авиации приостановлено, а регистрация новых проектов в конструкторе закрыта. Флот, ремонт и уже готовые войска работают как прежде.';
+const EC_ARMY_FROZEN = false;   // 19.10.2026: наземка снова строится; авиацию держит EC_AIR_FROZEN
+const EC_AIR_FROZEN = true;
+function ecMbFrozen(k) { return k !== 'ship' && (EC_ARMY_FROZEN || (k === 'aviation' && EC_AIR_FROZEN)); }
+const EC_FROZEN_TX = 'Авиация пока заморожена: наземная война вышла без неё, авиацию добавят отдельным обновлением. Пехота и наземная техника строятся как обычно.';
 function ecFrozenBox(nDesigns) {
   return `<div class="ec-frz">
     <div class="ec-frz-hd"><span class="ec-frz-ic">${ecIco('ban')}</span>Производство приостановлено</div>
@@ -7430,7 +7432,7 @@ function ecTabMilBuild() {
     // Причина та же, что и у закрытой регистрации проектов в конструкторе:
     // наземный движок переписывается, заказанное сейчас после обновления
     // пришлось бы пересчитывать. Флот и ремонт работают как прежде.
-    if (EC_ARMY_FROZEN) return ecFrozenBox(list.length);
+    if (EC_ARMY_FROZEN || (isAvia && EC_AIR_FROZEN)) return ecFrozenBox(list.length);
     if (isAvia && !caps.hasAirfield) return `<div class="ec-empty">Нужен Аэрокосмический Завод — постройте его во вкладке «Колонии».</div>`;
     if (isInf && !caps.hasTraining) return `<div class="ec-empty">Нужен ${caps.robot ? 'Военный Завод (робо-сборка пехоты)' : 'Центр Подготовки'} — постройте его во вкладке «Колонии».</div>`;
     if (!isAvia && !isInf && !caps.hasMil) return `<div class="ec-empty">Нужен Военный Завод — постройте его во вкладке «Колонии».</div>`;
@@ -7502,12 +7504,12 @@ function ecTabMilBuild() {
   const curMb = EC_MB.find(b => b.k === mtab);
 
   const mbTabsHtml = `<div class="ec-fb-tabs" role="tablist">${EC_MB.map(b => `
-    <button class="ec-fb-tab ec-fb-tab--${b.mod}${b.k === mtab ? ' on' : ''}${EC_ARMY_FROZEN && b.k !== 'ship' ? ' frz' : ''}" role="tab"
+    <button class="ec-fb-tab ec-fb-tab--${b.mod}${b.k === mtab ? ' on' : ''}${ecMbFrozen(b.k) ? ' frz' : ''}" role="tab"
       aria-selected="${b.k === mtab}" onclick="ecMilTab('${b.k}')"
-      title="${EC_ARMY_FROZEN && b.k !== 'ship' ? 'Цех заморожен до конца обновления «Убей или спаси»' : readyOf[b.k] ? `Проектов: ${ecNum(listOf[b.k].length)}` : 'Нет постройки — цех недоступен'}">
+      title="${ecMbFrozen(b.k) ? 'Цех заморожен' : readyOf[b.k] ? `Проектов: ${ecNum(listOf[b.k].length)}` : 'Нет постройки — цех недоступен'}">
       ${ecIco(b.ic, 'ec-fb-tab-ic')}
       <span class="ec-fb-tab-l">${esc(b.nm)}</span>
-      <span class="ec-fb-tab-n">${EC_ARMY_FROZEN && b.k !== 'ship' ? ecIco('lock', 'ec-fb-tab-lock') : readyOf[b.k] ? ecNum(listOf[b.k].length) : '—'}</span>
+      <span class="ec-fb-tab-n">${ecMbFrozen(b.k) ? ecIco('lock', 'ec-fb-tab-lock') : readyOf[b.k] ? ecNum(listOf[b.k].length) : '—'}</span>
     </button>`).join('')}</div>`;
 
   const curShopHtml = curMb.k === 'ship'
@@ -7548,7 +7550,7 @@ function ecUnitBillUpd(kind) {
 async function ecProduceUnit(kind, coupon) {
   if (EC.busy) return;
   // Заморозка: ни за ГС, ни за осколок — наземка и авиация не строятся.
-  if (EC_ARMY_FROZEN) { toast('Производство наземки и авиации приостановлено до конца обновления «Убей или спаси»', 'err'); return; }
+  if (EC_ARMY_FROZEN || (kind === 'aviation' && EC_AIR_FROZEN)) { toast(kind === 'aviation' ? 'Производство авиации пока заморожено' : 'Производство наземки и авиации приостановлено', 'err'); return; }
   const sel = ecId('ec-' + kind + '-sel'); if (!sel || !sel.value) { toast('Выберите проект', 'err'); return; }
   const qty = Math.max(1, parseInt(ecId('ec-' + kind + '-qty')?.value) || 1);
   const u = ecUnitPick(kind, sel.value); if (!u) { toast('Проект не найден', 'err'); return; }

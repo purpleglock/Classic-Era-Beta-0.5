@@ -359,9 +359,13 @@ const CN_DEFS = {
 // всё, что зарегистрируют сейчас, после обновления пришлось бы пересчитывать
 // или сносить. Конструктор остаётся ОТКРЫТЫМ на просмотр и прикидку — закрыта
 // только публикация (здесь) и заказ производства (economy.js, ecProduceUnit).
-const CN_FROZEN_TITLE = 'Регистрация проектов закрыта';
-const CN_FROZEN_TEXT = 'До конца обновления «Убей или спаси» работы над наземкой и авиацией не ведутся. Новые проекты после переработки могут стать неактуальными, поэтому регистрация закрыта, а производство наземных юнитов и авиации приостановлено. Конструктор открыт для прикидки: считайте ТТХ и сравнивайте компоновки — сохранить проект нельзя.';
-function cnFrozenCat(cat) { return cat === 'army' || cat === 'ground' || cat === 'aviation'; }
+const CN_FROZEN_TITLE = 'Авиация заморожена';
+const CN_FROZEN_TEXT = 'Авиация пока заморожена: наземная война вышла без неё, авиацию добавят отдельным обновлением. Конструктор открыт для прикидки ТТХ — сохранить проект авиации нельзя. Пехота и наземная техника регистрируются в «Планетарном арсенале».';
+// 19.10.2026: наземная война вышла (этапы 1–3) — пехота и техника снова
+// регистрируются. Авиация по решению владельца остаётся замороженной: её
+// цех — отдельная карточка, а в едином арсенале её классы режет cnPublish.
+function cnFrozenCat(cat) { return cat === 'aviation'; }
+function cnFrozenArmyClass(k) { return cnKvRealCat(k) === 'aviation'; }
 function cnFrozenBanner() {
   return `<div class="cn-frz"><div class="cn-frz-ic">${cnIco('ban')}</div>
     <div><div class="cn-frz-hd">${CN_FROZEN_TITLE}</div>
@@ -4962,7 +4966,7 @@ async function cnVehRender(cat) {
       <button class="btn btn-gh btn-fw cn-ln-add" onclick="cnVehAddItem('module')">+ модуль</button>
       <div class="cn-ln-sec">Расчётные ТТХ</div>
       <div id="cn-stats" class="cn-ln-stats"></div>
-      <div class="cn-ln-lock">${cnIco('lock', 'cn-i-sm')} Проект не сохраняется — регистрация закрыта до конца обновления «Убей или спаси».</div>
+      <div class="cn-ln-lock">${cnIco('lock', 'cn-i-sm')} Проект авиации не сохраняется — авиация пока заморожена.</div>
       <button class="btn btn-gh btn-fw" onclick="cnCopyVehCard()">Копировать спецификацию</button>
     </div>`;
   }
@@ -4987,7 +4991,7 @@ async function cnVehRender(cat) {
       : '<div class="cn-wip">⚠ Конструктор в переработке: палуба, модули и баланс ещё меняются — сохранённые проекты могут пересчитаться.</div>'}
     ${body}
   </div>`);
-  if (frozen) toast(CN_FROZEN_TITLE + ': до конца обновления «Убей или спаси» проекты наземки и авиации не регистрируются', 'inf');
+  if (frozen) toast(CN_FROZEN_TITLE + ': проекты авиации пока не регистрируются', 'inf');
 
   if (edit && cnId('cn-faction')) cnId('cn-faction').value = edit.faction_id || '';
   CN.snap = null; CN.snapOver = false; CN._applying = false;
@@ -6196,7 +6200,10 @@ function cnCatRoute(cat) { return { ship: 'cat-ships', ground: 'cat-ground', avi
 async function cnPublish() {
   if (CN.busy) return;
   // Заморозка «Убей или спаси»: наземка и авиация не регистрируются.
-  if (cnFrozenCat(CN.cat)) { toast(CN_FROZEN_TITLE + ' — проект наземки/авиации сохранить нельзя', 'err'); return; }
+  if (cnFrozenCat(CN.cat)) { toast(CN_FROZEN_TITLE + ' — проект авиации сохранить нельзя', 'err'); return; }
+  if (CN.cat === 'army' && cnFrozenArmyClass(cnId('cn-class')?.value)) {
+    toast('Авиация пока заморожена — зарегистрировать можно пехоту и наземную технику', 'err'); return;
+  }
   await cnLoadMyFaction();
   if (!cnCanAccess()) { toast('Нет доступа к публикации', 'err'); return; }
   const name = (cnId('cn-name')?.value || '').trim();
