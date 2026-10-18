@@ -4501,6 +4501,7 @@ function adTabTesting(e) {
     ${row('🛐 Удалить религию фракции', 'Удаляет веру, основанную этой фракцией. Адепты, признания и тайные секты уходят каскадом. Необратимо.', `<button class="btn btn-rd" onclick="adTestDeleteFaith()">Удалить религию</button>`)}
     ${adTestDuelSection()}
     ${adBotBattleSection()}
+    ${adGroundBattleSection()}
     ${adTestSpySection()}
   </div>`;
 }
@@ -4953,6 +4954,92 @@ function adBotBattleSection() {
     </div>
     <div class="fm-dim" style="font-size:11px;line-height:1.4">${status}</div>
   </div>`;
+}
+// ── 🪖 Тестовый наземный бой с ботом (_ground_admin_sandbox.sql) ──
+// Бот садится за оборону колонии выбранной державы (столица или самая
+// населённая): ополчение, оборонительные постройки, узел обороны и, по
+// желанию, гарнизон из тестовых проектов. Ничего не отнимает: у боя нет
+// колонии, армий и войны, итог не пишет новостей.
+function adGroundFactionOptions(sel) {
+  const nm = fid => (AD.byFid.get(fid)?.app?.name) || fid;
+  return [...AD.byFid.keys()]
+    .filter(fid => (AD.byFid.get(fid)?.colonies || []).length > 0)
+    .sort((a, b) => nm(a).localeCompare(nm(b), 'ru'))
+    .map(fid => `<option value="${esc(fid)}"${fid === sel ? ' selected' : ''}>${esc(nm(fid))} · ${(AD.byFid.get(fid)?.colonies || []).length} кол.</option>`)
+    .join('');
+}
+function adGroundBattleSection() {
+  const t = AD.groundBattle;
+  const cur = (t && t.bot_as) || AD.sel || '';
+  const status = t && t.battle_id
+    ? (t.status === 'forming'
+        ? `Текущий: <b>расстановка</b> — открой доску, выложи отряды и жми «В бой». Оборона: <b>${esc(t.bot_fname || t.bot_as || '')}</b>.`
+        : t.status === 'done'
+          ? `Текущий: окончен — <b>${esc(t.winner || 'ничья')}</b>.`
+          : `Текущий: идёт бой, ход ${t.turn || '—'} · осталось ходов ${t.att_left ?? '—'}/${t.def_left ?? '—'}${t.bot_turn ? ' · <b>сейчас ход бота</b>' : ' · сейчас твой ход'}`)
+    : 'Наземный тестовый бой ещё не создавался (или статус не загружен).';
+  return `<div class="fm-danger-act" style="align-items:flex-start;flex-direction:column;gap:10px">
+    <div class="fm-danger-label" style="width:100%">
+      <div>🪖 Тестовый наземный бой с ботом</div>
+      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Наземное поле 30×22: <b>ты — десант</b>, бот держит оборону колонии выбранной державы (столица или самая населённая): ополчение по населению, ПВО/ПРО и прочие оборонительные постройки, узел обороны. По желанию — <b>гарнизон</b> из тестовых проектов (пехота и танки). Свою сторону выкладывай из <b>тестового каталога наземки</b>: отряды по 100 пехоты или 10 машин. 15 ходов на сторону, не добил — ничья. <b>Ничего не отнимается</b>: ни колонии, ни армий, ни новостей. Повторное создание сносит прежнюю доску.</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;width:100%">
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1 1 220px">
+        <label class="fm-dim" style="font-size:11px">Чью колонию обороняет бот</label>
+        <select id="ad-gb-fid" class="ec-input" style="min-width:200px">${adGroundFactionOptions(cur)}</select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <label class="fm-dim" style="font-size:11px">Отрядов гарнизона</label>
+        <input id="ad-gb-garr" class="ec-input" type="number" min="0" max="20" value="0" style="width:90px">
+      </div>
+      <button class="btn btn-gd" onclick="adGroundBattle()">Создать / перезапустить</button>
+      <button class="btn btn-gh" onclick="adGroundBattleOpen()">Открыть доску</button>
+      <button class="btn btn-gh" onclick="adGroundBotTurn()">Ход бота ▸</button>
+    </div>
+    <div class="fm-dim" style="font-size:11px;line-height:1.4">${status}</div>
+  </div>`;
+}
+async function adGroundBattle() {
+  if (AD.busy) return;
+  const fid = document.getElementById('ad-gb-fid')?.value;
+  const garr = Math.max(0, Math.min(20, parseInt(document.getElementById('ad-gb-garr')?.value, 10) || 0));
+  if (!fid) { toast('Выбери державу', 'err'); return; }
+  if (AD.groundBattle?.battle_id && !confirm('Прежняя доска наземного боя будет снесена и создана заново. Продолжить?')) return;
+  AD.busy = true;
+  try {
+    const r = await apiFetch('rpc/admin_ground_battle', { method: 'POST', body: JSON.stringify({ p_bot_fid: fid, p_garrison: garr }) });
+    AD.groundBattle = await apiFetch('rpc/admin_ground_battle_state', { method: 'POST', body: '{}' });
+    toast(`Наземный бой создан: бот держит «${r?.colony || 'колонию'}» державы «${r?.bot_fname || fid}» (${r?.placed || 0} отрядов). Открой доску и выложи десант.`, 'ok');
+    adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+async function adGroundBattleOpen() {
+  if (AD.busy) return;
+  try {
+    if (!AD.groundBattle?.battle_id) {
+      AD.groundBattle = await apiFetch('rpc/admin_ground_battle_state', { method: 'POST', body: '{}' });
+      adPaint();
+    }
+    if (!AD.groundBattle?.battle_id) { toast('Наземный бой ещё не создан', 'err'); return; }
+    if (typeof bbOpen === 'function') bbOpen(AD.groundBattle.battle_id, false, true);
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+}
+async function adGroundBotTurn() {
+  if (AD.busy) return;
+  try {
+    if (!AD.groundBattle?.battle_id) {
+      AD.groundBattle = await apiFetch('rpc/admin_ground_battle_state', { method: 'POST', body: '{}' });
+    }
+    if (!AD.groundBattle?.battle_id) { toast('Наземный бой ещё не создан', 'err'); return; }
+    AD.busy = true;
+    await apiFetch('rpc/admin_bot_turn', { method: 'POST', body: JSON.stringify({ p_battle: AD.groundBattle.battle_id }) });
+    toast('Бот походил', 'ok');
+    AD.groundBattle = await apiFetch('rpc/admin_ground_battle_state', { method: 'POST', body: '{}' });
+    if (typeof bbReload === 'function') bbReload(); else if (typeof bbPoll === 'function') bbPoll();
+    adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
 }
 async function adBotBattle() {
   if (AD.busy) return;
