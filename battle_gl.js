@@ -74,7 +74,7 @@ function bgInit(canvas) {
   BG.scene = new THREE.Scene();
   BG.cam = new THREE.PerspectiveCamera(46, 1, 10, 20000);
 
-  bgBuildSky();
+  if (bgIsGroundBattle()) bgBuildGroundSky(); else bgBuildSky();
   bgBuildLights();
   bgBuildField();
 
@@ -169,6 +169,13 @@ function bgBuildField() {
   };
 
   // дно: даёт кораблям фон и ловит границу арены
+  // На земле — не полупрозрачная плёнка над пустотой, а грунт, освещённый
+  // тем же солнцем, что и техника: иначе горы стоят «в космосе».
+  if (bgIsGroundBattle()) {
+    lay(cells, bgGroundHexGeo(R), new THREE.MeshStandardMaterial({
+      color: 0x6f6047, roughness: 1, metalness: 0, side: THREE.DoubleSide }), -1);
+    bgBuildGroundSkirt(grp, W, H);
+  } else
   lay(cells, bgHexFillGeo(R), new THREE.MeshBasicMaterial({
     color: 0x060a12, transparent: true, opacity: 0.62, depthWrite: false,
     side: THREE.DoubleSide }), -1);
@@ -1296,7 +1303,8 @@ function bgSyncUnits() {
     // Маска корпуса колосса живёт в дизайне, а не в юните — достаём тем же
     // путём, что и 2D (bbDesignOf), иначе 3D покажет чужой борт.
     const uh = u.contact ? null : bgUnitHull(u);
-    const key = (u.contact ? '?' : bgHullKey(u.cls, uh)) + '|' + bgTone(u);
+    const key = (u.contact ? '?' : bgHullKey(u.cls, uh)) + '|' + bgTone(u)
+              + (bgIsGroundBattle() ? '|g' + bgStackN(u) : '');
     let m = BG.units.get(u.id);
     if (m && m.userData.key !== key) { bgDropUnit(u.id); m = null; }   // сменился класс/сторона/захват
     if (!m) {
@@ -1312,11 +1320,17 @@ function bgSyncUnits() {
         : u.contact ? BB.R * 0.8
         : BB.R * (0.75 + (typeof bbClsSize === 'function' ? bbClsSize(u.cls) : 1) * 1.15) * BG_SHIP_K;
       const rank = u.cls === 'angel' ? 0 : (+(u.pk && u.pk.gd) >= 2 ? 2 : 1);
-      m = ang ? bgBuildAngel(rank) : u.contact ? bgBuildContact() : bgBuildShip(u.cls, bgTone(u), uh);
-      m.scale.setScalar(L);
+      // НАЗЕМКА: на земле ездят и ходят, а не летают — своя модель класса,
+      // стоит на грунте (y = 0) и следа дюз за собой не тянет.
+      const gnd = !u.contact && !ang && !gdn && bgIsGroundBattle();
+      const gL = gnd ? BB.R * bgGroundSize(u.cls) : 0;
+      m = gnd ? bgBuildGroundUnit(u.cls, bgTone(u), bgStackN(u))
+        : ang ? bgBuildAngel(rank) : u.contact ? bgBuildContact() : bgBuildShip(u.cls, bgTone(u), uh);
+      m.scale.setScalar(gnd ? gL : L);
       m.userData.key = key; m.userData.uid = u.id;
-      m.userData.L = L; m.userData.angel = ang; m.userData.gd = gdn; m.userData.rank = rank;
-      m.userData.y = ang ? BB.R * 0.9 : u.contact ? BB.R * 0.3 : L * 0.12;   // высота килем над плоскостью
+      m.userData.L = gnd ? gL : L; m.userData.angel = ang; m.userData.gd = gdn; m.userData.rank = rank;
+      m.userData.ground = gnd;
+      m.userData.y = gnd ? 0 : ang ? BB.R * 0.9 : u.contact ? BB.R * 0.3 : L * 0.12;   // высота килем над плоскостью
       BG.g.units.add(m);
       BG.units.set(u.id, m);
     }
@@ -1371,7 +1385,7 @@ function bgPlaceUnits() {
       m.userData.mv = moving;
       (m.userData.nz || []).forEach(e => e.scale.set(1, moving ? 2.3 : 1, 1));
     }
-    bgTrail(u, m, c.ang, moving);
+    if (!m.userData.ground) bgTrail(u, m, c.ang, moving);
   });
   bgPlaceStatus();
 }
@@ -2325,6 +2339,10 @@ function bgSyncTerrain() {
     const [x, y] = key.split(':').map(Number);
     cells.push({ t, x, y, c: bbHexCenter(x, y) });
   });
+  // Наземный рельеф (горы, обрывы, осыпь) — своя сборка, см. bgGroundTerrain.
+  // Старые коды космоса на земле не встречаются, но если встретятся — ниже
+  // они нарисуются как раньше.
+  bgGroundTerrain(grp, cells.filter(c => c.t === 'mtn' || c.t === 'clf' || c.t === 'rck'));
 
   // Камни и обломки — ИНСТАНСАМИ: на большой доске их сотни, отдельными мешами
   // это сотни draw call'ов ради декора.
@@ -2546,6 +2564,11 @@ function bgSyncOverlay() {
 const BG_VEIL_SRC = 12;                  // сколько бортов-сенсоров держит шейдер
 
 function bgVeilShader(mode) {
+  // На земле туман войны — сумерки, а не космическая чернота: рельеф карты
+  // известен обеим сторонам, прячутся только отряды (их и так не отдаёт сервер).
+  const gv = bgIsGroundBattle();
+  const veilRgb = gv ? 'vec3(0.045, 0.036, 0.026)' : 'vec3(0.006, 0.011, 0.028)';
+  const veilA = gv ? '0.55' : '0.88';
   const common = `
     precision highp float;
     varying vec2 vW;
@@ -2590,7 +2613,7 @@ function bgVeilShader(mode) {
       // граница должна ощущаться светом, а не ещё одним контуром на доске
       float dark = smoothstep(0.92, 0.16, lit);
       if (dark < 0.01) discard;
-      gl_FragColor = vec4(vec3(0.006, 0.011, 0.028), dark * 0.88 * c.a);
+      gl_FragColor = vec4(${veilRgb}, dark * ${veilA} * c.a);
     }
   ` };
   return { vert, frag: common + `
@@ -3062,12 +3085,13 @@ function bgSyncGhosts() {
   const face = -bbDirAngle(bbSideFacing(s.my_side));
   BB.place.forEach(p => {
     const size = (typeof bbClsSize === 'function' ? bbClsSize(p.cls) : 1);
-    const L = BB.R * (0.75 + size * 1.15) * BG_SHIP_K;
-    const m = bgBuildShip(p.cls, 'mine', bgUnitHull(p));
+    const gnd = bgIsGroundBattle();
+    const L = gnd ? BB.R * bgGroundSize(p.cls) : BB.R * (0.75 + size * 1.15) * BG_SHIP_K;
+    const m = gnd ? bgBuildGroundUnit(p.cls, 'mine', +p.n || 1) : bgBuildShip(p.cls, 'mine', bgUnitHull(p));
     (m.userData.hullParts || []).forEach(q => { q.material = bgHullMat(true, false, true); });
     m.scale.setScalar(L);
     const c = bbHexCenter(p.x, p.y);
-    m.position.set(c.px, L * 0.12, c.py);
+    m.position.set(c.px, gnd ? 0 : L * 0.12, c.py);
     m.rotation.y = face;
     BG.g.gh.add(m);
   });
@@ -3143,6 +3167,288 @@ function bgSyncFail(step, e) {
   seen.add(step);
   if (typeof toast === 'function') toast(`3D-доска: сбой «${step}» — ${e && e.message ? e.message : e}`, 'err');
 }
+
+// ════════════════════════════════════════════════════════════
+// НАЗЕМНЫЙ БОЙ: небо, грунт, рельеф и техника
+// ────────────────────────────────────────────────────────────
+// Наземка идёт на той же арене и той же механике, что космос, но выглядеть
+// обязана иначе: под ногами грунт, над головой небо, горы — это горы, а по
+// полю едут танки и идёт пехота, а не корабли. Логику не трогаем: всё здесь
+// только картинка, и включается одним признаком s.kind === 'ground'.
+// ════════════════════════════════════════════════════════════
+function bgIsGroundBattle() { return !!(BB.st && BB.st.kind === 'ground'); }
+
+// Сколько бойцов в стеке: сервер кладёт n в pk, имя дублирует «×N».
+function bgStackN(u) {
+  const n = +(u && u.pk && u.pk.n);
+  if (n > 0) return n;
+  const m = /×\s*(\d+)/.exec((u && (u.name || u.unit_name)) || '');
+  return m ? +m[1] : 1;
+}
+
+// ── Небо: градиент на большой сфере + дымка у горизонта ──────
+function bgBuildGroundSky() {
+  BG.renderer.setClearColor(0x2b2f37, 1);
+  const tex = bgTex('gsky', 4, 256, (x, w, h) => {
+    const g = x.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0.00, '#1d2533');
+    g.addColorStop(0.38, '#46505e');
+    g.addColorStop(0.49, '#9c8b6e');   // пыльный горизонт
+    g.addColorStop(0.53, '#5d5140');
+    g.addColorStop(1.00, '#241e17');
+    x.fillStyle = g; x.fillRect(0, 0, w, h);
+  });
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(9000, 32, 16),
+    new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, depthWrite: false, fog: false }));
+  sky.frustumCulled = false;
+  BG.scene.add(sky);
+  BG.g.sky = sky;
+  // тёплая заливка от неба и грунта: без неё теневые склоны гор уходят в
+  // космическую синеву, а техника на земле теряется
+  BG.scene.add(new THREE.HemisphereLight(0xd9c9a6, 0x4a3d2c, 1.1));
+  // дымка прячет край грунта и даёт глубину: дальние склоны светлеют
+  BG.scene.fog = new THREE.Fog(0x857760, 5200, 14000);
+}
+
+// Грунт за кромкой арены и дальние холмы по кругу — горизонт вместо пустоты.
+function bgBuildGroundSkirt(grp, W, H) {
+  const cx = W / 2, cz = H / 2;
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(30000, 30000),
+    new THREE.MeshStandardMaterial({ color: 0x4d4232, roughness: 1, metalness: 0 }));
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.set(cx, -4, cz);
+  plane.userData.ownGeo = true;
+  grp.add(plane);
+
+  let seed = 0x51ed;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const N = 40, rad0 = Math.max(W, H) * 1.5;
+  const hills = new THREE.InstancedMesh(bgGeoCache('cone6', () => new THREE.ConeGeometry(1, 1, 6)),
+    new THREE.MeshStandardMaterial({ color: 0x5e5240, roughness: 1, flatShading: true }), N);
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + rnd() * 0.2;
+    const h = 300 + rnd() * 900, w = h * (0.9 + rnd() * 0.6);
+    const r = rad0 + w + rnd() * rad0 * 0.8;     // подошва холма не заходит на поле
+    _p.set(cx + Math.cos(a) * r, h / 2 - 6, cz + Math.sin(a) * r);
+    _q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 6.28);
+    _s.set(w, h, w * (0.7 + rnd() * 0.5));
+    hills.setMatrixAt(i, _m.compose(_p, _q, _s));
+  }
+  hills.instanceMatrix.needsUpdate = true;
+  hills.frustumCulled = false;
+  grp.add(hills);
+}
+
+// Пол наземки: та же шестигранная заливка, но с нормалями вверх — без них
+// освещаемый материал выходит чёрным, и грунт превращается в провал.
+function bgGroundHexGeo(r) {
+  return bgGeoCache('ghex' + r.toFixed(2), () => {
+    const g = bgHexFillGeo(r).clone();
+    const n = g.attributes.position.count, nr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) nr[i * 3 + 1] = -1;   // веер смотрит вниз: с DoubleSide нормаль развернётся к камере
+    g.setAttribute('normal', new THREE.BufferAttribute(nr, 3));
+    return g;
+  });
+}
+
+// Общие геометрии наземки — по ключу, одна на всю сцену.
+function bgGeoCache(key, make) {
+  const c = BG._gGeo || (BG._gGeo = {});
+  return c[key] || (c[key] = make());
+}
+function bgMatCache(key, make) {
+  const c = BG._gMat || (BG._gMat = {});
+  return c[key] || (c[key] = make());
+}
+
+// ── РЕЛЬЕФ ──────────────────────────────────────────────────
+// ГОРЫ  — каменное основание на весь гекс и две-три вершины со снегом:
+//         видно издалека, что здесь не пройти и за ними не видно.
+// ОБРЫВ — тёмный провал с рваными каменными зубцами по краю: ниже уровня
+//         поля, поэтому над ним видно и стрелять можно, а пройти — нет.
+// ОСЫПЬ — россыпь плоских камней по грунту: проходимо, но медленно.
+// Раскладка детерминирована от координат (bgTerrRnd), как у 2D-доски.
+function bgGroundTerrain(grp, cells) {
+  if (!cells.length) return;
+  const R = BB.R;
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(),
+        _s = new THREE.Vector3(), _e = new THREE.Euler();
+  const mtn = cells.filter(c => c.t === 'mtn'), clf = cells.filter(c => c.t === 'clf'),
+        rck = cells.filter(c => c.t === 'rck');
+  const inst = (geo, mat, n) => { const im = new THREE.InstancedMesh(geo, mat, Math.max(1, n)); im.count = 0; grp.add(im); return im; };
+  const put = (im, px, py, pz, rx, ry, rz, sx, sy, sz) => {
+    _e.set(rx, ry, rz); _q.setFromEuler(_e); _p.set(px, py, pz); _s.set(sx, sy, sz);
+    im.setMatrixAt(im.count++, _m.compose(_p, _q, _s));
+  };
+  const hexPrism = bgGeoCache('hex6', () => new THREE.CylinderGeometry(1, 1, 1, 6, 1, false, Math.PI / 2));
+  const cone = bgGeoCache('cone6', () => new THREE.ConeGeometry(1, 1, 6));
+  const rock = BG._rock || (BG._rock = new THREE.IcosahedronGeometry(1, 0));
+  const shard = bgGeoCache('tet', () => new THREE.TetrahedronGeometry(1, 0));
+
+  if (mtn.length) {
+    const base = inst(hexPrism, new THREE.MeshStandardMaterial({ color: 0x5a4f41, roughness: 1, flatShading: true }), mtn.length);
+    const peak = inst(cone, new THREE.MeshStandardMaterial({ color: 0x77695a, roughness: 0.95, flatShading: true }), mtn.length * 3);
+    const snow = inst(cone, new THREE.MeshStandardMaterial({ color: 0xe9edf2, roughness: 0.7, flatShading: true }), mtn.length * 3);
+    mtn.forEach(({ x, y, c }) => {
+      const rnd = k => bgTerrRnd(x, y, k);
+      const bh = R * (0.28 + rnd(1) * 0.12);
+      put(base, c.px, bh / 2, c.py, 0, 0, 0, R * 1.0, bh, R * 1.0);
+      const n = 2 + (rnd(2) > 0.45 ? 1 : 0);
+      for (let i = 0; i < n; i++) {
+        const big = i === 0;
+        const r = R * (big ? 0.9 + rnd(10 + i) * 0.2 : 0.6 + rnd(10 + i) * 0.2);
+        const h = R * (big ? 1.45 + rnd(20 + i) * 0.55 : 0.85 + rnd(20 + i) * 0.4);
+        const a = rnd(30 + i) * 6.28, d = big ? R * 0.12 : R * (0.3 + rnd(40 + i) * 0.15);
+        const px = c.px + Math.cos(a) * d, pz = c.py + Math.sin(a) * d, ry = rnd(50 + i) * 6.28;
+        const yb = bh * 0.6;
+        put(peak, px, yb + h / 2, pz, 0, ry, 0, r, h, r);
+        // шапка — та же пирамида в масштабе: сидит ровно на вершине
+        const k = 0.34, tip = yb + h;
+        put(snow, px, tip - h * k / 2 + 0.4, pz, 0, ry, 0, r * k * 1.06, h * k, r * k * 1.06);
+      }
+    });
+    [base, peak, snow].forEach(im => { im.instanceMatrix.needsUpdate = true; im.frustumCulled = false; });
+  }
+
+  if (clf.length) {
+    const pit = new THREE.InstancedMesh(bgHexFillGeo(R * 0.9),
+      new THREE.MeshBasicMaterial({ color: 0x0c0907, side: THREE.DoubleSide }), clf.length);
+    const lip = inst(shard, new THREE.MeshStandardMaterial({ color: 0x4e4337, roughness: 1, flatShading: true }), clf.length * 6);
+    clf.forEach(({ x, y, c }, i) => {
+      pit.setMatrixAt(i, _m.makeTranslation(c.px, 0.6, c.py));
+      const rnd = k => bgTerrRnd(x, y, k);
+      for (let j = 0; j < 6; j++) {
+        const a = j * Math.PI / 3 + (rnd(j) - 0.5) * 0.5;
+        const d = R * (0.78 + rnd(j + 6) * 0.14);
+        const sz = R * (0.16 + rnd(j + 12) * 0.14);
+        put(lip, c.px + Math.cos(a) * d, sz * 0.35, c.py + Math.sin(a) * d,
+            rnd(j + 18) * 6.28, rnd(j + 24) * 6.28, rnd(j + 30) * 6.28, sz, sz * (1.1 + rnd(j + 36)), sz);
+      }
+    });
+    pit.instanceMatrix.needsUpdate = true; pit.frustumCulled = false; grp.add(pit);
+    lip.instanceMatrix.needsUpdate = true; lip.frustumCulled = false;
+  }
+
+  if (rck.length) {
+    const st = inst(rock, new THREE.MeshStandardMaterial({ color: 0x8a7b63, roughness: 1, flatShading: true }), rck.length * 9);
+    rck.forEach(({ x, y, c }) => {
+      const rnd = k => bgTerrRnd(x, y, k);
+      for (let i = 0; i < 9; i++) {
+        const sz = R * (0.07 + rnd(i + 4) * 0.12);
+        put(st, c.px + (rnd(i) - 0.5) * R * 1.3, sz * 0.25, c.py + (rnd(i + 9) - 0.5) * R * 1.3,
+            rnd(i + 1) * 0.6, rnd(i + 5) * 6.28, rnd(i + 6) * 0.6, sz, sz * 0.55, sz * (0.8 + rnd(i + 3) * 0.4));
+      }
+    });
+    st.instanceMatrix.needsUpdate = true; st.frustumCulled = false;
+  }
+}
+
+// ── ТЕХНИКА И ПЕХОТА ────────────────────────────────────────
+// Модель ЕДИНИЧНОЙ длины, нос в +X, стоит на y = 0 — тот же уговор, что у
+// корпусов кораблей, поэтому посадка, поворот по курсу и полоски состояния
+// работают без изменений. Броня — тот же материал стороны (bgHullMat), что у
+// кораблей: свой/союзник/враг читаются одинаково на обеих досках.
+function bgGroundSize(cls) {
+  return ({ peh: 1.3, btr: 1.2, tanki: 1.3, arta: 1.4, walker: 1.35, ss13: 1.45 })[cls] || 1.3;
+}
+
+function bgBuildGroundUnit(cls, tone, n) {
+  const grp = new THREE.Group();
+  const armor = bgHullMat(tone);
+  const dark = bgMatCache('dark', () => new THREE.MeshStandardMaterial({ color: 0x23211e, roughness: 0.85, metalness: 0.35 }));
+  const conc = bgMatCache('conc', () => new THREE.MeshStandardMaterial({ color: 0x8a8376, roughness: 1, metalness: 0, flatShading: true }));
+  const glow = bgGlowMat(BG_C[tone] || BG_C.foe, 'g');
+  const parts = [];
+  const add = (geo, mat, x, y, z, rx, ry, rz) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    if (rx || ry || rz) m.rotation.set(rx || 0, ry || 0, rz || 0);
+    grp.add(m);
+    if (mat === armor) parts.push(m);
+    return m;
+  };
+  const box = (w, h, d) => bgGeoCache(`b${w}|${h}|${d}`, () => new THREE.BoxGeometry(w, h, d));
+  const cyl = (rt, rb, h, seg) => bgGeoCache(`c${rt}|${rb}|${h}|${seg}`, () => new THREE.CylinderGeometry(rt, rb, h, seg || 10));
+  const H = -Math.PI / 2;     // цилиндр по оси Y → ствол вдоль +X
+
+  const tracks = (z, len) => {
+    add(box(len, 0.13, 0.13), dark, 0, 0.065, z);
+    add(box(len, 0.13, 0.13), dark, 0, 0.065, -z);
+  };
+
+  switch (cls) {
+    case 'peh': {
+      // Отделение: чем больше бойцов в стеке, тем гуще строй (3…8 фигур).
+      const k = Math.max(3, Math.min(8, 3 + Math.floor(Math.log2(Math.max(1, n)))));
+      const spots = [[0.24, 0], [0.08, -0.17], [0.08, 0.17], [-0.08, 0], [-0.12, -0.33], [-0.12, 0.33], [-0.28, -0.15], [-0.28, 0.15]];
+      const body = bgGeoCache('soldier', () => new THREE.CapsuleGeometry(0.045, 0.12, 3, 8));
+      const head = bgGeoCache('helmet', () => new THREE.SphereGeometry(0.046, 10, 8));
+      for (let i = 0; i < k; i++) {
+        const [sx, sz] = spots[i];
+        add(body, armor, sx, 0.105, sz);
+        add(head, dark, sx, 0.245, sz);
+        add(box(0.012, 0.014, 0.05), glow, sx + 0.04, 0.248, sz);     // визор
+        add(box(0.16, 0.018, 0.018), dark, sx + 0.07, 0.16, sz + 0.035); // винтовка
+      }
+      break;
+    }
+    case 'btr': {
+      add(box(0.8, 0.16, 0.32), armor, -0.02, 0.21, 0);
+      add(box(0.2, 0.1, 0.32), armor, 0.4, 0.18, 0, 0, 0, -0.6);
+      const wheel = cyl(0.075, 0.075, 0.07, 12);
+      [-0.3, -0.1, 0.1, 0.3].forEach(x => {
+        add(wheel, dark, x, 0.075, 0.18, Math.PI / 2);
+        add(wheel, dark, x, 0.075, -0.18, Math.PI / 2);
+      });
+      add(cyl(0.07, 0.08, 0.07, 10), armor, 0.08, 0.325, 0);
+      add(cyl(0.013, 0.013, 0.24, 6), dark, 0.22, 0.33, 0, 0, 0, H);
+      add(box(0.04, 0.02, 0.2), glow, -0.4, 0.3, 0);
+      break;
+    }
+    case 'arta': {
+      tracks(0.17, 0.74);
+      add(box(0.7, 0.13, 0.3), armor, 0, 0.18, 0);
+      add(box(0.34, 0.15, 0.28), armor, -0.12, 0.32, 0);
+      const el = 0.45, bl = 0.62;
+      add(cyl(0.024, 0.03, bl, 8), dark, 0.05 + Math.cos(el) * bl / 2, 0.34 + Math.sin(el) * bl / 2, 0, 0, 0, H + el);
+      add(box(0.04, 0.02, 0.2), glow, -0.3, 0.41, 0);
+      break;
+    }
+    case 'walker': {
+      [0.15, -0.15].forEach(z => {
+        add(box(0.075, 0.24, 0.075), armor, -0.02, 0.36, z, 0, 0, 0.3);
+        add(box(0.065, 0.26, 0.065), dark, 0.02, 0.13, z, 0, 0, -0.25);
+        add(box(0.17, 0.03, 0.1), dark, 0.05, 0.015, z);
+      });
+      add(box(0.38, 0.2, 0.36), armor, 0, 0.56, 0);
+      add(box(0.13, 0.1, 0.22), armor, 0.2, 0.55, 0);
+      add(box(0.02, 0.03, 0.17), glow, 0.27, 0.57, 0);
+      add(cyl(0.028, 0.028, 0.32, 8), dark, 0.16, 0.52, 0.24, 0, 0, H);
+      add(cyl(0.028, 0.028, 0.32, 8), dark, 0.16, 0.52, -0.24, 0, 0, H);
+      break;
+    }
+    case 'ss13': {
+      // Огневая точка колонии: бетонный шестигранный капонир и купол с орудием.
+      add(cyl(0.42, 0.48, 0.14, 6), conc, 0, 0.07, 0);
+      add(bgGeoCache('dome', () => new THREE.SphereGeometry(0.22, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2)), armor, 0, 0.14, 0);
+      add(cyl(0.032, 0.038, 0.5, 8), dark, 0.3, 0.27, 0, 0, 0, H + 0.12);
+      add(box(0.05, 0.03, 0.16), glow, -0.2, 0.25, 0);
+      break;
+    }
+    default: {   // tanki и всё неизвестное — танк
+      tracks(0.19, 0.8);
+      add(box(0.66, 0.13, 0.34), armor, 0, 0.18, 0);
+      add(box(0.16, 0.08, 0.34), armor, 0.36, 0.15, 0, 0, 0, -0.5);
+      add(cyl(0.13, 0.15, 0.1, 8), armor, -0.04, 0.295, 0);
+      add(cyl(0.022, 0.027, 0.46, 8), dark, 0.32, 0.3, 0, 0, 0, H);
+      add(box(0.05, 0.02, 0.2), glow, -0.17, 0.35, 0);
+    }
+  }
+  grp.userData.hullParts = parts;     // призрак расстановки перекрашивает броню
+  return grp;
+}
+
 
 // ════════════════════════════════════════════════════════════
 // ПОДКЛЮЧЕНИЕ: загрузка three.js и подъём сцены

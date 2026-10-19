@@ -4668,7 +4668,7 @@ function bbPaintUnits(ctx, s) {
   if (typeof ANGEL !== 'undefined') ANGEL.live = 0;   // счётчик «ангел в кадре»
   if (forming) {
     const defFacing = bbSideFacing(s.my_side);
-    BB.place.forEach(p => bbShip(ctx, { x: p.x, y: p.y, cls: p.cls, name: p.unit_name, mine: true, facing: defFacing, hp: 1, max_hp: 1, shield: 0, max_shield: 0 }, 0.55));
+    BB.place.forEach(p => bbShip(ctx, { x: p.x, y: p.y, cls: p.cls, name: p.unit_name, n: p.n, mine: true, facing: defFacing, hp: 1, max_hp: 1, shield: 0, max_shield: 0 }, 0.55));
   }
   (s.units || []).forEach(u => {
     if (u.contact) { bbContact(ctx, u); return; }
@@ -4960,6 +4960,9 @@ function bbShip(ctx, u, alpha) {
     angelDraw(ctx, { cx, cy, R: BB.R * (+u.pk.gd >= 2 ? 0.55 : 0.78), alpha, tone: col,
                      gaze: bbGazeAt(u, cx, cy), id: u.id, guard: true });
     if (typeof angelWantsFrames === 'function' && angelWantsFrames()) bbAnimKick();
+  } else if (bbIsGround(BB.st)) {
+    // наземка: танк, БТР, пехота — не корабельный силуэт
+    bbPaintGroundUnit(ctx, u, cx, cy, ang, tone);
   } else {
     // спрайт корпуса: нос смотрит вправо → поворот на угол курса
     ctx.translate(cx, cy);
@@ -4981,6 +4984,89 @@ function bbShip(ctx, u, alpha) {
   if (shFrac > 0) {
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.fillRect(bx, by - 4, bw * Math.max(0, Math.min(1, shFrac)), 2);
+  }
+  ctx.restore();
+}
+
+// ── НАЗЕМНАЯ ТЕХНИКА СВЕРХУ ─────────────────────────────────
+// Зеркало bgBuildGroundUnit (battle_gl.js) для плоской доски: нос вправо,
+// единичная длина S. Броня в тон стороны, ходовая и стволы тёмные, огонёк
+// стороны — та же метка, что у кораблей.
+function bbStackN(u) {
+  const n = +((u && u.n) || (u && u.pk && u.pk.n));
+  if (n > 0) return n;
+  const m = /×\s*(\d+)/.exec((u && (u.name || u.unit_name)) || '');
+  return m ? +m[1] : 1;
+}
+function bbPaintGroundUnit(ctx, u, cx, cy, ang, tone) {
+  const S = BB.R * 1.3, col = BB_C[tone] || BB_C.foe;
+  const armor = { mine: '#5f7688', ally: '#5f8873', foe: '#8a6270' }[tone] || '#8a6270';
+  const dark = '#262320', edge = 'rgba(0,0,0,0.55)';
+  const lw = Math.max(0.6, 1 / BB.zoom);
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(ang); ctx.scale(S, S);
+  ctx.lineWidth = lw / S; ctx.strokeStyle = edge;
+  const rect = (x, y, w, h, f) => { ctx.fillStyle = f; ctx.fillRect(x - w / 2, y - h / 2, w, h); ctx.strokeRect(x - w / 2, y - h / 2, w, h); };
+  const circ = (x, y, r, f) => { ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fillStyle = f; ctx.fill(); ctx.stroke(); };
+  const mark = (x, y, w, h) => { ctx.fillStyle = `rgba(${col},0.95)`; ctx.fillRect(x - w / 2, y - h / 2, w, h); };
+  // тень под техникой — отрывает модель от грунта
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(0.03, 0.04, 0.46, 0.27, 0, 0, 6.2832); ctx.fill();
+  switch (u.cls) {
+    case 'peh': {
+      const k = Math.max(3, Math.min(8, 3 + Math.floor(Math.log2(Math.max(1, bbStackN(u))))));
+      const spots = [[0.24, 0], [0.08, -0.17], [0.08, 0.17], [-0.08, 0], [-0.12, -0.33], [-0.12, 0.33], [-0.28, -0.15], [-0.28, 0.15]];
+      for (let i = 0; i < k; i++) {
+        const [x, y] = spots[i];
+        ctx.fillStyle = dark; ctx.fillRect(x, y + 0.02, 0.15, 0.025);           // винтовка
+        circ(x, y, 0.065, armor);
+        circ(x + 0.01, y, 0.038, dark);                                          // шлем
+        mark(x + 0.045, y, 0.014, 0.04);
+      }
+      break;
+    }
+    case 'btr': {
+      [-0.3, -0.1, 0.1, 0.3].forEach(x => { rect(x, -0.18, 0.13, 0.07, dark); rect(x, 0.18, 0.13, 0.07, dark); });
+      ctx.beginPath();
+      ctx.moveTo(-0.42, -0.16); ctx.lineTo(0.3, -0.16); ctx.lineTo(0.48, 0); ctx.lineTo(0.3, 0.16); ctx.lineTo(-0.42, 0.16); ctx.closePath();
+      ctx.fillStyle = armor; ctx.fill(); ctx.stroke();
+      ctx.fillStyle = dark; ctx.fillRect(0.08, -0.012, 0.26, 0.024);
+      circ(0.08, 0, 0.075, armor);
+      mark(-0.38, 0, 0.04, 0.2);
+      break;
+    }
+    case 'arta': {
+      rect(0, -0.17, 0.74, 0.12, dark); rect(0, 0.17, 0.74, 0.12, dark);
+      rect(0, 0, 0.7, 0.3, armor);
+      rect(-0.12, 0, 0.34, 0.26, armor);
+      ctx.fillStyle = dark; ctx.fillRect(0.05, -0.022, 0.6, 0.044);
+      mark(-0.31, 0, 0.04, 0.2);
+      break;
+    }
+    case 'walker': {
+      [-0.17, 0.17].forEach(y => { rect(0.06, y, 0.2, 0.09, dark); });
+      rect(0, 0, 0.38, 0.36, armor);
+      rect(0.2, 0, 0.12, 0.22, armor);
+      ctx.fillStyle = dark; ctx.fillRect(0.0, -0.27, 0.34, 0.05); ctx.fillRect(0.0, 0.22, 0.34, 0.05);
+      mark(0.27, 0, 0.025, 0.17);
+      break;
+    }
+    case 'ss13': {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; const px = Math.cos(a) * 0.46, py = Math.sin(a) * 0.46; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+      ctx.closePath(); ctx.fillStyle = '#8a8376'; ctx.fill(); ctx.stroke();
+      ctx.fillStyle = dark; ctx.fillRect(0.05, -0.03, 0.5, 0.06);
+      circ(0, 0, 0.22, armor);
+      mark(-0.15, 0, 0.05, 0.16);
+      break;
+    }
+    default: {   // танк
+      rect(0, -0.19, 0.8, 0.13, dark); rect(0, 0.19, 0.8, 0.13, dark);
+      rect(0, 0, 0.7, 0.34, armor);
+      ctx.fillStyle = dark; ctx.fillRect(0.05, -0.025, 0.52, 0.05);
+      circ(-0.04, 0, 0.15, armor);
+      mark(-0.17, 0, 0.05, 0.2);
+    }
   }
   ctx.restore();
 }
