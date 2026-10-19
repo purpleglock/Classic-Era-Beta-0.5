@@ -535,6 +535,9 @@ async function saveHeroCoverToDb(url) {
 async function loadHeroCoverFromDb() {
   const homePg = _pgCache.get('home');
   if (homePg?.image_url) { _heroCoverUrl = homePg.image_url; localStorage.setItem('wk_hero_cover', _heroCoverUrl); }
+  // Обложку в базе сняли — забываем и закэшированную в браузере, иначе у тех, кто
+  // уже заходил, главная продолжит показывать старую картинку вместо assets/bg.jpg.
+  else if (homePg) { _heroCoverUrl = ''; localStorage.removeItem('wk_hero_cover'); }
 }
 
 // Background is now loaded by loadSiteSettings() at startup
