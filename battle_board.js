@@ -1104,7 +1104,7 @@ function bbModCheck(sel, key, x, y) {
                                              : `цель и так вплотную — тянуть некуда` };
   }
   if (L > rng) return { ok: false, why: `дистанция ${L} — достаёт до ${rng} гекс.` };
-  if (aim.los && !bbLosClear(sel, tgt)) return { ok: false, why: 'линия огня перекрыта астероидами' };
+  if (aim.los && !bbLosClear(sel, tgt)) return { ok: false, why: 'линия огня перекрыта ' + bbLosWord() };
   if (key === 'drones' && +tgt.hp >= +tgt.max_hp) return { ok: false, why: 'борт и так цел' };
   return { ok: true, tgt };
 }
@@ -1671,7 +1671,7 @@ function bbZoneCells(s) {
   const busy = new Set([].concat(
     (s.units || []).map(u => u.x + ':' + u.y),
     BB.place.map(p => p.x + ':' + p.y)));
-  const free = (x, y) => !busy.has(x + ':' + y) && bbTerra(x, y) !== 'ast';   // в камнях борт не ставим
+  const free = (x, y) => !busy.has(x + ':' + y) && bbTerra(x, y) !== 'ast' && !bbImpassable(bbTerra(x, y));   // в камни, горы и обрывы не ставим
   const a = bbMySpawn();
 
   if (a) {
@@ -2134,10 +2134,14 @@ function bbUnitPanel(s) {
       <div class="bb-panel-t">Корабль не выбран</div>
       <div class="bb-panel-h">${s.my_turn ? `Кликните по своему кораблю: подсветятся гексы хода и цели в зоне поражения. За ход можно активировать ${s.acts_max || 6} кораблей.` : 'Сейчас ходит противник. Доска обновится сама.'}</div>
       <div class="bb-panel-h" style="margin-bottom:0">
-        <b>Поле:</b> ⬢ астероиды режут линию огня, стоянка в них −10% корпуса за ход ·
+        ${s.kind === 'ground'
+          ? `<b>Поле:</b> ▲ горы непроходимы и закрывают линию огня — бой идёт через перевалы ·
+        ╱ обрыв не пройти, но через него видно и стреляют ·
+        ⣿ осыпь: вход дороже в полтора раза, −15% входящего урона.<br>`
+          : `<b>Поле:</b> ⬢ астероиды режут линию огня, стоянка в них −10% корпуса за ход ·
         ▒ туманность гасит щиты и рассеивает залпы ·
         ◎ грав. колодец тянет корабли к центру ·
-        ⣿ обломки: −1 к ходу, −15% входящего урона.<br>
+        ⣿ обломки: −1 к ходу, −15% входящего урона.<br>`}
         <b>Радар:</b> тусклая точка — неопознанный контакт. Вблизи (до 3 гексов) видно всех;
         дальше цель ловит радар на дистанции ≈ сенсор − половина скрытности.
         Выстрел раскрывает стрелявшего до его следующего хода.</div>
@@ -2392,7 +2396,7 @@ function bbLosClear(a, b) {
     const dq = Math.abs(rq - fq), dr = Math.abs(rr - fr), ds = Math.abs(rs - fs);
     if (dq > dr && dq > ds) rq = -rr - rs; else if (dr > ds) rr = -rq - rs;
     const hx = rq, hy = rr + ((rq - (rq & 1)) >> 1);
-    if (bbTerra(hx, hy) === 'ast') return false;
+    if (bbLosBlock(bbTerra(hx, hy))) return false;
   }
   return true;
 }
@@ -2687,7 +2691,14 @@ function bbFalloff(g, L, sel) {
 // сервер бонус давал, а на глаз «форсаж ничего не поменял».
 // ЗЕРКАЛО _bt_terra_mult (_bt_terrain_cost.sql): цена платится за ВХОД в
 // гекс, по его ландшафту. Пояс не пролетают — сквозь него продавливаются.
-var BBW_TERRA = { ast: 2.2, deb: 1.5, neb: 1.25 };
+var BBW_TERRA = { ast: 2.2, deb: 1.5, neb: 1.25, rck: 1.5, mtn: 99, clf: 99 };
+// НАЗЕМНЫЙ РЕЛЬЕФ (_ground_terrain.sql): горы и обрывы непроходимы — множитель
+// 99 не по карману ни одному ходу, так что досягаемость их обходит сама.
+function bbImpassable(t) { return t === 'mtn' || t === 'clf'; }
+// Что перекрывает линию огня: в космосе астероиды, на земле горы. Обрыв —
+// нет: через пропасть видно и стреляют.
+function bbLosBlock(t) { return t === 'ast' || t === 'mtn'; }
+function bbLosWord() { return BB.st && BB.st.kind === 'ground' ? 'горами' : 'астероидами'; }
 function bbTerraMult(x, y) { return BBW_TERRA[bbTerra(x, y)] || 1; }
 
 // Базовая цена шага — по чистому гексу. Ландшафт домножает её на входе.
@@ -2728,6 +2739,7 @@ function bbComputeReach(sel) {
         if (!bbInArena(p.x, p.y)) continue;        // в пустоту за кромкой не летают
         const key = p.x + ':' + p.y;
         if (occ.has(key)) continue;
+        if (bbImpassable(bbTerra(p.x, p.y))) continue;   // горы и обрывы не пройти
         const cost = c.cost + base * bbTerraMult(p.x, p.y);
         if (cost > tp + 1e-9) continue;
         if (best.has(key) && best.get(key) <= cost + 1e-9) continue;
@@ -2758,7 +2770,7 @@ function bbCanHit(sel, tgt) {
   if (!groups && close) return { ok: false,
     why: `дистанция ${L} — ракетам не хватает разгона на захват, отойдите дальше` };
   if (!groups) return { ok: false, why: `дистанция ${L} — дальше, чем бьют огневые группы` };
-  if (!bbLosClear(sel, tgt)) return { ok: false, why: 'линию огня перекрывают астероиды' };
+  if (!bbLosClear(sel, tgt)) return { ok: false, why: 'линию огня перекрывают ' + (bbLosWord() === 'горами' ? 'горы' : 'астероиды') };
   // fade — во сколько раз дистанция съедает залп. Нужен подсказке: «бьёшь, но
   // вполсилы — подойди ближе» это другое решение, чем «не достаёшь».
   return { ok: true, dmg: Math.round(dmg), groups,
@@ -2774,7 +2786,7 @@ function bbCanHeal(sel, tgt) {
   let heal = 0, groups = 0;
   for (const g of gs) if (bbIsHeal(g) && L >= 1 && L <= g.rng) { heal += g.dmg; groups++; }
   if (!groups) return { ok: false, why: `дистанция ${L} — дальше, чем добрасывает ремонтный рой` };
-  if (!bbLosClear(sel, tgt)) return { ok: false, why: 'путь рою перекрывают астероиды' };
+  if (!bbLosClear(sel, tgt)) return { ok: false, why: 'путь рою перекрывают ' + (bbLosWord() === 'горами' ? 'горы' : 'астероиды') };
   return { ok: true, heal: Math.round(heal), groups };
 }
 // Есть ли у корабля ремонтные группы (для подсветки союзников как целей).
@@ -4242,6 +4254,7 @@ function bbVisibleCells(s) {
 
 // ── КОСМОС: чистая пустота — тёмный задник без звёзд, доска важнее ──
 function bbPaintSpace(ctx, s, W, H) {
+  if (s && s.kind === 'ground') { bbPaintGround(ctx, s, W, H); return; }
   ctx.fillStyle = '#020409'; ctx.fillRect(0, 0, W, H);
   // лёгкий провал глубины к центру — объём без «звёздного неба»
   const d = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
@@ -4250,6 +4263,18 @@ function bbPaintSpace(ctx, s, W, H) {
   // виньетка — прижимает края
   const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.8);
   g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+// ── ЗЕМЛЯ: задник наземного боя — тёмная охра со светом сверху ──
+// Тон глуше, чем у юнитов и зон, чтобы рельеф и отряды читались поверх.
+function bbPaintGround(ctx, s, W, H) {
+  ctx.fillStyle = '#16130e'; ctx.fillRect(0, 0, W, H);
+  const d = ctx.createRadialGradient(W * 0.45, H * 0.35, 0, W / 2, H / 2, Math.max(W, H) * 0.75);
+  d.addColorStop(0, 'rgba(78,66,44,0.55)'); d.addColorStop(1, 'rgba(22,19,14,0)');
+  ctx.fillStyle = d; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.8);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.5)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
 
@@ -4271,7 +4296,7 @@ function bbPaintHexes(ctx, s) {
       const zoneRgb = zoneCol ? (zoneCol === 'att' ? (meAtt ? BB_C.mine : BB_C.foe) : (meAtt ? BB_C.foe : BB_C.mine)) : null;
       const c = bbHexCenter(x, y);
       bbHexPath(ctx, c.px, c.py, R * 0.96);
-      ctx.fillStyle = zoneRgb ? `rgba(${zoneRgb},0.06)` : BB_C.hexIn;
+      ctx.fillStyle = zoneRgb ? `rgba(${zoneRgb},0.06)` : (s.kind === 'ground' ? 'rgba(150,132,96,0.07)' : BB_C.hexIn);
       ctx.fill();
       ctx.strokeStyle = zoneRgb ? `rgba(${zoneRgb},0.28)` : BB_C.hex;
       ctx.lineWidth = lw;
@@ -4286,6 +4311,81 @@ function bbPaintHexes(ctx, s) {
   }
 }
 
+// ── НАЗЕМНЫЙ РЕЛЬЕФ ─────────────────────────────────────────
+// ГОРЫ: сплошной каменный гекс и две-три вершины со светлым склоном и
+// снеговой шапкой — с первого взгляда «сюда не пройти и не простреливается».
+function bbPaintMountain(ctx, c, R, rnd) {
+  const lw = Math.max(0.4, 0.7 / BB.zoom);
+  bbHexPath(ctx, c.px, c.py, R * 0.98);
+  const base = ctx.createLinearGradient(c.px, c.py - R, c.px, c.py + R);
+  base.addColorStop(0, 'rgb(88,78,64)'); base.addColorStop(1, 'rgb(46,40,32)');
+  ctx.fillStyle = base; ctx.fill();
+  const peaks = 2 + Math.floor(rnd(30) * 2);
+  for (let i = 0; i < peaks; i++) {
+    const px = c.px + (i - (peaks - 1) / 2) * R * 0.55 + (rnd(i + 31) - 0.5) * R * 0.2;
+    const hgt = R * (0.75 + rnd(i + 33) * 0.4), half = R * (0.42 + rnd(i + 35) * 0.16);
+    const by = c.py + R * 0.62, ty = by - hgt;
+    // тёмный склон
+    ctx.beginPath(); ctx.moveTo(px - half, by); ctx.lineTo(px, ty); ctx.lineTo(px + half, by); ctx.closePath();
+    ctx.fillStyle = 'rgb(70,62,52)'; ctx.fill();
+    // освещённый склон
+    ctx.beginPath(); ctx.moveTo(px - half, by); ctx.lineTo(px, ty); ctx.lineTo(px + half * 0.15, by); ctx.closePath();
+    ctx.fillStyle = 'rgb(132,118,96)'; ctx.fill();
+    // снег
+    ctx.beginPath(); ctx.moveTo(px - half * 0.3, ty + hgt * 0.3); ctx.lineTo(px, ty);
+    ctx.lineTo(px + half * 0.3, ty + hgt * 0.3); ctx.lineTo(px + half * 0.08, ty + hgt * 0.22);
+    ctx.lineTo(px - half * 0.1, ty + hgt * 0.33); ctx.closePath();
+    ctx.fillStyle = 'rgba(232,236,240,0.92)'; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(px - half, by); ctx.lineTo(px, ty); ctx.lineTo(px + half, by);
+    ctx.strokeStyle = 'rgba(20,16,12,0.7)'; ctx.lineWidth = lw; ctx.stroke();
+  }
+}
+// ОБРЫВ: чёрная трещина-пропасть с рваными кромками и светлым ребром.
+// Видно насквозь (линию огня не режет) — поэтому не заливаем гекс целиком.
+function bbPaintCliff(ctx, c, R, rnd, x, y) {
+  const lw = Math.max(0.5, 0.9 / BB.zoom);
+  const ang = rnd(40) * Math.PI;                  // направление трещины
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  const L = R * 0.95, segs = 6;
+  const edge = (side) => {
+    const pts = [];
+    for (let i = 0; i <= segs; i++) {
+      const t = -1 + 2 * i / segs;
+      const off = side * R * (0.18 + rnd(i * 3 + (side > 0 ? 41 : 51)) * 0.2) * (1 - Math.abs(t) * 0.55);
+      pts.push([c.px + ca * t * L - sa * off, c.py + sa * t * L + ca * off]);
+    }
+    return pts;
+  };
+  const top = edge(1), bot = edge(-1).reverse();
+  ctx.beginPath();
+  top.concat(bot).forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  ctx.closePath();
+  const g = ctx.createLinearGradient(c.px - sa * R * 0.4, c.py + ca * R * 0.4, c.px + sa * R * 0.4, c.py - ca * R * 0.4);
+  g.addColorStop(0, 'rgb(4,4,6)'); g.addColorStop(0.5, 'rgb(16,13,10)'); g.addColorStop(1, 'rgb(4,4,6)');
+  ctx.fillStyle = g; ctx.fill();
+  // светлое ребро по верхней кромке — читается как срыв
+  ctx.beginPath(); top.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  ctx.strokeStyle = 'rgba(196,170,120,0.85)'; ctx.lineWidth = lw * 1.4; ctx.stroke();
+  ctx.beginPath(); bot.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  ctx.strokeStyle = 'rgba(110,92,64,0.7)'; ctx.lineWidth = lw; ctx.stroke();
+}
+// ОСЫПЬ: песчаное пятно и россыпь камней — проходимо, но медленно; укрытие.
+function bbPaintScree(ctx, c, R, rnd) {
+  const lw = Math.max(0.3, 0.5 / BB.zoom);
+  const g = ctx.createRadialGradient(c.px, c.py, 0, c.px, c.py, R * 0.95);
+  g.addColorStop(0, 'rgba(168,146,104,0.30)'); g.addColorStop(1, 'rgba(168,146,104,0.04)');
+  ctx.fillStyle = g; bbHexPath(ctx, c.px, c.py, R * 0.95); ctx.fill();
+  const n = 7 + Math.floor(rnd(60) * 3);
+  for (let i = 0; i < n; i++) {
+    const ax = c.px + (rnd(i + 61) - 0.5) * R * 1.3, ay = c.py + (rnd(i + 71) - 0.5) * R * 1.2;
+    const ar = R * (0.06 + rnd(i + 81) * 0.1), tone = 0.7 + rnd(i + 91) * 0.4;
+    ctx.beginPath(); ctx.ellipse(ax, ay, ar * 1.25, ar, rnd(i + 99) * 3.14, 0, 6.2832);
+    ctx.fillStyle = `rgb(${Math.round(120 * tone)},${Math.round(108 * tone)},${Math.round(90 * tone)})`;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(20,16,12,0.55)'; ctx.lineWidth = lw; ctx.stroke();
+  }
+}
+
 // ── ЛАНДШАФТ: астероиды / туманности / колодцы / обломки ────
 function bbPaintTerrain(ctx, s) {
   const R = BB.R, { x0, x1, y0, y1 } = bbVisibleCells(s);
@@ -4295,7 +4395,10 @@ function bbPaintTerrain(ctx, s) {
     const c = bbHexCenter(x, y);
     // детермин. «случайность» от координат — рисунок не мигает между кадрами
     const rnd = k => { const v = Math.sin(x * 127.1 + y * 311.7 + k * 74.7) * 43758.5; return v - Math.floor(v); };
-    if (t === 'ast') {
+    if (t === 'mtn') { bbPaintMountain(ctx, c, R, rnd); }
+    else if (t === 'clf') { bbPaintCliff(ctx, c, R, rnd, x, y); }
+    else if (t === 'rck') { bbPaintScree(ctx, c, R, rnd); }
+    else if (t === 'ast') {
       // Россыпь каменных глыб — как пояс на карте: серый камень со светотенью,
       // неправильная форма, тёмная теневая сторона, тонкий рим-свет сверху.
       const rocks = 5 + Math.floor(rnd(20) * 2);
