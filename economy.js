@@ -7666,7 +7666,9 @@ async function ecArmyLandOpen(id) {
   if (box.innerHTML) { box.innerHTML = ''; return; }          // повторный клик — свернуть
   box.innerHTML = '<div class="ec-hint" style="padding:6px 0">Ищем цели для высадки…</div>';
   let list = [];
-  try { list = await ecRpc('ground_landing_targets'); } catch (e) { list = []; }
+  let landErr = '';
+  try { list = await ecRpc('ground_landing_targets'); } catch (e) { list = []; landErr = (e && e.message) || String(e); }
+  if (landErr) { box.innerHTML = `<div class="ec-empty" style="padding:8px">Не удалось получить цели высадки: ${esc(landErr)}</div>`; return; }
   if (!Array.isArray(list) || !list.length) {
     box.innerHTML = `<div class="ec-empty" style="padding:8px">Высаживаться некуда. Нужны три условия: идёт война с тем, кто держит колонию; в её системе стоит ваш флот (или флот союзника по войне); там нет вражеских флотов и идущих космических боёв.</div>`;
     return;

@@ -3876,6 +3876,11 @@ function gmOpenArmyCmd(id, step) {
         <button class="gm-opcmd-btn" onclick="gmArmySendTo('${ar.id}', document.getElementById('gm-army-dest').value)">➤ Начать марш</button>
         <button class="gm-opcmd-btn" onclick="gmOpenArmyCmd('${ar.id}')">← Назад</button>`;
     }
+  } else if (step === 'land') {
+    // Высадка на вражескую колонию: цели считает сервер (война + своя орбита),
+    // отправка — тем же army_invade, что и кнопка «🪂 Высадка» в кабинете.
+    body = `<div class="gm-opcmd-hint">Ищем цели для высадки…</div>`;
+    gmArmyLandLoad(ar.id);
   } else if (step === 'disband') {
     body = `<div class="gm-opcmd-hint">Распустить армию? Все её юниты (${+ar.units || 0}) вернутся в состав вооружённых сил.</div>
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmArmyDisband('${ar.id}')">✕ Да, распустить</button>
@@ -3885,6 +3890,7 @@ function gmOpenArmyCmd(id, step) {
     const comp = (ar.composition || []).map(c => `${esc(c.unit_name || '?')} ×${c.qty}`).join(', ');
     body = `${comp ? `<div class="gm-opcmd-hint">${comp}</div>` : ''}
       <button class="gm-opcmd-btn" onclick="gmOpenArmyCmd('${ar.id}','move')">➤ Перебросить…</button>
+      ${ar.foreign ? '' : `<button class="gm-opcmd-btn" title="Высадка на вражескую колонию: нужна война и ваш флот на орбите" onclick="gmOpenArmyCmd('${ar.id}','land')">🪂 Высадка на врага…</button>`}
       ${ar.can_recall ? `<button class="gm-opcmd-btn" onclick="gmArmyRecall('${ar.id}')">↩ Вернуть домой</button>` : ''}
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmOpenArmyCmd('${ar.id}','disband')">✕ Распустить…</button>`;
   }
@@ -3904,6 +3910,48 @@ async function gmArmySendTo(id, destColony) {
     gmCloseArmyCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); gmCloseArmyCmd(); }
+  finally { GM._defBusy = false; }
+}
+// Шаг «land»: подтянуть цели высадки и дорисовать плашку, если она всё ещё
+// открыта на этой армии (пока шёл запрос, игрок мог закрыть её или переключиться).
+async function gmArmyLandLoad(id) {
+  let list = [], err = '';
+  try { list = await gmDefRpc('ground_landing_targets'); }
+  catch (e) { err = e.message || String(e); }
+  if (!GMM.armyCmd || GMM.armyCmd.id !== id) return;
+  const el = document.getElementById('gm-opcmd'); if (!el) return;
+  const box = el.querySelector('.gm-opcmd-card'); if (!box) return;
+  const back = `<button class="gm-opcmd-btn" onclick="gmOpenArmyCmd('${id}')">← Назад</button>`;
+  let html;
+  if (err) {
+    html = `<div class="gm-opcmd-hint">Не удалось получить цели: ${esc(err)}</div>${back}`;
+  } else if (!Array.isArray(list) || !list.length) {
+    html = `<div class="gm-opcmd-hint">Высаживаться некуда. Нужно: идёт война с владельцем колонии; в её системе стоит ваш флот (или союзника по войне); там нет вражеских флотов и космических боёв.</div>${back}`;
+  } else {
+    const bySys = {};
+    list.forEach(t => { const sn = t.system_name || 'система'; (bySys[sn] = bySys[sn] || []).push(t); });
+    const opts = Object.keys(bySys).sort().map(sn =>
+      `<optgroup label="✦ ${esc(sn)}">${bySys[sn].map(t => `<option value="${esc(t.colony_id)}">${t.liberation ? '🏳 освободить: ' : ''}${esc(t.planet_name || 'колония')} · ${esc(t.holder_name || '')}${t.is_capital ? ' · ★ столица' : ''}${t.battle ? ' · идёт бой' : ''}</option>`).join('')}</optgroup>`).join('');
+    html = `<div class="gm-opcmd-hint">Куда высаживаться? Если к прибытию орбита останется за вами — начнётся наземный бой; потеряете орбиту — высадка сорвётся.</div>
+      <select id="gm-army-land" class="gm-opcmd-sel" style="width:100%;margin:4px 0">${opts}</select>
+      <button class="gm-opcmd-btn" onclick="gmArmyInvade('${id}', document.getElementById('gm-army-land').value)">🪂 Высадить</button>
+      ${back}`;
+  }
+  // Шапку (название, гарнизон, ✕) оставляем, меняем только тело после неё.
+  const sub = box.querySelector('.gm-opcmd-sub');
+  while (sub && sub.nextSibling) sub.nextSibling.remove();
+  box.insertAdjacentHTML('beforeend', html);
+}
+async function gmArmyInvade(id, colony) {
+  if (!colony) { toast('Выберите колонию', 'err'); return; }
+  if (!confirm('Отправить армию на высадку? Пока она в пути и в бою, распоряжаться ею нельзя.')) return;
+  if (GM._defBusy) return; GM._defBusy = true;
+  try {
+    const r = await gmDefRpc('army_invade', { p_id: id, p_colony: colony });
+    toast(`${r && r.liberation ? 'Армия летит освобождать колонию' : 'Десант в пути'} · высадка ${r && r.arrive_at ? new Date(r.arrive_at).toLocaleString('ru') : 'скоро'}`, 'ok');
+    gmCloseArmyCmd();
+    await gmReloadDefense();
+  } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
   finally { GM._defBusy = false; }
 }
 async function gmArmyRecall(id) {
