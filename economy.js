@@ -7587,14 +7587,37 @@ function ecColonyName(colonyId) {
 function ecArmyPanelHtml() {
   const armies = EC.armies || [];
   const rows = armies.map(a => {
-    const where = a.status === 'transit'
-      ? `на марше → ${esc(ecColonyName(a.dest_colony))}, прибытие ${a.arrive_at ? new Date(a.arrive_at).toLocaleString('ru') : '—'}`
-      : `гарнизон: ${esc(a.planet_name || ecColonyName(a.colony_id))}`;
+    const when = iso => iso ? new Date(iso).toLocaleString('ru') : '—';
+    const destNm = a.dest_planet_name || ecColonyName(a.dest_colony);
+    const hereNm = a.planet_name || ecColonyName(a.colony_id);
+    const occ = a.occupy;
+    let where, acts = '';
+    if (a.status === 'transit' && a.mission === 'invade') {
+      where = `🪂 десант → ${esc(destNm)}, высадка ${when(a.arrive_at)}`;
+    } else if (a.status === 'transit') {
+      where = `на марше → ${esc(destNm)}, прибытие ${when(a.arrive_at)}`;
+    } else if (a.status === 'battle') {
+      where = `⚔ в наземном бою за ${esc(hereNm)}`;
+      acts = a.battle_id ? `<button class="btn btn-gd btn-sm" onclick="bbOpen('${jsq(a.battle_id)}')">⚔ К бою</button>` : '';
+    } else if (occ) {
+      const canLoot = !occ.plunder_at || new Date(occ.plunder_at) <= new Date();
+      where = `⚑ держит ${esc(hereNm)} (${esc(occ.owner_name || 'чужая')}) · колония перейдёт ${when(occ.transfer_at)}`;
+      acts = `<button class="btn btn-gh btn-sm" ${canLoot ? '' : 'disabled'} title="${canLoot ? 'Вынести долю ГС и сырья владельца' : 'Следующий налёт ' + when(occ.plunder_at)}" onclick="ecArmyPlunder('${jsq(a.id)}')">💰 Грабить</button>
+        <button class="btn btn-gh btn-sm" title="Увести армию домой — оккупация снимется" onclick="ecArmyRecall('${jsq(a.id)}')">↩ Домой</button>`;
+    } else if (a.foreign) {
+      where = `стоит на чужой колонии ${esc(hereNm)}`;
+      acts = `<button class="btn btn-gh btn-sm" onclick="ecArmyRecall('${jsq(a.id)}')">↩ Домой</button>`;
+    } else {
+      where = `гарнизон: ${esc(hereNm)}`;
+      acts = `<button class="btn btn-gd btn-sm" title="Высадка на вражескую колонию: нужна война и ваш флот на орбите" onclick="ecArmyLandOpen('${jsq(a.id)}')">🪂 Высадка</button>
+        <button class="btn btn-gh btn-sm" onclick="go('map')" title="Переброска — на карте, режим «Звёздный марш»">${ecIco('map')} На карту</button>
+        <button class="ec-bld-del" title="Распустить — юниты вернутся в состав" onclick="ecArmyDisband('${a.id}')">✕</button>`;
+    }
     const comp = (a.composition || []).map(c => `${esc(c.unit_name || 'юнит')} ×${ecNum(c.qty || 0)}`).join(', ');
-    return `<div class="ec-q-row">
+    return `<div class="ec-q-row" style="flex-wrap:wrap">
       <span class="ec-r-name">${ecIco('flag')} ${esc(a.name || 'Армия')} <span class="ec-hint">· ${ecNum(a.units || 0)} юнит. · ${where}</span><br><span class="ec-hint">${comp}</span></span>
-      ${a.status === 'idle' ? `<button class="btn btn-gh btn-sm" onclick="go('map')" title="Переброска — на карте, режим «Звёздный марш»">${ecIco('map')} На карту</button>
-      <button class="ec-bld-del" title="Распустить — юниты вернутся в состав" onclick="ecArmyDisband('${a.id}')">✕</button>` : ''}
+      ${acts}
+      <div id="ec-army-land-${esc(a.id)}" style="flex-basis:100%"></div>
     </div>`;
   }).join('');
   // Перегруз гарнизонов по колониям
@@ -7635,6 +7658,63 @@ async function ecArmyForm() {
     EC.armies = await ecRpc('armies_mine').catch(() => EC.armies);
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+// ── 🪂 Высадка / грабёж / отход (наземная война, _ground_stage1…4) ──
+async function ecArmyLandOpen(id) {
+  const box = ecId('ec-army-land-' + id); if (!box) return;
+  if (box.innerHTML) { box.innerHTML = ''; return; }          // повторный клик — свернуть
+  box.innerHTML = '<div class="ec-hint" style="padding:6px 0">Ищем цели для высадки…</div>';
+  let list = [];
+  try { list = await ecRpc('ground_landing_targets'); } catch (e) { list = []; }
+  if (!Array.isArray(list) || !list.length) {
+    box.innerHTML = `<div class="ec-empty" style="padding:8px">Высаживаться некуда. Нужны три условия: идёт война с тем, кто держит колонию; в её системе стоит ваш флот (или флот союзника по войне); там нет вражеских флотов и идущих космических боёв.</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="ec-prod-form" style="flex-wrap:wrap;margin-top:6px">
+      <select id="ec-land-sel-${esc(id)}" style="min-width:260px">${list.map(t => `<option value="${esc(t.colony_id)}">${t.liberation ? '🏳 освободить: ' : ''}${esc(t.planet_name || 'колония')} · ${esc(t.system_name || '')} · ${esc(t.holder_name || '')}${t.is_capital ? ' · ★ столица' : ''}${t.battle ? ' · идёт бой' : ''}</option>`).join('')}</select>
+      <button class="btn btn-gd btn-sm" onclick="ecArmyInvade('${jsq(id)}')">🪂 Высадить</button>
+      <button class="btn btn-gh btn-sm" onclick="ecId('ec-army-land-${jsq(id)}').innerHTML=''">Отмена</button>
+    </div>
+    <div class="ec-hint" style="margin-top:4px">Армия летит к колонии; если к прибытию орбита останется за вами — начнётся наземный бой против ополчения, построек и гарнизона. Потеряете орбиту — высадка сорвётся, армия вернётся.</div>`;
+}
+async function ecArmyInvade(id) {
+  if (EC.busy) return;
+  const colony = ecId('ec-land-sel-' + id)?.value;
+  if (!colony) { toast('Выберите колонию', 'err'); return; }
+  if (!confirm('Отправить армию на высадку? Пока она в пути и в бою, распоряжаться ею нельзя.')) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('army_invade', { p_id: id, p_colony: colony });
+    toast(`${r && r.liberation ? 'Армия летит освобождать колонию' : 'Десант в пути'} · высадка ${r && r.arrive_at ? new Date(r.arrive_at).toLocaleString('ru') : 'скоро'}`, 'ok');
+    EC.armies = await ecRpc('armies_mine').catch(() => EC.armies);
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+async function ecArmyPlunder(id) {
+  if (EC.busy) return;
+  if (!confirm('Разграбить склады владельца колонии? Налёт попадёт в военную хронику.')) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('army_plunder', { p_id: id });
+    const res = r && r.resources ? Object.entries(r.resources).map(([k, v]) => `${k} ${ecNum(v)}`).join(', ') : '';
+    toast(`Вынесено: ${ecNum((r && r.gc) || 0)} ГС${res ? ' · ' + res : ''}`, 'ok');
+    EC.armies = await ecRpc('armies_mine').catch(() => EC.armies);
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+async function ecArmyRecall(id) {
+  if (EC.busy) return;
+  if (!confirm('Увести армию домой? Если она держит колонию, оккупация снимется.')) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('army_recall', { p_id: id });
+    toast('Армия возвращается домой' + (r && r.fly_h ? ` · ${r.fly_h} ч в пути` : ''), 'ok');
+    EC.armies = await ecRpc('armies_mine').catch(() => EC.armies);
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
   finally { EC.busy = false; }
 }
 async function ecArmyDisband(id) {
@@ -17585,6 +17665,7 @@ function ecTabWar() {
   return `${intro}
     ${ecWarIncomingBlock()}
     ${ecWarBattlesBlock()}
+    ${ecWarOccBlock()}
     ${ecLegionBlock()}
     <div class="ec-section-title">Текущие войны <span class="ec-hint">— ${wars.length ? wars.length + ' активн.' : 'мир'}</span></div>
     ${wars.length ? wars.map(ecWarCard).join('') : '<div class="ec-dip-grid"><div class="ec-dip-card"><div class="ec-empty">Держава ни с кем не воюет. Тишина — тоже позиция.</div></div></div>'}
@@ -17592,6 +17673,35 @@ function ecTabWar() {
     <div class="ec-dip-grid">${ecWarDeclareBlock()}</div>
     ${ecWarOpenBlock()}
     ${ecWarHistoryBlock()}`;
+}
+
+// ── Колонии в оккупации (_ground_stage3_capture.sql) ──
+// Свои занятые — сколько осталось до перехода и как отбить; чужие занятые
+// нами — тот же срок. Грабёж и отход — в панели армий («Колонии»).
+function ecWarOccBlock() {
+  const list = ecWarArr('colony_occ');
+  if (!list.length) return '';
+  const left = iso => {
+    const ms = +new Date(iso) - Date.now();
+    if (!(ms > 0)) return 'вот-вот';
+    const h = Math.floor(ms / 36e5);
+    return h >= 24 ? `${Math.floor(h / 24)} сут ${h % 24} ч` : `${h} ч ${Math.floor(ms % 36e5 / 6e4)} мин`;
+  };
+  const rows = list.map(o => {
+    const nm = `${esc(o.planet_name || 'колония')}${o.system_name ? ' · ' + esc(o.system_name) : ''}${o.is_capital ? ' · ★ столица' : ''}`;
+    const fight = o.battle ? ' · <b>за неё идёт бой</b>' : '';
+    return o.mine
+      ? `<div class="ec-war-note">
+          <div class="ec-war-note-h">⚑ <b>${nm}</b> — занята державой ${esc(o.occupier_name || '')}</div>
+          <div class="ec-war-note-msg">Перейдёт оккупанту через ${esc(left(o.transfer_at))}${o.is_capital ? ' — а с ней капитулирует вся держава' : ''}${fight}. Отбить: флот на орбиту, затем армия → «🪂 Высадка» на эту колонию. Оккупация спадёт и сама, если оккупант уведёт армию или война кончится.</div>
+        </div>`
+      : `<div class="ec-war-note">
+          <div class="ec-war-note-h">⚑ <b>${nm}</b> — держим у державы ${esc(o.owner_name || '')}</div>
+          <div class="ec-war-note-msg">Колония станет нашей через ${esc(left(o.transfer_at))}, если армия удержит её${fight}. Грабить склад — в панели армий.</div>
+        </div>`;
+  }).join('');
+  return `<div class="ec-section-title">Оккупация <span class="ec-hint">— колонии под чужим флагом</span></div>
+    <div class="ec-dip-grid"><div class="ec-dip-card ec-war-hot">${rows}</div></div>`;
 }
 
 // ── Входящие ноты: зовы в войну и мирные предложения ──
@@ -18120,21 +18230,23 @@ function ecWarBattlesBlock() {
   const bs = Array.isArray(EC.battles) ? EC.battles : [];
   if (!bs.length) return '';
   const rows = bs.map(b => {
-    const kind = b.kind === 'intercept'
+    const ground = b.kind === 'ground';
+    const kind = ground ? '<span class="ec-war-kind">🪖 наземный бой за колонию</span>'
+      : b.kind === 'intercept'
       ? '<span class="ec-war-kind">🛑 перехват на трассе</span>'
       : '<span class="ec-war-kind">⚔ встреча флотов</span>';
     const st = b.status === 'forming'
       ? '<span class="ec-war-res">состав не выбран</span>'
       : b.status === 'active' ? '<span class="ec-war-res ec-war-lost">идёт бой</span>' : '';
     const fleets = (b.my_fleets || []).map(f => esc(f.name || 'Флот')).join(', ');
-    const cta = b.status === 'forming' ? 'Расставить флот' : 'К доске боя';
+    const cta = b.status === 'forming' ? (ground ? 'Расставить отряды' : 'Расставить флот') : 'К доске боя';
     return `<div class="ec-war-note">
         <div class="ec-war-note-h">⚔ <b>${esc(b.system_name || b.system_id)}</b> — против ${esc(b.foe_name)} ${kind}</div>
-        <div class="ec-war-note-msg">Скованы боем: ${fleets || '—'}. ${st}</div>
+        <div class="ec-war-note-msg">${ground ? 'Армии и оборона колонии на поле.' : `Скованы боем: ${fleets || '—'}.`} ${st}</div>
         <div class="ec-war-note-a"><button class="btn btn-gd btn-xs" onclick="bbOpen('${jsq(b.id)}')">${cta}</button></div>
       </div>`;
   }).join('');
-  return `<div class="ec-section-title">Сражения <span class="ec-hint">— флоты сцепились</span></div>
+  return `<div class="ec-section-title">Сражения <span class="ec-hint">— флоты и армии сцепились</span></div>
     <div class="ec-dip-grid"><div class="ec-dip-card ec-war-hot">
       <div class="ec-dip-t">⚔ Идут сражения</div>
       <div style="font-size:12.5px;color:var(--t2);margin:6px 0">Скованный боем флот никуда не уйдёт, пока сражение не окончено. Система под боем не оккупируется — сначала надо победить.</div>

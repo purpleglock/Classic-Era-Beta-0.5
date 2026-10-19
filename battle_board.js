@@ -1620,6 +1620,36 @@ function bbPlural(n, one, few, many) {
   return d === 1 ? one : (d >= 2 && d <= 4 ? few : many);
 }
 // Сводка лимитов расстановки: сколько бортов и денег уже потрачено.
+// ── НАЗЕМНЫЙ БОЙ: ОТРЯДЫ ───────────────────────────────────
+// В наземном бою (kind 'ground') на гексе стоит не один юнит, а отряд из n
+// юнитов одного проекта: резерв (free) считается в юнитах, место на доске —
+// в отрядах. Размер нового отряда — p.stack_default от сервера (пехота 100,
+// техника 10), не больше остатка; поменять — кнопка «Отряд: N» на карточке.
+function bbIsGround(s) { return !!s && s.kind === 'ground'; }
+function bbUsedUnits(uid) {
+  return BB.place.filter(q => q.unit_id === uid).reduce((a, q) => a + (Number(q.n) || 1), 0);
+}
+function bbStackFor(s, p) {
+  if (!bbIsGround(s)) return 1;
+  const left = Math.max(0, (Number(p.free) || 0) - bbUsedUnits(p.unit_id));
+  const want = (BB.stack && BB.stack[p.unit_id]) || Number(p.stack_default) || 1;
+  return Math.max(1, Math.min(left, want));
+}
+function bbPlaceEntry(s, p, x, y) {
+  const e = { unit_id: p.unit_id, unit_name: p.unit_name, cls: p.cls, x, y };
+  if (bbIsGround(s)) e.n = bbStackFor(s, p);
+  return e;
+}
+function bbSetStack(uid) {
+  const s = BB.st; if (!s) return;
+  const p = (s.pool || []).find(q => q.unit_id === uid); if (!p) return;
+  const cur = (BB.stack && BB.stack[uid]) || Number(p.stack_default) || 1;
+  const v = parseInt(prompt(`Сколько юнитов «${p.unit_name}» в одном отряде? В резерве ${p.free}.`, String(cur)), 10);
+  if (!(v > 0)) return;
+  BB.stack = BB.stack || {};
+  BB.stack[uid] = v;
+  bbRender();
+}
 function bbDeployLim(s) {
   // s.cap — лимит бортов на доску от сервера (_bt_cap). Если сервер его не
   // прислал, НЕ запираем расстановку нулём: иначе экран мёртвый, ни один
@@ -1674,8 +1704,8 @@ function bbCanAdd(s, p) {
   // состав уже утверждён — трогать нечего
   if (s.my_side === 'attacker' ? s.att_ready : s.def_ready) return 'Состав утверждён — расстановку не изменить';
   const L = bbDeployLim(s);
-  const used = BB.place.filter(q => q.unit_id === p.unit_id).length;
-  if (used >= (p.free || 0)) return 'В резерве больше таких кораблей нет';
+  const used = bbIsGround(s) ? bbUsedUnits(p.unit_id) : BB.place.filter(q => q.unit_id === p.unit_id).length;
+  if (used >= (p.free || 0)) return bbIsGround(s) ? 'В резерве больше таких юнитов нет' : 'В резерве больше таких кораблей нет';
   if (L.slots <= 0) return `На доску больше ${L.cap} кораблей не вывести`;
   if (L.budget > 0 && L.spent + (Number(p.cost) || 0) > L.budget)
     return `Не хватает бюджета: борт стоит ${bbNum(p.cost)} ГС, осталось ${bbNum(L.left)} ГС`;
@@ -1689,7 +1719,7 @@ function bbAddOne(uid) {
   if (why) { toast(why, 'err'); return; }
   const cell = bbZoneCells(s)[0];
   if (!cell) { toast('В зоне разворачивания не осталось свободных гексов', 'err'); return; }
-  BB.place.push({ unit_id: p.unit_id, unit_name: p.unit_name, cls: p.cls, x: cell.x, y: cell.y });
+  BB.place.push(bbPlaceEntry(s, p, cell.x, cell.y));
   BB.pick = uid;
   bbRender();
 }
@@ -1710,7 +1740,7 @@ function bbAutoPlace() {
     if (!p) break;
     const cell = bbZoneCells(s)[0];
     if (!cell) break;
-    BB.place.push({ unit_id: p.unit_id, unit_name: p.unit_name, cls: p.cls, x: cell.x, y: cell.y });
+    BB.place.push(bbPlaceEntry(s, p, cell.x, cell.y));
     added++;
   }
   if (!added) toast('Добавить больше нечего: упёрлись в резерв, места или бюджет', 'err');
@@ -1790,7 +1820,7 @@ function bbFindNote(s) {
 function bbTrayChips(s) {
   if (!s) return '';
   const cnt = {};
-  BB.place.forEach(p => { cnt[p.unit_id] = (cnt[p.unit_id] || 0) + 1; });
+  BB.place.forEach(p => { cnt[p.unit_id] = (cnt[p.unit_id] || 0) + (bbIsGround(s) ? (Number(p.n) || 1) : 1); });
   const list = bbPoolList(s);
   if (!list.length) {
     return `<div class="bbd-none">${(BB.q || '').trim()
@@ -1814,6 +1844,8 @@ function bbTrayChips(s) {
         <span class="bbd-s-btn">
           <button class="bbd-s-a bbd-s-spec" title="Полные ТТХ"
             onclick="event.stopPropagation();bbSpec('${jsq(p.unit_id)}')">ⓘ</button>
+          ${bbIsGround(s) ? `<button class="bbd-s-a" title="Размер следующего отряда — сколько юнитов встанет на один гекс"
+            onclick="event.stopPropagation();bbSetStack('${jsq(p.unit_id)}')">×${bbStackFor(s, p)}</button>` : ''}
           <button class="bbd-s-a" ${n ? '' : 'disabled'} title="Снять борт"
             onclick="event.stopPropagation();bbDelOne('${jsq(p.unit_id)}')">−</button>
           <button class="bbd-s-a" ${why ? 'disabled' : ''} title="${why ? esc(why) : 'Поставить борт'}"
@@ -2997,7 +3029,7 @@ function bbClick(x, y) {
     if (!p) return;
     const why = bbCanAdd(s, p);
     if (why) { toast(why, 'err'); return; }
-    BB.place.push({ unit_id: p.unit_id, unit_name: p.unit_name, cls: p.cls, x, y });
+    BB.place.push(bbPlaceEntry(s, p, x, y));
     bbRender();
     return;
   }
@@ -3216,7 +3248,7 @@ function bbReconcilePlace() {
   BB.place = BB.place.filter(p => {
     // корабль, которого в свежем резерве нет вовсе, — тоже под нож
     const limit = cap.hasOwnProperty(p.unit_id) ? cap[p.unit_id] : 0;
-    const n = (seen[p.unit_id] = (seen[p.unit_id] || 0) + 1);
+    const n = (seen[p.unit_id] = (seen[p.unit_id] || 0) + (bbIsGround(BB.st) ? (Number(p.n) || 1) : 1));
     if (n > limit) { dropped.push(p.unit_name || 'борт'); return false; }
     return true;
   });
@@ -3243,7 +3275,7 @@ async function bbConfirmDeploy() {
   BB.busy = true;
   bbRender();                             // кнопка сразу гаснет — экран не «немой»
   try {
-    if (!only) await ecRpc('battle_deploy', { p_battle: BB.id, p_units: BB.place.map(p => ({ unit_id: p.unit_id, unit_name: p.unit_name, x: p.x, y: p.y })) });
+    if (!only) await ecRpc('battle_deploy', { p_battle: BB.id, p_units: BB.place.map(p => (p.n ? { unit_id: p.unit_id, unit_name: p.unit_name, x: p.x, y: p.y, n: p.n } : { unit_id: p.unit_id, unit_name: p.unit_name, x: p.x, y: p.y })) });
     await ecRpc('battle_ready', { p_battle: BB.id });
     toast('Состав утверждён', 'ok');
     BB.place = []; BB.pick = null;
